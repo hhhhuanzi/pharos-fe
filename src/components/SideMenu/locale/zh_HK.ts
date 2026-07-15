@@ -28,6 +28,7 @@ const zh_HK = {
     object_explorer: '快捷視圖',
     recording_rules: '記錄規則',
     logs_explorer: '日誌',
+    traces: '鏈路',
     monitors: '告警',
     alerts_notifications: '告警通知',
     rules: '規則管理',

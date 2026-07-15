@@ -14,45 +14,74 @@
  * limitations under the License.
  *
  */
-import _ from 'lodash';
-import request from '@/utils/request';
-import { RequestMethod } from '@/store/common';
-import { N9E_PATHNAME } from '@/utils/constant';
+import {
+  getTraceServices as getUnifiedTraceServices,
+  getTraceOperations as getUnifiedTraceOperations,
+  searchTraces as searchUnifiedTraces,
+  getTraceByID as getUnifiedTraceByID,
+  getTraceDependencies as getUnifiedTraceDependencies,
+  TracePluginType,
+} from '@/dh/trace';
 import { SearchTraceType, SearchTraceIDType } from './type';
 
-export const getTraceServices = (data_source_id) => {
-  return request(`/api/${N9E_PATHNAME}/proxy/${data_source_id}/api/services`, {
-    method: RequestMethod.Get,
-  }).then((res) => {
-    return res.data;
+export type { TracePluginType };
+
+function pluginTypeOf(data: { plugin_type?: TracePluginType }): TracePluginType {
+  return data.plugin_type || 'jaeger';
+}
+
+/**
+ * Returns service options: { label, value, id? }
+ * - Jaeger: value = service name
+ * - SkyWalking: value/id = service id, label = name
+ */
+export const getTraceServices = async (
+  data_source_id: number,
+  plugin_type: TracePluginType = 'jaeger',
+  startMs?: number,
+  endMs?: number,
+) => {
+  const end = endMs ?? Date.now();
+  const start = startMs ?? end - 12 * 60 * 60 * 1000;
+  return getUnifiedTraceServices(plugin_type, data_source_id, { start, end });
+};
+
+export const getTraceOperation = async (
+  data_source_id: number,
+  service: string,
+  plugin_type: TracePluginType = 'jaeger',
+  startMs?: number,
+  endMs?: number,
+) => {
+  const end = endMs ?? Date.now();
+  const start = startMs ?? end - 12 * 60 * 60 * 1000;
+  // For SkyWalking, `service` param from UI is already the service id (Select value)
+  return getUnifiedTraceOperations(plugin_type, data_source_id, service, { start, end });
+};
+
+export const getTraceSearch = (data: SearchTraceType & { plugin_type?: TracePluginType }) => {
+  return searchUnifiedTraces({
+    data_source_id: data.data_source_id,
+    plugin_type: pluginTypeOf(data),
+    service: data.service,
+    operation: data.operation,
+    start_time_min: data.start_time_min,
+    start_time_max: data.start_time_max,
+    attributes: (data.attributes as unknown as Record<string, string>) || null,
+    duration_max: data.duration_max,
+    duration_min: data.duration_min,
+    num_traces: data.num_traces,
   });
 };
 
-export const getTraceOperation = (data_source_id, service) => {
-  return request(`/api/${N9E_PATHNAME}/proxy/${data_source_id}/api/services/${service}/operations`, {
-    method: RequestMethod.Get,
-  }).then((res) => res.data);
+export const getTraceByID = (data: SearchTraceIDType & { plugin_type?: TracePluginType }) => {
+  return getUnifiedTraceByID({
+    data_source_id: data.data_source_id,
+    traceID: data.traceID,
+    plugin_type: pluginTypeOf(data),
+  });
 };
 
-export const getTraceSearch = (data: SearchTraceType) => {
-  return request(`/api/${N9E_PATHNAME}/proxy/${data.data_source_id}/api/traces`, {
-    method: RequestMethod.Get,
-    params: _.omit(data, 'data_source_id'),
-  }).then((res) => res.data);
-};
-
-export const getTraceByID = (data: SearchTraceIDType) => {
-  return request(`/api/${N9E_PATHNAME}/proxy/${data.data_source_id}/api/traces/${data.traceID}`, {
-    method: RequestMethod.Get,
-  }).then((res) => res.data);
-};
-
-export const getTraceDependencies = (id) => {
-  return request(`/api/${N9E_PATHNAME}/proxy/${id}/api/dependencies`, {
-    method: RequestMethod.Get,
-    params: {
-      endTs: Date.now(),
-      lookback: 86400000,
-    },
-  }).then((res) => res.data);
+export const getTraceDependencies = (id: number, plugin_type: TracePluginType = 'jaeger') => {
+  return getUnifiedTraceDependencies(plugin_type, id);
 };

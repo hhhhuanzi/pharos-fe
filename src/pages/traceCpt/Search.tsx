@@ -1,11 +1,10 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { Row, Col, Select, Space, Button, Input, Tooltip, InputNumber, Spin, Form, Radio, Popover } from 'antd';
+import { Row, Col, Select, Space, Button, Input, Tooltip, InputNumber, Spin, Form, Radio } from 'antd';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import _ from 'lodash';
 import moment from 'moment';
 import { useTranslation, Trans } from 'react-i18next';
 import logfmtParser from 'logfmt/lib/logfmt_parser';
-import { Link } from 'react-router-dom';
 import TimeRangePicker, { IRawTimeRange, parseRange } from '@/components/TimeRangePicker';
 import InputGroupWithFormItem from '@/components/InputGroupWithFormItem';
 import EmptyDatasourcePopover from '@/components/DatasourceSelect/EmptyDatasourcePopover';
@@ -13,6 +12,8 @@ import { CommonStateContext } from '@/App';
 import { SearchTraceType, SearchTraceIDType } from './type';
 import LabelField from './components/LabelField';
 import { getTraceServices, getTraceOperation } from './services';
+import { TRACING_PLUGIN_TYPES } from '@/dh/trace';
+import type { TracePluginType } from '@/dh/trace';
 
 interface IProps {
   init?: string;
@@ -47,9 +48,10 @@ export type { SearchTraceType };
 
 export default function Index(props: IProps) {
   const { t } = useTranslation('trace');
-  const { profile, groupedDatasourceList } = useContext(CommonStateContext);
-  const datasourceList = groupedDatasourceList['jaeger'];
+  const { groupedDatasourceList } = useContext(CommonStateContext);
   const { onSearch, resultLoading, init, initPluginId } = props;
+  const [cate, setCate] = useState<TracePluginType>('jaeger');
+  const datasourceList = groupedDatasourceList[cate] || [];
   const [curPlugin, setCurPlugin] = useState<number>();
   const [isTraceId, setIsTraceId] = useState(false);
   const [services, setServices] = useState<{ label: string; value: string }[]>([]);
@@ -66,40 +68,53 @@ export default function Index(props: IProps) {
     operation: '',
     start_time_min: moment().subtract(12, 'h').valueOf(),
     start_time_max: moment().valueOf(),
+    plugin_type: 'jaeger',
   });
   const [loading, setLoading] = useState(false);
+  const [form] = Form.useForm();
 
   useEffect(() => {
-    const tempList = datasourceList;
+    // Prefer a cate that actually has configured datasources
+    const preferred =
+      TRACING_PLUGIN_TYPES.find((item) => (groupedDatasourceList[item.value] || []).length > 0)?.value || 'jaeger';
+    setCate(preferred);
+  }, []);
+
+  useEffect(() => {
+    const tempList = groupedDatasourceList[cate] || [];
     if (tempList?.length > 0) {
       const firstAvailableId = initPluginId || tempList[0].id;
       setCurPlugin(firstAvailableId);
+      setSearch((prev) => ({ ...prev, plugin_type: cate, data_source_id: firstAvailableId }));
       if (!isTraceId) {
-        initSearchForm(firstAvailableId);
+        fetchService(firstAvailableId, cate);
       }
       if (init) {
         form.setFieldsValue({ traceId: init });
-        onSearch({ data_source_id: firstAvailableId, traceID: init });
+        onSearch({ data_source_id: firstAvailableId, traceID: init, plugin_type: cate });
       }
+    } else {
+      setCurPlugin(undefined);
+      setServices([]);
+      setOperations([]);
     }
-  }, []);
-  const [form] = Form.useForm();
+  }, [cate]);
 
-  const initSearchForm = (firstAvailableId?) => {
-    if (firstAvailableId) {
-      fetchService(firstAvailableId);
-    }
-  };
-
-  const fetchService = async (dataSourceId) => {
+  const fetchService = async (dataSourceId: number, pluginType: TracePluginType = cate) => {
     try {
       setLoading(true);
-      const serviceRes = await getTraceServices(dataSourceId);
-
-      setServices(serviceRes.map((service) => ({ label: service, value: service })));
+      const startMs = moment(parsedRange.start).valueOf();
+      const endMs = moment(parsedRange.end).valueOf();
+      const serviceRes = await getTraceServices(dataSourceId, pluginType, startMs, endMs);
+      setServices(serviceRes);
       if (serviceRes.length > 0) {
-        setSearch((search) => ({ ...search, service: serviceRes[0] }));
-        await fetchOperation(dataSourceId, serviceRes[0]);
+        const first = serviceRes[0];
+        setSearch((prev) => ({
+          ...prev,
+          service: first.value,
+          plugin_type: pluginType,
+        }));
+        await fetchOperation(dataSourceId, first.value, pluginType);
       }
       setLoading(false);
     } catch (e) {
@@ -107,10 +122,12 @@ export default function Index(props: IProps) {
     }
   };
 
-  const fetchOperation = async (dataSourceId, service) => {
+  const fetchOperation = async (dataSourceId: number, service: string, pluginType: TracePluginType = cate) => {
     try {
       setLoading(true);
-      const operationRes = await getTraceOperation(dataSourceId, service);
+      const startMs = moment(parsedRange.start).valueOf();
+      const endMs = moment(parsedRange.end).valueOf();
+      const operationRes = await getTraceOperation(dataSourceId, service, pluginType, startMs, endMs);
       setOperations(operationRes.map((operation) => ({ label: operation, value: operation })));
       operationRes.length > 0 && form.setFieldsValue({ operation: operationRes[0] });
       setLoading(false);
@@ -119,40 +136,46 @@ export default function Index(props: IProps) {
     }
   };
 
-  const handlePluginChange = async (id) => {
+  const handleCateChange = (next: TracePluginType) => {
+    setCate(next);
+    setSearch((prev) => ({ ...prev, plugin_type: next, service: '' }));
+    form.setFieldsValue({ operation: '' });
+  };
+
+  const handlePluginChange = async (id: number) => {
     setCurPlugin(id);
     if (isTraceId) {
       await form.validateFields();
       const traceID = form.getFieldValue('traceId');
-      onSearch({ data_source_id: id, traceID });
+      onSearch({ data_source_id: id, traceID, plugin_type: cate });
     } else {
-      setSearch((search) => ({ ...search, service: '' }));
+      setSearch((prev) => ({ ...prev, service: '', data_source_id: id, plugin_type: cate }));
       form.setFieldsValue({ operation: '' });
-      if (!isTraceId) {
-        fetchService(id);
-      }
+      fetchService(id, cate);
     }
   };
 
   const handleTypeSwitch = () => {
     setIsTraceId(!isTraceId);
     if (isTraceId) {
-      initSearchForm();
+      if (curPlugin) {
+        fetchService(curPlugin, cate);
+      }
     } else {
       form.setFieldsValue({ traceId: '' });
     }
   };
-  const handleServiceChange = async (service) => {
-    setSearch({ ...search, service });
-    fetchOperation(curPlugin, service);
+  const handleServiceChange = async (service: string) => {
+    setSearch({ ...search, service, plugin_type: cate });
+    fetchOperation(curPlugin!, service, cate);
   };
 
-  const handleSearch = async (isTraceId) => {
+  const handleSearch = async (byTraceId: boolean) => {
     if (!curPlugin) return;
-    if (isTraceId) {
+    if (byTraceId) {
       await form.validateFields();
       const traceID = form.getFieldValue('traceId');
-      onSearch({ data_source_id: curPlugin, traceID });
+      onSearch({ data_source_id: curPlugin, traceID, plugin_type: cate });
     } else {
       await form.validateFields();
       const { attributes, duration_max, duration_min, operation } = form.getFieldsValue();
@@ -166,6 +189,7 @@ export default function Index(props: IProps) {
         duration_max,
         duration_min,
         attributes: convTagsLogfmt(attributes),
+        plugin_type: cate,
       };
       onSearch(searchItems);
     }
@@ -179,20 +203,17 @@ export default function Index(props: IProps) {
             <Col span={24}>
               <Space style={{ width: '100%', justifyContent: 'start', marginBottom: 8 }}>
                 <InputGroupWithFormItem label={t('common:datasource.type')}>
-                  <Select dropdownMatchSelectWidth={false} style={{ width: '100%' }} value='jaeger'>
-                    {_.map(
-                      [
-                        {
-                          label: 'Jaeger',
-                          value: 'jaeger',
-                        },
-                      ],
-                      (item) => (
-                        <Select.Option key={item.value} value={item.value}>
-                          {item.label}
-                        </Select.Option>
-                      ),
-                    )}
+                  <Select
+                    dropdownMatchSelectWidth={false}
+                    style={{ width: '100%' }}
+                    value={cate}
+                    onChange={handleCateChange}
+                  >
+                    {_.map(TRACING_PLUGIN_TYPES, (item) => (
+                      <Select.Option key={item.value} value={item.value}>
+                        {item.label}
+                      </Select.Option>
+                    ))}
                   </Select>
                 </InputGroupWithFormItem>
                 <EmptyDatasourcePopover datasourceList={datasourceList}>

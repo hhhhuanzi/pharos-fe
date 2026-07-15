@@ -32,7 +32,8 @@ export default function TraceCpt(props: IProps) {
               setCurTrace(undefined);
               if (v['traceID']) {
                 const item = await getTraceByID(v as SearchTraceIDType);
-                setCurTrace(transformTraceData(item[0]));
+                const first = Array.isArray(item) ? item[0] : item;
+                setCurTrace(first ? transformTraceData(first) : null);
               }
               setResultLoading(false);
             } catch (e) {

@@ -35,6 +35,13 @@ alwaysApply: true
 - `src/plugins/<own>/`：自有插件（Explorer / Dashboard 等）
 - 可参考现有 `plus:` 路径别名注入机制；开源树不一定有完整 plus，勿假设本地有全量 plus 源码
 
+## Tracing 扩展（链路）
+
+- 模式：`plugins` 元数据 + `/proxy/:id/*` 透传 + FE `src/dh/trace` adapter（与 Jaeger 一致，**不必** `RegisterDatasource`）
+- 本期：`skywalking`（GraphQL）；预留 `otel` adapter 占位，后续往 OpenTelemetry 靠拢时只加 adapter
+- FE：`AdvancedWrap/utils.ts` / `SideMenu` / Datasource Form 仅薄入口；业务在 `src/dh/trace/**`、`Datasources/SkyWalking/**`
+- BE：`center/cconf/plugin.go` 增加 `tracing` 类 plugin 项即可
+
 ## Commit 与版本对齐
 
 - 前缀建议：`feat(dh):` / `fix(dh):` / `chore(dh):`

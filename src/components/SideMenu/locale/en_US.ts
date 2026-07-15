@@ -28,6 +28,7 @@ const en_US = {
     object_explorer: 'Quick view',
     recording_rules: 'Recording rules',
     logs_explorer: 'Logs',
+    traces: 'Traces',
     monitors: 'Monitors',
     alerts_notifications: 'Alerts & Notifications',
     rules: 'Alert rules',

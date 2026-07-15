@@ -28,6 +28,7 @@ const ru_RU = {
     object_explorer: 'Быстрое представление',
     recording_rules: 'Правила записи',
     logs_explorer: 'Логи',
+    traces: 'Трейсы',
     monitors: 'Оповещения',
     alerts_notifications: 'Оповещения и уведомления',
     rules: 'Управление правилами',

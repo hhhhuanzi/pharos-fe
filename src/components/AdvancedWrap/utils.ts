@@ -89,6 +89,18 @@ export const baseCates: Cate[] = [
     logo: '/image/logos/jaeger.png',
   },
   {
+    value: 'skywalking',
+    label: 'SkyWalking',
+    label_en: 'SkyWalking',
+    type: ['tracing'],
+    alertRule: false,
+    dashboard: false,
+    dashboardVariable: false,
+    graphPro: false,
+    alertPro: false,
+    logo: '/image/logos/skywalking.svg',
+  },
+  {
     value: 'ck',
     label: 'ClickHouse',
     label_en: 'ClickHouse',

@@ -1,0 +1,283 @@
+import _ from 'lodash';
+import { UnifiedServiceOption, TraceSearchParams, TraceByIdParams } from '../types';
+import { buildDuration, graphqlRequest } from './skywalkingGraphql';
+import { TraceResponse, TraceSpanData } from '@/pages/traceCpt/type';
+
+interface SwService {
+  id: string;
+  name: string;
+}
+
+interface SwEndpoint {
+  id: string;
+  name: string;
+}
+
+interface SwBasicTrace {
+  segmentId?: string;
+  endpointNames?: string[];
+  duration?: number;
+  start?: string;
+  isError?: boolean;
+  traceIds?: string[];
+}
+
+interface SwSpan {
+  traceId: string;
+  segmentId: string;
+  spanId: number;
+  parentSpanId: number;
+  refs?: Array<{
+    traceId: string;
+    parentSegmentId: string;
+    parentSpanId: number;
+    type: string;
+  }>;
+  serviceCode: string;
+  serviceInstanceName?: string;
+  startTime: number;
+  endTime: number;
+  endpointName: string;
+  type?: string;
+  peer?: string;
+  component?: string;
+  isError?: boolean;
+  layer?: string;
+  tags?: Array<{ key: string; value: string }>;
+  logs?: Array<{
+    time: number;
+    data?: Array<{ key: string; value: string }>;
+  }>;
+}
+
+function toSpanId(segmentId: string, spanId: number) {
+  return `${segmentId}.${spanId}`;
+}
+
+/** SW start/end are milliseconds → Jaeger-compatible microseconds */
+function msToUs(ms: number) {
+  return ms * 1000;
+}
+
+/**
+ * Map SkyWalking spans directly to a Jaeger `TraceResponse`.
+ * traceCpt's `transformTraceData` recomputes trace startTime/duration/services from spans,
+ * so we only need to emit processes + spans here.
+ */
+function swSpansToJaegerResponse(traceId: string, spans: SwSpan[]): TraceResponse {
+  const processes: TraceResponse['processes'] = {};
+  const processIdByService: Record<string, string> = {};
+  let processSeq = 0;
+
+  const jaegerSpans: TraceSpanData[] = (spans || []).map((s) => {
+    const serviceName = s.serviceCode || 'unknown';
+    let processID = processIdByService[serviceName];
+    if (!processID) {
+      processID = `p${processSeq++}`;
+      processIdByService[serviceName] = processID;
+      processes[processID] = {
+        serviceName,
+        tags: s.serviceInstanceName ? [{ key: 'service.instance', value: s.serviceInstanceName }] : [],
+      };
+    }
+
+    const spanTraceId = s.traceId || traceId;
+    const references: NonNullable<TraceSpanData['references']> = [];
+    if (s.parentSpanId >= 0) {
+      references.push({ refType: 'CHILD_OF', spanID: toSpanId(s.segmentId, s.parentSpanId), traceID: spanTraceId });
+    }
+    (s.refs || []).forEach((ref) => {
+      references.push({ refType: 'CHILD_OF', spanID: toSpanId(ref.parentSegmentId, ref.parentSpanId), traceID: ref.traceId || traceId });
+    });
+
+    const tags = [
+      ...(s.tags || []).map((t) => ({ key: t.key, value: String(t.value) })),
+      s.component ? { key: 'component', value: s.component } : null,
+      s.peer ? { key: 'peer', value: s.peer } : null,
+      s.layer ? { key: 'layer', value: s.layer } : null,
+      s.type ? { key: 'span.type', value: s.type } : null,
+      s.isError ? { key: 'error', value: 'true' } : null,
+      s.serviceInstanceName ? { key: 'service.instance', value: s.serviceInstanceName } : null,
+    ].filter(Boolean) as Array<{ key: string; value: string }>;
+
+    const startUs = msToUs(Number(s.startTime));
+    const endUs = msToUs(Number(s.endTime));
+
+    return {
+      spanID: toSpanId(s.segmentId, s.spanId),
+      traceID: spanTraceId,
+      processID,
+      operationName: s.endpointName || 'unknown',
+      startTime: startUs,
+      duration: Math.max(endUs - startUs, 0),
+      logs: (s.logs || []).map((log) => ({
+        timestamp: msToUs(Number(log.time)),
+        fields: (log.data || []).map((d) => ({ key: d.key, value: String(d.value) })),
+      })),
+      tags,
+      references,
+      flags: 0,
+      warnings: null,
+    };
+  });
+
+  return {
+    traceID: traceId,
+    processes,
+    spans: jaegerSpans,
+  };
+}
+
+export async function getSkyWalkingServices(dataSourceId: number, startMs: number, endMs: number): Promise<UnifiedServiceOption[]> {
+  const duration = buildDuration(startMs, endMs);
+  const data = await graphqlRequest(
+    dataSourceId,
+    `
+      query ($duration: Duration!) {
+        getAllServices(duration: $duration) {
+          id
+          name
+        }
+      }
+    `,
+    { duration },
+  );
+  const list: SwService[] = data?.getAllServices || [];
+  return list.map((s) => ({ label: s.name, value: s.id }));
+}
+
+export async function getSkyWalkingOperations(dataSourceId: number, serviceId: string): Promise<string[]> {
+  if (!serviceId) return [];
+  const data = await graphqlRequest(
+    dataSourceId,
+    `
+      query ($serviceId: ID!) {
+        findEndpoint(serviceId: $serviceId, keyword: "", limit: 100) {
+          id
+          name
+        }
+      }
+    `,
+    { serviceId },
+  );
+  const list: SwEndpoint[] = data?.findEndpoint || [];
+  return list.map((e) => e.name);
+}
+
+async function queryTraceRaw(dataSourceId: number, traceId: string): Promise<TraceResponse | null> {
+  const data = await graphqlRequest(
+    dataSourceId,
+    `
+      query ($traceId: ID!) {
+        queryTrace(traceId: $traceId) {
+          spans {
+            traceId
+            segmentId
+            spanId
+            parentSpanId
+            refs {
+              traceId
+              parentSegmentId
+              parentSpanId
+              type
+            }
+            serviceCode
+            serviceInstanceName
+            startTime
+            endTime
+            endpointName
+            type
+            peer
+            component
+            isError
+            layer
+            tags {
+              key
+              value
+            }
+            logs {
+              time
+              data {
+                key
+                value
+              }
+            }
+          }
+        }
+      }
+    `,
+    { traceId },
+  );
+  const spans: SwSpan[] = data?.queryTrace?.spans || [];
+  if (!spans.length) return null;
+  const tid = spans[0].traceId || traceId;
+  return swSpansToJaegerResponse(tid, spans);
+}
+
+export async function searchSkyWalkingTraces(params: TraceSearchParams): Promise<TraceResponse[]> {
+  const duration = buildDuration(params.start_time_min, params.start_time_max);
+  const pageSize = params.num_traces || 20;
+
+  const condition: Record<string, unknown> = {
+    queryDuration: duration,
+    traceState: 'ALL',
+    queryOrder: 'BY_START_TIME',
+    paging: { pageNum: 1, pageSize },
+  };
+
+  if (params.service) {
+    condition.serviceId = params.service;
+  }
+  if (params.operation) {
+    // endpoint filter uses name lookup via queryBasicTraces tags when id unknown;
+    // prefer leaving endpointId empty and filter client-side by endpointNames if needed
+  }
+  if (params.attributes && !_.isEmpty(params.attributes)) {
+    condition.tags = Object.entries(params.attributes).map(([key, value]) => ({ key, value }));
+  }
+
+  const data = await graphqlRequest(
+    params.data_source_id,
+    `
+      query ($condition: TraceQueryCondition!) {
+        queryBasicTraces(condition: $condition) {
+          traces {
+            segmentId
+            endpointNames
+            duration
+            start
+            isError
+            traceIds
+          }
+        }
+      }
+    `,
+    { condition },
+  );
+
+  let briefs: SwBasicTrace[] = data?.queryBasicTraces?.traces || [];
+  if (params.operation) {
+    briefs = briefs.filter((b) => (b.endpointNames || []).includes(params.operation as string));
+  }
+
+  const uniqueTraceIds = _.uniq(
+    briefs.flatMap((b) => b.traceIds || []).filter(Boolean),
+  ).slice(0, pageSize);
+
+  const results = await Promise.all(
+    uniqueTraceIds.map(async (traceId) => {
+      try {
+        return await queryTraceRaw(params.data_source_id, traceId);
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return results.filter(Boolean) as TraceResponse[];
+}
+
+export async function getSkyWalkingTraceById(params: TraceByIdParams): Promise<TraceResponse[]> {
+  const trace = await queryTraceRaw(params.data_source_id, params.traceID);
+  return trace ? [trace] : [];
+}

@@ -5,6 +5,7 @@ export const helpLinkMap = {
   [DatasourceCateEnum.iotdb]: 'https://iotdb.apache.org/UserGuide/latest-Table/',
   [DatasourceCateEnum.tdengine]: 'https://flashcat.cloud/docs/content/flashcat-monitor/nightingale-v9/usage/integrations/datasource/tdengine/',
   jaeger: 'https://flashcat.cloud/docs/content/flashcat-monitor/nightingale-v9/usage/integrations/datasource/jaeger/',
+  skywalking: 'https://skywalking.apache.org/docs/main/next/en/api/query-protocol/',
   [DatasourceCateEnum.zabbix]: 'https://flashcat.cloud/docs/content/flashcat-monitor/nightingale-v9/usage/integrations/datasource/zabbix/',
   [DatasourceCateEnum.loki]: 'https://flashcat.cloud/docs/content/flashcat-monitor/nightingale-v9/usage/integrations/datasource/loki/',
   [DatasourceCateEnum.tencentCLS]: 'https://flashcat.cloud/docs/content/flashcat-monitor/nightingale-v9/usage/integrations/datasource/tx-cls/',

@@ -4,6 +4,8 @@ export interface AttributeType {
 export interface SearchTraceIDType {
   traceID: string;
   data_source_id: number;
+  /** cate / plugin_type for dh/trace adapter dispatch */
+  plugin_type?: 'jaeger' | 'skywalking' | 'otel';
 }
 export interface SearchTraceType {
   data_source_id: number;
@@ -15,6 +17,8 @@ export interface SearchTraceType {
   duration_max?: string;
   duration_min?: string;
   num_traces?: number;
+  /** cate / plugin_type for dh/trace adapter dispatch */
+  plugin_type?: 'jaeger' | 'skywalking' | 'otel';
 }
 
 export interface Span {

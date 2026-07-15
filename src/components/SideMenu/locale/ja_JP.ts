@@ -28,6 +28,7 @@ const ja_JP = {
     object_explorer: 'クイックビュー',
     recording_rules: 'レコーディングルール',
     logs_explorer: 'ログ',
+    traces: 'トレース',
     monitors: 'アラート',
     alerts_notifications: 'アラート通知',
     rules: 'ルール管理',
