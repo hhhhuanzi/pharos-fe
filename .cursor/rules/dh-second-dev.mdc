@@ -1,0 +1,47 @@
+---
+description: Fork 二开隔离规范：减小与 upstream 冲突面，指导落点与追平流程（始终生效）
+alwaysApply: true
+---
+
+# 二开隔离规范（dh-n9e-fe）
+
+## 目标
+
+本仓库是 Nightingale 前端 fork。应随时可 `fetch upstream` + `merge upstream/main` 追平官方，**冲突面尽量小**。
+
+## Remotes
+
+| remote     | 含义                         | 操作                         |
+| ---------- | ---------------------------- | ---------------------------- |
+| `origin`   | 自己的 fork                  | push / PR 到此               |
+| `upstream` | 官方 `https://github.com/n9e/fe.git` | 只 fetch / merge，**不 push** |
+
+## 分支
+
+- `main`：尽量贴近官方 `upstream/main`，避免堆叠二开提交。
+- 功能开发用约定分支；**当前产品分支为 `feature_link`**（不要随意改名）。
+- 二开功能合入前，先在 `main`（或功能分支）merge 官方，再解决冲突。
+
+## 隔离原则
+
+1. **能加文件不改文件**：二开逻辑优先落在新增文件/目录。
+2. **不得不改官方文件时只留薄入口**：注册一行、import 一行、挂载入口；业务实现仍放自有目录。
+3. 少动 `App.tsx`；少在 `src/routers/index.tsx` 塞大段逻辑（最多一行注册/展开）。
+
+## FE 落点（优先）
+
+- `src/dh/`：通用二开工具、共享类型、薄适配层
+- 独立 `src/pages/<feature>/`：整页级二开功能
+- `src/plugins/<own>/`：自有插件（Explorer / Dashboard 等）
+- 可参考现有 `plus:` 路径别名注入机制；开源树不一定有完整 plus，勿假设本地有全量 plus 源码
+
+## Commit 与版本对齐
+
+- 前缀建议：`feat(dh):` / `fix(dh):` / `chore(dh):`
+- 前后端尽量成对追同一官方 tag / release，避免接口漂移
+
+## 自检（改代码前）
+
+- 这次改动能放进新建文件吗？
+- 若必须改官方文件，是否只加了「薄入口」？
+- merge `upstream/main` 时，冲突是否集中在那几行入口？
