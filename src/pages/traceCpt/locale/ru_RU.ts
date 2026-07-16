@@ -35,6 +35,7 @@ const ru_RU = {
   duration_max: 'Максимальное время выполнения',
   duration_min: 'Минимальное время выполнения',
   num_traces: 'Количество результатов',
+  load_more: 'Загрузить ещё',
   query: 'Запрос',
   traceid_msg: 'Пожалуйста, введите Trace ID',
   sort: {

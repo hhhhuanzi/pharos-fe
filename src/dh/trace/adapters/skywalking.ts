@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { UnifiedServiceOption, TraceSearchParams, TraceByIdParams } from '../types';
+import { UnifiedServiceOption, TraceSearchParams, TraceByIdParams, TracePageResult } from '../types';
 import { buildDuration, graphqlRequest } from './skywalkingGraphql';
 import { TraceResponse, TraceSpanData } from '@/pages/traceCpt/type';
 
@@ -336,4 +336,78 @@ export async function searchSkyWalkingTraces(params: TraceSearchParams): Promise
 export async function getSkyWalkingTraceById(params: TraceByIdParams): Promise<TraceResponse[]> {
   const trace = await queryTraceRaw(params.data_source_id, params.traceID);
   return trace ? [trace] : [];
+}
+
+/** Build the `queryBasicTraces` condition shared by the lightweight list query. */
+function buildBasicTraceCondition(params: TraceSearchParams, pageNum: number, pageSize: number): Record<string, unknown> {
+  const condition: Record<string, unknown> = {
+    queryDuration: buildDuration(params.start_time_min, params.start_time_max),
+    traceState: 'ALL',
+    queryOrder: 'BY_START_TIME',
+    paging: { pageNum, pageSize },
+  };
+  if (params.service) {
+    condition.serviceId = params.service;
+  }
+  if (params.instance) {
+    condition.serviceInstanceId = params.instance;
+  }
+  if (params.attributes && !_.isEmpty(params.attributes)) {
+    condition.tags = Object.entries(params.attributes).map(([key, value]) => ({ key, value }));
+  }
+  return condition;
+}
+
+/**
+ * Paginated trace list with full spans. Two steps per page:
+ *   1. `queryBasicTraces` returns the page's trace ids (cheap; also drives pagination / `hasMore` / order).
+ *   2. For each de-duplicated trace id on the page, `queryTraceRaw` fetches the full span tree (concurrent).
+ * The list row can then show span count + services (via traceCpt `transformTraceData`), just like Jaeger.
+ * The per-page fan-out is bounded by `page_size` (default 20), so it never regresses to the old
+ * "one-shot 2000 traces" behaviour.
+ */
+export async function searchSkyWalkingTracesPaged(params: TraceSearchParams): Promise<TracePageResult> {
+  const pageSize = params.page_size || 20;
+  const pageNum = params.page_num || 1;
+  const condition = buildBasicTraceCondition(params, pageNum, pageSize);
+
+  const data = await graphqlRequest(
+    params.data_source_id,
+    `
+      query ($condition: TraceQueryCondition!) {
+        queryBasicTraces(condition: $condition) {
+          traces {
+            segmentId
+            endpointNames
+            duration
+            start
+            isError
+            traceIds
+          }
+        }
+      }
+    `,
+    { condition },
+  );
+
+  const rawBriefs: SwBasicTrace[] = data?.queryBasicTraces?.traces || [];
+  const briefs = params.operation ? rawBriefs.filter((b) => (b.endpointNames || []).includes(params.operation as string)) : rawBriefs;
+
+  // Preserve the backend ordering while de-duplicating trace ids across segments.
+  const traceIds = _.uniq(briefs.flatMap((b) => b.traceIds || []).filter(Boolean));
+
+  const results = await Promise.all(
+    traceIds.map(async (traceId) => {
+      try {
+        return await queryTraceRaw(params.data_source_id, traceId);
+      } catch {
+        // A single trace failing must not fail the whole page.
+        return null;
+      }
+    }),
+  );
+
+  // A full raw page suggests more may exist; a short page means we've reached the end.
+  // (Base this on the unfiltered page length, since the operation filter is applied client-side.)
+  return { traces: results.filter(Boolean) as TraceResponse[], hasMore: rawBriefs.length >= pageSize };
 }

@@ -1,9 +1,9 @@
-import { TraceByIdParams, TracePluginType, TraceSearchParams, UnifiedServiceOption } from './types';
+import { TraceByIdParams, TracePluginType, TraceSearchParams, UnifiedServiceOption, TracePageResult } from './types';
 import * as jaeger from './adapters/jaeger';
 import * as skywalking from './adapters/skywalking';
 import * as otel from './adapters/otel';
 
-export type { TracePluginType, TraceSearchParams, TraceByIdParams, UnifiedServiceOption };
+export type { TracePluginType, TraceSearchParams, TraceByIdParams, UnifiedServiceOption, TracePageResult };
 
 /** Visible cate options in Trace explorer (OTel reserved for later). */
 export const TRACING_PLUGIN_TYPES: Array<{ label: string; value: TracePluginType }> = [
@@ -67,6 +67,18 @@ export async function searchTraces(params: TraceSearchParams) {
     return otel.searchOtelTraces(params);
   }
   return jaeger.searchJaegerTraces(params);
+}
+
+/**
+ * Paginated full-trace list for datasources that expose a cheap list query (SkyWalking): one page of
+ * trace ids -> per-trace full fetch. Jaeger keeps its one-shot full-trace search via `searchTraces`,
+ * so this only serves SkyWalking.
+ */
+export async function searchTracesPaged(params: TraceSearchParams): Promise<TracePageResult> {
+  if (params.plugin_type === 'skywalking') {
+    return skywalking.searchSkyWalkingTracesPaged(params);
+  }
+  return { traces: [], hasMore: false };
 }
 
 export async function getTraceByID(params: TraceByIdParams) {

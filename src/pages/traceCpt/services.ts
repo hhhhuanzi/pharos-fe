@@ -19,13 +19,15 @@ import {
   getTraceOperations as getUnifiedTraceOperations,
   getTraceInstances as getUnifiedTraceInstances,
   searchTraces as searchUnifiedTraces,
+  searchTracesPaged as searchUnifiedTracesPaged,
   getTraceByID as getUnifiedTraceByID,
   getTraceDependencies as getUnifiedTraceDependencies,
   TracePluginType,
 } from '@/dh/trace';
+import type { TracePageResult } from '@/dh/trace';
 import { SearchTraceType, SearchTraceIDType } from './type';
 
-export type { TracePluginType };
+export type { TracePluginType, TracePageResult };
 
 function pluginTypeOf(data: { plugin_type?: TracePluginType }): TracePluginType {
   return data.plugin_type || 'jaeger';
@@ -90,6 +92,30 @@ export const getTraceSearch = (data: SearchTraceType & { plugin_type?: TracePlug
     duration_max: data.duration_max,
     duration_min: data.duration_min,
     num_traces: data.num_traces,
+  });
+};
+
+/**
+ * Paginated full-trace list query (currently SkyWalking). Each page returns full traces
+ * (with spans) so list rows can show span count / services, plus a `hasMore` flag for "load more".
+ */
+export const getTracePagedSearch = (
+  data: SearchTraceType & { plugin_type?: TracePluginType; page_num?: number; page_size?: number },
+): Promise<TracePageResult> => {
+  return searchUnifiedTracesPaged({
+    data_source_id: data.data_source_id,
+    plugin_type: pluginTypeOf(data),
+    service: data.service,
+    service_name: data.service_name,
+    operation: data.operation,
+    instance: data.instance,
+    start_time_min: data.start_time_min,
+    start_time_max: data.start_time_max,
+    attributes: (data.attributes as unknown as Record<string, string>) || null,
+    duration_max: data.duration_max,
+    duration_min: data.duration_min,
+    page_num: data.page_num,
+    page_size: data.page_size,
   });
 };
 

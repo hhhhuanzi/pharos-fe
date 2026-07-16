@@ -42,6 +42,7 @@ const zh_CN = {
   duration_max: '最大耗时',
   duration_min: '最小耗时',
   num_traces: '显示结果数',
+  load_more: '加载更多',
   query: '查询',
   traceid_msg: '请输入 Trace ID',
   sort: {

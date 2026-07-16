@@ -19,6 +19,8 @@ export interface SearchTraceType {
   num_traces?: number;
   /** Optional service instance filter (e.g. SkyWalking `serviceInstanceId`); ignored by datasources without instance-level query support. */
   instance?: string;
+  /** Display short name of the selected service; used to build the SkyWalking lightweight list `traceName`. */
+  service_name?: string;
   /** cate / plugin_type for dh/trace adapter dispatch */
   plugin_type?: 'jaeger' | 'skywalking' | 'otel';
 }

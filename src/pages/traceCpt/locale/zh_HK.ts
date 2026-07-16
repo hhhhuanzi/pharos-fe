@@ -42,6 +42,7 @@ const zh_HK = {
   duration_max: '最大耗時',
   duration_min: '最小耗時',
   num_traces: '顯示結果數',
+  load_more: '載入更多',
   query: '查詢',
   traceid_msg: '請輸入 Trace ID',
   sort: {

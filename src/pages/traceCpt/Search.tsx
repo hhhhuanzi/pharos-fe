@@ -243,6 +243,8 @@ export default function Index(props: IProps) {
         duration_max,
         duration_min,
         attributes: convTagsLogfmt(attributes),
+        // Selected service short name, used to build the SkyWalking lightweight list `traceName`.
+        service_name: services.find((item) => item.value === search.service)?.label,
         plugin_type: cate,
       };
       onSearch(searchItems);

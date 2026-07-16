@@ -35,6 +35,7 @@ const ja_JP = {
   duration_max: "最大所要時間",
   duration_min: "最小所要時間",
   num_traces: "結果数の表示",
+  load_more: "もっと読み込む",
   query: "クエリ",
   traceid_msg: "Trace ID を入力してください",
   sort: {

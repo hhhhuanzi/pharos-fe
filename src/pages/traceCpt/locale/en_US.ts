@@ -42,6 +42,7 @@ const en_US = {
   duration_max: 'Max Duration',
   duration_min: 'Min Duration',
   num_traces: 'Number of Traces',
+  load_more: 'Load More',
   query: 'Execute',
   traceid_msg: 'Please enter Trace ID',
   sort: {

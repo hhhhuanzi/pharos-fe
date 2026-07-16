@@ -2,9 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Scatter, ScatterConfig } from '@ant-design/plots';
 import _ from 'lodash';
-import moment from 'moment';
+import moment from 'moment-timezone';
 import { formatDuration } from '../../utils/date';
 import { Trace } from '../../type';
+
+// 链路时间统一按东八区（Asia/Shanghai）24 小时制展示，避免 UTC 与 12 小时制歧义
+const TRACE_TIME_ZONE = 'Asia/Shanghai';
+const TRACE_TIME_FORMAT = 'HH:mm:ss';
 
 interface Props {
   data: Trace[];
@@ -90,7 +94,9 @@ const ScatterBulleChart = (props: Props) => {
       },
       label: {
         formatter: (text: string, item, index: number) => {
-          let result = moment(parseInt(text) / 1e6).format('hh:mm:ss');
+          let result = moment(parseInt(text) / 1e3)
+            .tz(TRACE_TIME_ZONE)
+            .format(TRACE_TIME_FORMAT);
           return text === '0' ? '00:00:00' : result;
         },
       },
@@ -109,7 +115,9 @@ const ScatterBulleChart = (props: Props) => {
           el.name = tooltipNameMap[key] ?? el.name;
           if (key === 'startTime') {
             // @ts-ignore
-            el.value = moment(el.value / 1e6).format('hh:mm:ss');
+            el.value = moment(el.value / 1e3)
+              .tz(TRACE_TIME_ZONE)
+              .format(TRACE_TIME_FORMAT);
           }
           if (key === 'duration') {
             // @ts-ignore
