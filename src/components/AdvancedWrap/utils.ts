@@ -98,7 +98,7 @@ export const baseCates: Cate[] = [
     dashboardVariable: false,
     graphPro: false,
     alertPro: false,
-    logo: '/image/logos/skywalking.svg',
+    logo: '/image/logos/skywalking.png',
   },
   {
     value: 'ck',
