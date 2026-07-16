@@ -6,6 +6,15 @@ import { TraceResponse, TraceSpanData } from '@/pages/traceCpt/type';
 interface SwService {
   id: string;
   name: string;
+  /** Real agent-instrumented service (true) vs. conjectural/virtual service inferred from downstream calls, e.g. a DB/MQ node (false). */
+  normal?: boolean;
+}
+
+/** SkyWalking service names follow `${group}::${shortName}` (Service Auto Grouping). Split for display; ungrouped services have no `::`. */
+function splitServiceGroup(name: string): { group?: string; shortName: string } {
+  const idx = name.indexOf('::');
+  if (idx === -1) return { shortName: name };
+  return { group: name.slice(0, idx), shortName: name.slice(idx + 2) };
 }
 
 interface SwEndpoint {
@@ -97,7 +106,7 @@ function swSpansToJaegerResponse(traceId: string, spans: SwSpan[]): TraceRespons
       s.layer ? { key: 'layer', value: s.layer } : null,
       s.type ? { key: 'span.type', value: s.type } : null,
       s.isError ? { key: 'error', value: 'true' } : null,
-      s.serviceInstanceName ? { key: 'service.instance', value: s.serviceInstanceName } : null,
+      // service.instance already surfaces via span.process.tags (see processes[processID] below); avoid duplicating it here.
     ].filter(Boolean) as Array<{ key: string; value: string }>;
 
     const startUs = msToUs(Number(s.startTime));
@@ -130,20 +139,44 @@ function swSpansToJaegerResponse(traceId: string, spans: SwSpan[]): TraceRespons
 
 export async function getSkyWalkingServices(dataSourceId: number, startMs: number, endMs: number): Promise<UnifiedServiceOption[]> {
   const duration = buildDuration(startMs, endMs);
-  const data = await graphqlRequest(
-    dataSourceId,
-    `
-      query ($duration: Duration!) {
-        getAllServices(duration: $duration) {
-          id
-          name
+  let list: SwService[];
+  try {
+    const data = await graphqlRequest(
+      dataSourceId,
+      `
+        query ($duration: Duration!) {
+          getAllServices(duration: $duration) {
+            id
+            name
+            normal
+          }
         }
-      }
-    `,
-    { duration },
-  );
-  const list: SwService[] = data?.getAllServices || [];
-  return list.map((s) => ({ label: s.name, value: s.id }));
+      `,
+      { duration },
+    );
+    list = data?.getAllServices || [];
+  } catch (e) {
+    // Older OAP versions may not expose `normal` on Service; degrade to the minimal field set.
+    const data = await graphqlRequest(
+      dataSourceId,
+      `
+        query ($duration: Duration!) {
+          getAllServices(duration: $duration) {
+            id
+            name
+          }
+        }
+      `,
+      { duration },
+    );
+    list = data?.getAllServices || [];
+  }
+  return list
+    .filter((s) => s.normal !== false) // hide conjectural services (e.g. auto-detected DB/MQ nodes) from the picker; keep real instrumented services only
+    .map((s) => {
+      const { group, shortName } = splitServiceGroup(s.name);
+      return { label: shortName, value: s.id, group };
+    });
 }
 
 export async function getSkyWalkingOperations(dataSourceId: number, serviceId: string): Promise<string[]> {
@@ -162,6 +195,26 @@ export async function getSkyWalkingOperations(dataSourceId: number, serviceId: s
   );
   const list: SwEndpoint[] = data?.findEndpoint || [];
   return list.map((e) => e.name);
+}
+
+export async function getSkyWalkingInstances(dataSourceId: number, serviceId: string, startMs: number, endMs: number): Promise<UnifiedServiceOption[]> {
+  if (!serviceId) return [];
+  const duration = buildDuration(startMs, endMs);
+  const data = await graphqlRequest(
+    dataSourceId,
+    `
+      query ($duration: Duration!, $serviceId: ID!) {
+        getServiceInstances(duration: $duration, serviceId: $serviceId) {
+          id
+          name
+        }
+      }
+    `,
+    { duration, serviceId },
+  );
+  const list: SwService[] = data?.getServiceInstances || [];
+  // Instance `name` already contains the IP (SkyWalking convention: `${instanceUUID}@${ip}`); show as-is.
+  return list.map((i) => ({ label: i.name, value: i.id }));
 }
 
 async function queryTraceRaw(dataSourceId: number, traceId: string): Promise<TraceResponse | null> {
@@ -227,6 +280,9 @@ export async function searchSkyWalkingTraces(params: TraceSearchParams): Promise
 
   if (params.service) {
     condition.serviceId = params.service;
+  }
+  if (params.instance) {
+    condition.serviceInstanceId = params.instance;
   }
   if (params.operation) {
     // endpoint filter uses name lookup via queryBasicTraces tags when id unknown;

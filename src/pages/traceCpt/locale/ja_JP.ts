@@ -24,6 +24,10 @@ const ja_JP = {
     id: "Trace ID クエリ",
     query: "条件クエリ",
   },
+  group: "グループ",
+  all_groups: "すべてのグループ",
+  instance: "インスタンス",
+  all_instances: "すべてのインスタンス",
   label: "ラベル",
   label_tip:
     "\n    <0>\n      値サポート\n      <1>logfmt</1>\n      フォーマット\n    </0>\n    <2>スペースで分割</2>\n    <3>スペースを含む文字列は引用符で囲む必要があります</3>\n    ",

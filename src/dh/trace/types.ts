@@ -15,6 +15,8 @@ export interface UnifiedServiceOption {
   label: string;
   /** Value used in subsequent queries (Jaeger: name; SkyWalking: service id) */
   value: string;
+  /** Optional group label (e.g. SkyWalking's `group::name` service auto-grouping). Datasources without grouping leave this undefined. */
+  group?: string;
 }
 
 export interface TraceSearchParams {
@@ -28,6 +30,8 @@ export interface TraceSearchParams {
   duration_max?: string;
   duration_min?: string;
   num_traces?: number;
+  /** Optional service instance filter (e.g. SkyWalking `serviceInstanceId`); ignored by datasources without instance-level query support. */
+  instance?: string;
 }
 
 export interface TraceByIdParams {

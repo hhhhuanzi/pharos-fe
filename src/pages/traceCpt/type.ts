@@ -17,6 +17,8 @@ export interface SearchTraceType {
   duration_max?: string;
   duration_min?: string;
   num_traces?: number;
+  /** Optional service instance filter (e.g. SkyWalking `serviceInstanceId`); ignored by datasources without instance-level query support. */
+  instance?: string;
   /** cate / plugin_type for dh/trace adapter dispatch */
   plugin_type?: 'jaeger' | 'skywalking' | 'otel';
 }
@@ -187,4 +189,6 @@ export type Trace = TraceData & {
   traceName: string;
   services: Array<{ name: string; numberOfSpans: number }>;
   spansLengh?: number;
+  /** True when any span carries the `error` tag (OpenTracing/Jaeger convention; SkyWalking adapter maps `isError` to the same tag). */
+  hasError?: boolean;
 };

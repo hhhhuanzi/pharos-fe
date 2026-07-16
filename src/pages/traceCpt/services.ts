@@ -17,6 +17,7 @@
 import {
   getTraceServices as getUnifiedTraceServices,
   getTraceOperations as getUnifiedTraceOperations,
+  getTraceInstances as getUnifiedTraceInstances,
   searchTraces as searchUnifiedTraces,
   getTraceByID as getUnifiedTraceByID,
   getTraceDependencies as getUnifiedTraceDependencies,
@@ -59,12 +60,30 @@ export const getTraceOperation = async (
   return getUnifiedTraceOperations(plugin_type, data_source_id, service, { start, end });
 };
 
+/**
+ * Returns instance options for the given service: { label, value }
+ * - SkyWalking: value = instance id, label = instance name (e.g. `instanceUUID@ip`)
+ * - Jaeger/OTel: no instance-level query support, returns []
+ */
+export const getTraceInstances = async (
+  data_source_id: number,
+  service: string,
+  plugin_type: TracePluginType = 'jaeger',
+  startMs?: number,
+  endMs?: number,
+) => {
+  const end = endMs ?? Date.now();
+  const start = startMs ?? end - 12 * 60 * 60 * 1000;
+  return getUnifiedTraceInstances(plugin_type, data_source_id, service, { start, end });
+};
+
 export const getTraceSearch = (data: SearchTraceType & { plugin_type?: TracePluginType }) => {
   return searchUnifiedTraces({
     data_source_id: data.data_source_id,
     plugin_type: pluginTypeOf(data),
     service: data.service,
     operation: data.operation,
+    instance: data.instance,
     start_time_min: data.start_time_min,
     start_time_max: data.start_time_max,
     attributes: (data.attributes as unknown as Record<string, string>) || null,

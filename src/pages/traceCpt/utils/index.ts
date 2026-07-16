@@ -2,6 +2,7 @@ import _ from 'lodash';
 import { Span, TraceProcess, TraceSortItem, INanoSecond, TraceResponse, Trace, TraceSpan, TraceKeyValuePair } from '../type';
 import TreeNode from './TreeNode';
 import { getTraceSpanIdsAsTree } from './trace';
+import { isErrorSpan } from '../Detail/Timeline/VirtualizedTraceView/utils';
 
 export function _getTraceNameImpl(spans: Span[]) {
   let candidateSpan: Span | undefined;
@@ -156,6 +157,7 @@ export function transformTraceData(data?: TraceResponse): Trace | null {
     duration: traceEndTime - traceStartTime,
     startTime: traceStartTime,
     endTime: traceEndTime,
+    hasError: spans.some(isErrorSpan),
   };
 }
 

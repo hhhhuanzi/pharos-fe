@@ -18,7 +18,11 @@
 3. **链路查询**
    - [ ] 数据源类型可选 Jaeger / SkyWalking
    - [ ] 选择 SkyWalking 实例后能加载 Service 列表
-   - [ ] 按时间 + Service 查询出 Trace 列表
+   - [ ] 有分组信息时，Service 前面出现独立的「分组」选择框，先选分组、再选服务（级联），选中分组后 Service 下拉框收窄到该组
+   - [ ] Service 列表不包含虚拟/推断服务（如自动探测出的 DB、MQ 节点，`normal=false`），只列真实插了 Agent 的服务
+   - [ ] 当前 Service 存在多个实例时，Operation 后面出现「实例」选择框（展示 `instanceUUID@ip`），可按实例过滤 Trace；只有 1 个实例时不显示该选择框
+   - [ ] 按时间 + Service（+ 分组/实例，若有）查询出 Trace 列表
+   - [ ] 含错误 Span 的 Trace 在列表里有红色标识（左边框 + Error 标签），非错误 Trace 无标识
    - [ ] 点击列表项或按 TraceId 查询可打开 Span 瀑布图
 4. **Jaeger 回归**
    - [ ] 已有 Jaeger 数据源仍可查询列表与详情

@@ -11,7 +11,7 @@ import EmptyDatasourcePopover from '@/components/DatasourceSelect/EmptyDatasourc
 import { CommonStateContext } from '@/App';
 import { SearchTraceType, SearchTraceIDType } from './type';
 import LabelField from './components/LabelField';
-import { getTraceServices, getTraceOperation } from './services';
+import { getTraceServices, getTraceOperation, getTraceInstances } from './services';
 import { TRACING_PLUGIN_TYPES } from '@/dh/trace';
 import type { TracePluginType } from '@/dh/trace';
 
@@ -46,6 +46,11 @@ export function convTagsLogfmt(tags) {
 
 export type { SearchTraceType };
 
+/** Distinct, sorted group names present in a service list (e.g. SkyWalking's `group::name` auto-grouping). Empty for datasources without grouping (Jaeger). */
+function getGroupOptions(services: { label: string; value: string; group?: string }[]): string[] {
+  return (_.uniq(services.map((item) => item.group).filter(Boolean)) as string[]).sort();
+}
+
 export default function Index(props: IProps) {
   const { t } = useTranslation('trace');
   const { groupedDatasourceList } = useContext(CommonStateContext);
@@ -54,8 +59,15 @@ export default function Index(props: IProps) {
   const datasourceList = groupedDatasourceList[cate] || [];
   const [curPlugin, setCurPlugin] = useState<number>();
   const [isTraceId, setIsTraceId] = useState(false);
-  const [services, setServices] = useState<{ label: string; value: string }[]>([]);
+  const [services, setServices] = useState<{ label: string; value: string; group?: string }[]>([]);
+  const [group, setGroup] = useState<string>('');
   const [operations, setOperations] = useState<{ label: string; value: string }[]>([]);
+  const [instances, setInstances] = useState<{ label: string; value: string }[]>([]);
+  const groupOptions = getGroupOptions(services);
+  const filteredServices = group ? services.filter((item) => item.group === group) : services;
+  // Only worth a dedicated column when the current service actually has multiple instances to pick from.
+  const hasInstanceCol = instances.length > 1;
+  const searchColSpan = groupOptions.length > 0 || hasInstanceCol ? 6 : 8;
   const [range, setRange] = useState<IRawTimeRange>({
     start: 'now-12h',
     end: 'now',
@@ -97,6 +109,7 @@ export default function Index(props: IProps) {
       setCurPlugin(undefined);
       setServices([]);
       setOperations([]);
+      setInstances([]);
     }
   }, [cate]);
 
@@ -107,6 +120,7 @@ export default function Index(props: IProps) {
       const endMs = moment(parsedRange.end).valueOf();
       const serviceRes = await getTraceServices(dataSourceId, pluginType, startMs, endMs);
       setServices(serviceRes);
+      setGroup('');
       if (serviceRes.length > 0) {
         const first = serviceRes[0];
         setSearch((prev) => ({
@@ -115,6 +129,9 @@ export default function Index(props: IProps) {
           plugin_type: pluginType,
         }));
         await fetchOperation(dataSourceId, first.value, pluginType);
+        await fetchInstances(dataSourceId, first.value, pluginType);
+      } else {
+        setInstances([]);
       }
       setLoading(false);
     } catch (e) {
@@ -133,6 +150,22 @@ export default function Index(props: IProps) {
       setLoading(false);
     } catch (e) {
       setLoading(false);
+    }
+  };
+
+  const fetchInstances = async (dataSourceId: number, service: string, pluginType: TracePluginType = cate) => {
+    setSearch((prev) => ({ ...prev, instance: undefined }));
+    if (!service) {
+      setInstances([]);
+      return;
+    }
+    try {
+      const startMs = moment(parsedRange.start).valueOf();
+      const endMs = moment(parsedRange.end).valueOf();
+      const instanceRes = await getTraceInstances(dataSourceId, service, pluginType, startMs, endMs);
+      setInstances(instanceRes);
+    } catch (e) {
+      setInstances([]);
     }
   };
 
@@ -168,6 +201,27 @@ export default function Index(props: IProps) {
   const handleServiceChange = async (service: string) => {
     setSearch({ ...search, service, plugin_type: cate });
     fetchOperation(curPlugin!, service, cate);
+    fetchInstances(curPlugin!, service, cate);
+  };
+
+  const handleGroupChange = (nextGroup?: string) => {
+    const g = nextGroup || '';
+    setGroup(g);
+    const filtered = g ? services.filter((item) => item.group === g) : services;
+    const first = filtered[0];
+    setSearch((prev) => ({ ...prev, service: first ? first.value : '', plugin_type: cate }));
+    form.setFieldsValue({ operation: '' });
+    if (first && curPlugin) {
+      fetchOperation(curPlugin, first.value, cate);
+      fetchInstances(curPlugin, first.value, cate);
+    } else {
+      setOperations([]);
+      setInstances([]);
+    }
+  };
+
+  const handleInstanceChange = (nextInstance?: string) => {
+    setSearch((prev) => ({ ...prev, instance: nextInstance || undefined }));
   };
 
   const handleSearch = async (byTraceId: boolean) => {
@@ -236,7 +290,29 @@ export default function Index(props: IProps) {
 
             {!isTraceId ? (
               <>
-                <Col span={8}>
+                {groupOptions.length > 0 && (
+                  <Col span={searchColSpan}>
+                    <LabelField label={t('group')}>
+                      <Select
+                        dropdownMatchSelectWidth={false}
+                        style={{ width: '100%' }}
+                        value={group || undefined}
+                        allowClear
+                        placeholder={t('all_groups')}
+                        onChange={(val) => handleGroupChange(val)}
+                        showSearch
+                        filterOption={(input, option: any) => (option.children || '').indexOf(input) >= 0}
+                      >
+                        {groupOptions.map((g) => (
+                          <Select.Option value={g} key={g}>
+                            {g}
+                          </Select.Option>
+                        ))}
+                      </Select>
+                    </LabelField>
+                  </Col>
+                )}
+                <Col span={searchColSpan}>
                   <LabelField label='Service'>
                     <Select
                       dropdownMatchSelectWidth={false}
@@ -245,9 +321,9 @@ export default function Index(props: IProps) {
                       value={search.service}
                       className='ellipse-when-overflow'
                       showSearch
-                      filterOption={(input, option: any) => option.children.indexOf(input) >= 0}
+                      filterOption={(input, option: any) => (option.children || '').indexOf(input) >= 0}
                     >
-                      {services.map((item) => (
+                      {filteredServices.map((item) => (
                         <Select.Option value={item.value} key={item.value}>
                           {item.label}
                         </Select.Option>
@@ -255,10 +331,32 @@ export default function Index(props: IProps) {
                     </Select>
                   </LabelField>
                 </Col>
-                <Col span={8}>
+                {hasInstanceCol && (
+                  <Col span={searchColSpan}>
+                    <LabelField label={t('instance')}>
+                      <Select
+                        dropdownMatchSelectWidth={false}
+                        style={{ width: '100%' }}
+                        value={search.instance || undefined}
+                        allowClear
+                        placeholder={t('all_instances')}
+                        onChange={handleInstanceChange}
+                        showSearch
+                        filterOption={(input, option: any) => (option.children || '').indexOf(input) >= 0}
+                      >
+                        {instances.map((item) => (
+                          <Select.Option value={item.value} key={item.value}>
+                            {item.label}
+                          </Select.Option>
+                        ))}
+                      </Select>
+                    </LabelField>
+                  </Col>
+                )}
+                <Col span={searchColSpan}>
                   <LabelField label='Operation'>
                     <Form.Item name='operation' style={{ width: '100%' }}>
-                      <Select dropdownMatchSelectWidth={false} style={{ width: '100%' }} showSearch allowClear>
+                      <Select dropdownMatchSelectWidth={false} style={{ width: '100%' }} className='ellipse-when-overflow' showSearch allowClear>
                         {operations.map((item) => (
                           <Select.Option value={item.value} key={item.value}>
                             {item.label}
@@ -268,7 +366,7 @@ export default function Index(props: IProps) {
                     </Form.Item>
                   </LabelField>
                 </Col>
-                <Col span={8}>
+                <Col span={searchColSpan}>
                   <LabelField
                     label={
                       <span>

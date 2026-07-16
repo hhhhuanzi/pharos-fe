@@ -24,6 +24,10 @@ const zh_HK = {
     id: 'Trace ID 查詢',
     query: '條件查詢',
   },
+  group: '分組',
+  all_groups: '全部分組',
+  instance: '實例',
+  all_instances: '全部實例',
   label: '標籤',
   label_tip: `
     <0>

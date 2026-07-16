@@ -2,6 +2,16 @@
   display: flex;
   align-items: flex-start;
 
+  // The value control is the 2nd flex child; without min-width: 0 a flex item's automatic
+  // minimum size falls back to its content's min-content width. For unbreakable strings
+  // (e.g. hash-like SkyWalking instance IDs with no space/hyphen to wrap at), that min-content
+  // width can exceed the column width, pushing the control (and its clear button) past the border
+  // instead of shrinking/truncating.
+  > *:not(.label-field-name) {
+    min-width: 0;
+    flex: 1;
+  }
+
   &-name {
     background: var(--fc-background-color-light);
     padding: 5px 10px;

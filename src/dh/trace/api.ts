@@ -44,6 +44,21 @@ export async function getTraceOperations(
   return jaeger.getJaegerOperations(dataSourceId, service);
 }
 
+/** Instance-level query is only meaningful where the backend can filter traces by instance (currently SkyWalking). Others return []. */
+export async function getTraceInstances(
+  pluginType: TracePluginType,
+  dataSourceId: number,
+  service: string,
+  range?: { start: number; end: number },
+): Promise<UnifiedServiceOption[]> {
+  if (pluginType === 'skywalking' && service) {
+    const end = range?.end ?? Date.now();
+    const start = range?.start ?? end - 12 * 60 * 60 * 1000;
+    return skywalking.getSkyWalkingInstances(dataSourceId, service, start, end);
+  }
+  return [];
+}
+
 export async function searchTraces(params: TraceSearchParams) {
   if (params.plugin_type === 'skywalking') {
     return skywalking.searchSkyWalkingTraces(params);

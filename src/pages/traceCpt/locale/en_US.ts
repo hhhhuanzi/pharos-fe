@@ -24,6 +24,10 @@ const en_US = {
     id: 'Trace ID',
     query: 'Search',
   },
+  group: 'Group',
+  all_groups: 'All Groups',
+  instance: 'Instance',
+  all_instances: 'All Instances',
   label: 'Label',
   label_tip: `
     <0>

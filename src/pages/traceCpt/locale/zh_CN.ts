@@ -24,6 +24,10 @@ const zh_CN = {
     id: 'Trace ID 查询',
     query: '条件查询',
   },
+  group: '分组',
+  all_groups: '全部分组',
+  instance: '实例',
+  all_instances: '全部实例',
   label: '标签',
   label_tip: `
     <0>
