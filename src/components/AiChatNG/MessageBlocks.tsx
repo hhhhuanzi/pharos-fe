@@ -277,7 +277,7 @@ export function EmptyConversation({ prompts, onPromptClick }: { prompts?: string
         <div className='text-l4 font-bold'>
           <Space align='baseline'>
             <img src='/image/ai-chat/ai.gif' className='w-[24px] h-[24px]' />
-            <TypedGreeting prefix={greetingPrefix} brand='NightingaleAI' />
+            <TypedGreeting prefix={greetingPrefix} brand='PharosAI' />
           </Space>
         </div>
       </div>

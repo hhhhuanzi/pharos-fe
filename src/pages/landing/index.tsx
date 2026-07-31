@@ -2,10 +2,8 @@ import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useHistory } from 'react-router-dom';
 import { ArrowRightOutlined } from '@ant-design/icons';
-import classNames from 'classnames';
 import {
   Activity,
-  BarChart3,
   Bell,
   BookOpenText,
   Boxes,
@@ -26,7 +24,6 @@ import {
   Server,
   Smartphone,
   Sparkles,
-  Star,
   Users as UsersIcon,
   UsersRound,
   Waypoints,
@@ -36,12 +33,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import PageLayout from '@/components/pageLayout';
-import DocumentDrawer from '@/components/DocumentDrawer';
-import { IS_PLUS } from '@/utils/constant';
 import { useAiChatContext } from '@/components/AiChatNG';
 import { buildPageFrom, getRecommendByUrl } from '@/components/AiChatNG/recommend';
 import {
-  DOC_LINKS,
   landingAiAssistant,
   landingCollectionProduct,
   landingFootnotes,
@@ -51,17 +45,13 @@ import {
   landingIntegrationProducts,
   landingNotificationCards,
   landingObservabilityProducts,
-  landingQuickStartCards,
   landingScenarioProducts,
 } from './landing.data';
-import OnboardingChecklist from './OnboardingChecklist';
 import './style.less';
 
 const scenarioIcons: LucideIcon[] = [UsersIcon, Flame, History, Sparkles];
 const notificationIcons: LucideIcon[] = [Bell, FileText, MessageSquare, UsersRound];
 const infrastructureIcons: LucideIcon[] = [Layers, Server, PlugZap, Smartphone, Cloud, HardDrive, Container, Cpu, Network];
-const quickStartIcons: LucideIcon[] = [PlugZap, BarChart3, Bell, Sparkles];
-const quickStartIconClasses = ['bg-violet-500/15 text-violet-500', 'bg-blue-500/15 text-blue-500', 'bg-amber-500/15 text-amber-500', 'bg-emerald-500/15 text-emerald-500'];
 const aiCapabilityIcons: LucideIcon[] = [Sparkles, Activity, Boxes, BookOpenText];
 
 function isInternalUrl(url?: string): boolean {
@@ -126,21 +116,8 @@ export default function Landing() {
     [openAiChat, i18n.language],
   );
 
-  // 快速上手区的文档：在右侧抽屉内嵌打开，不跳新标签页
-  const handleOpenDoc = useCallback(
-    (url: string, title: string) => {
-      DocumentDrawer({
-        language: i18n.language,
-        title,
-        type: 'iframe',
-        documentPath: url,
-      });
-    },
-    [i18n.language],
-  );
-
   return (
-    <PageLayout title={t('pageTitle')}>
+    <PageLayout title={t('pageTitle')} hideDocAndCommunityLinks>
       <div className='n9e-landing-page best-looking-scroll'>
         <div className='n9e-landing-surface'>
           {/* Section 1 · Hero */}
@@ -162,18 +139,10 @@ export default function Landing() {
               </div>
               <div className='n9e-landing-hero-description'>{t('hero.description')}</div>
               <div className='n9e-landing-hero-actions'>
-                <a className='n9e-landing-hero-btn n9e-landing-hero-btn-primary' href={landingHero.primaryAction.url} target='_blank' rel='noopener noreferrer'>
-                  <BookOpenText className='n9e-landing-hero-btn-icon' strokeWidth={1.9} />
-                  <span>{t('hero.primaryAction')}</span>
-                </a>
                 <button className='n9e-landing-hero-btn n9e-landing-hero-btn-secondary' type='button' onClick={() => handleAskAi()}>
                   <Sparkles className='n9e-landing-hero-btn-icon n9e-landing-ai-breath-icon' strokeWidth={1.9} />
                   <span>{t('hero.secondaryAction')}</span>
                 </button>
-                <a className='n9e-landing-hero-btn n9e-landing-hero-btn-ghost' href={DOC_LINKS.github} target='_blank' rel='noopener noreferrer'>
-                  <Star className='n9e-landing-hero-btn-icon' strokeWidth={1.9} />
-                  <span>GitHub</span>
-                </a>
               </div>
             </div>
             <div className='n9e-landing-hero-visual'>
@@ -188,9 +157,6 @@ export default function Landing() {
               </div>
             </div>
           </section>
-
-          {/* Section 1.5 · 新手任务清单（仅开源版、且仍有未完成步骤时展示） */}
-          {!IS_PLUS && <OnboardingChecklist />}
 
           {/* Section header for the matrix */}
           <div className='n9e-landing-header'>
@@ -371,72 +337,7 @@ export default function Landing() {
             </div>
           </div>
 
-          {/* Section 3 · 快速上手 */}
-          <section className='n9e-landing-guide'>
-            <div className='n9e-landing-guide-header'>
-              <div className='n9e-landing-guide-header-left'>
-                <h3 className='n9e-landing-guide-title'>{t('quickStart.title')}</h3>
-                <a className='n9e-landing-guide-all-docs' href={DOC_LINKS.base} target='_blank' rel='noopener noreferrer'>
-                  <BookOpenText className='n9e-landing-guide-all-docs-icon' strokeWidth={1.9} />
-                  {t('quickStart.viewAll')}
-                </a>
-              </div>
-            </div>
-            <div className='n9e-landing-guide-grid'>
-              {landingQuickStartCards.map((item, index) => {
-                const Icon = quickStartIcons[index] || Sparkles;
-                return (
-                  <div key={item.titleKey} className='n9e-landing-quickstart-card'>
-                    <div className='n9e-landing-quickstart-card-head'>
-                      <div className={classNames('n9e-landing-quickstart-icon', quickStartIconClasses[index])}>
-                        <Icon strokeWidth={1.9} />
-                      </div>
-                      <div className='n9e-landing-quickstart-text'>
-                        <h4 className='n9e-landing-quickstart-title'>{t(item.titleKey)}</h4>
-                        <p className='n9e-landing-quickstart-description'>{t(item.descriptionKey)}</p>
-                      </div>
-                    </div>
-                    <div className='n9e-landing-quickstart-link-list'>
-                      {item.links.map((link) => {
-                        const linkLabel = t(link.labelKey);
-                        return (
-                          <div key={link.labelKey} className='n9e-landing-quickstart-link-row'>
-                            <a
-                              className='n9e-landing-quickstart-link'
-                              href={link.url}
-                              rel='noopener noreferrer'
-                              onClick={(e) => {
-                                if (!link.url) return;
-                                e.preventDefault();
-                                handleOpenDoc(link.url, linkLabel);
-                              }}
-                            >
-                              <ArrowRightOutlined className='n9e-landing-quickstart-link-arrow' />
-                              <span className='n9e-landing-quickstart-link-label'>{linkLabel}</span>
-                            </a>
-                            <button
-                              type='button'
-                              className='n9e-landing-quickstart-ask-ai-btn'
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                handleAskAi(linkLabel);
-                              }}
-                            >
-                              <Sparkles className='n9e-landing-quickstart-ask-ai-icon' strokeWidth={1.9} />
-                              <span>{t('quickStart.askAi')}</span>
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* Section 4 · AI 助手 callout */}
+          {/* Section 3 · AI 助手 callout */}
           <section className='n9e-landing-section'>
             <div className='n9e-landing-ai-callout'>
               <div className='n9e-landing-ai-callout-inner'>

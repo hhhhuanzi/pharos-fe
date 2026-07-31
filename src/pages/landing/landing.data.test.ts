@@ -4,7 +4,6 @@ import {
   landingNotificationCards,
   landingIntegrationProducts,
   landingInfrastructureCategories,
-  landingQuickStartCards,
   landingAiAssistant,
   landingHero,
   landingCollectionProduct,
@@ -13,7 +12,7 @@ import {
 
 describe('landing.data', () => {
   it('hero 配置具备必要字段', () => {
-    expect(landingHero.title).toBe('Nightingale');
+    expect(landingHero.title).toBe('Pharos');
     expect(landingHero.heroScreenshot).toMatch(/^\/image\//);
     expect(landingHero.primaryAction.url).toBe(DOC_LINKS.base);
   });
@@ -28,11 +27,14 @@ describe('landing.data', () => {
     });
   });
 
-  it('平台·统一观测全部为站内路由', () => {
+  it('平台·统一观测全部为站内路由，且涵盖指标/日志/链路三大探索入口', () => {
     expect(landingObservabilityProducts.length).toBeGreaterThanOrEqual(7);
     landingObservabilityProducts.forEach((item) => {
       expect(item.url?.startsWith('/')).toBe(true);
     });
+    expect(landingObservabilityProducts.some((item) => item.url === '/metric/explorer')).toBe(true);
+    expect(landingObservabilityProducts.some((item) => item.url === '/log/explorer')).toBe(true);
+    expect(landingObservabilityProducts.some((item) => item.url === '/trace/explorer')).toBe(true);
   });
 
   it('通知矩阵 4 张卡片均有 i18n key 与站内路由', () => {
@@ -44,29 +46,18 @@ describe('landing.data', () => {
     });
   });
 
-  it('数据源集成 chip 不为空且都有 logo', () => {
-    expect(landingIntegrationProducts).toHaveLength(10);
+  it('数据源集成 chip 不为空且都有 logo，且涵盖链路追踪数据源', () => {
+    expect(landingIntegrationProducts).toHaveLength(12);
     landingIntegrationProducts.forEach((item) => {
       expect(item.label).toBeTruthy();
       expect(item.iconUrl).toMatch(/^\/image\/logos\//);
     });
+    expect(landingIntegrationProducts.some((item) => item.label === 'Jaeger')).toBe(true);
+    expect(landingIntegrationProducts.some((item) => item.label === 'SkyWalking')).toBe(true);
   });
 
   it('基础设施 9 个分类齐全', () => {
     expect(landingInfrastructureCategories).toHaveLength(9);
-  });
-
-  it('快速上手 4 张卡片，每卡 2 个文档链接，均为 flashcat.cloud 的文档', () => {
-    expect(landingQuickStartCards).toHaveLength(4);
-    landingQuickStartCards.forEach((card) => {
-      expect(card.links).toHaveLength(2);
-      card.links.forEach((link) => {
-        const url = new URL(link.url || '');
-        expect(url.protocol).toBe('https:');
-        expect(url.hostname).toBe('flashcat.cloud');
-        expect(url.pathname).toMatch(/nightingale|categraf/);
-      });
-    });
   });
 
   it('AI 助手能力列表非空', () => {

@@ -253,9 +253,9 @@ function App() {
             console.error(e);
           }
         }
-        document.title = siteInfo?.page_title || 'Nightingale';
+        document.title = siteInfo?.page_title || 'Pharos';
         if (iconLink) {
-          iconLink.href = siteInfo?.favicon_url || '/image/favicon.ico';
+          iconLink.href = siteInfo?.favicon_url || '/image/favicon.svg';
         }
         if (siteInfo?.font_family) {
           document.body.style.fontFamily = siteInfo.font_family;

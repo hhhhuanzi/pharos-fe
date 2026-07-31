@@ -68,7 +68,7 @@ function FlashAiButtonContent() {
       size='small'
       onClick={handleClick}
     >
-      Nightingale AI
+      Pharos AI
     </Button>
   );
 }

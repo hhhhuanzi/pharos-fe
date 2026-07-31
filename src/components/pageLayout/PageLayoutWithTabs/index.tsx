@@ -54,9 +54,25 @@ interface IPageLayoutProps {
   productDocLink?: string;
   tabGroup?: string;
   docButtonText?: string;
+  /** 隐藏顶部「产品文档 / 提交问题 / 预约交流」链接，供首页等不需要这些入口的页面使用 */
+  hideDocAndCommunityLinks?: boolean;
 }
 
-const PageLayout: React.FC<IPageLayoutProps> = ({ icon, title, rightArea, introIcon, children, customArea, showBack, backPath, doc, productDocLink, tabGroup, docButtonText }) => {
+const PageLayout: React.FC<IPageLayoutProps> = ({
+  icon,
+  title,
+  rightArea,
+  introIcon,
+  children,
+  customArea,
+  showBack,
+  backPath,
+  doc,
+  productDocLink,
+  tabGroup,
+  docButtonText,
+  hideDocAndCommunityLinks,
+}) => {
   const { t, i18n } = useTranslation('pageLayout');
   const history = useHistory();
   const location = useLocation();
@@ -139,13 +155,13 @@ const PageLayout: React.FC<IPageLayoutProps> = ({ icon, title, rightArea, introI
                     )}
                     <FlashAiButton />
                     {rightArea}
-                    <DocLink link={documentUrl} />
-                    {!IS_ENT && !IS_PLUS && (
+                    {!hideDocAndCommunityLinks && <DocLink link={documentUrl} />}
+                    {!hideDocAndCommunityLinks && !IS_ENT && !IS_PLUS && (
                       <Button className='text-hint text-[11px]' target='_blank' href='https://github.com/ccfos/nightingale/issues' size='small' icon={<GithubOutlined />}>
                         {t('submit_issue')}
                       </Button>
                     )}
-                    {!IS_ENT && !IS_PLUS && ['zh_CN', 'zh_HK'].includes(i18n.language) && (
+                    {!hideDocAndCommunityLinks && !IS_ENT && !IS_PLUS && ['zh_CN', 'zh_HK'].includes(i18n.language) && (
                       <Button
                         className='text-hint text-[11px]'
                         target='_blank'

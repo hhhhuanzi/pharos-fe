@@ -12,9 +12,9 @@ const zh_HK = {
   document_url: '文檔鏈接 URL',
   document_url_tip: '覆蓋默認的夜鶯文檔鏈接地址',
   site_url: '站點鏈接',
-  site_url_tip: '用於外部訪問夜鶯的地址，後端可用此生成可訪問到夜鶯實例的鏈接',
+  site_url_tip: '用於外部訪問 Pharos 的地址，後端可用此生成可訪問到 Pharos 實例的鏈接',
   page_title: '站點標題',
-  page_title_tip: '覆蓋默認的標題 (Nightingale)',
+  page_title_tip: '覆蓋默認的標題 (Pharos)',
   home_page_url: '主站鏈接',
   home_page_url_tip: '覆蓋默認的主站鏈接 (/metric/explorer)',
   displayMode: {

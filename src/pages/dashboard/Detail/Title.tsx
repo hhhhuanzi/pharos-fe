@@ -69,7 +69,7 @@ interface IProps {
   hideGoList?: boolean;
 }
 
-const cachePageTitle = document.title || 'Nightingale';
+const cachePageTitle = document.title || 'Pharos';
 
 export default function Title(props: IProps) {
   const { t, i18n } = useTranslation('dashboard');

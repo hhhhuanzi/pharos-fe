@@ -21,29 +21,17 @@ export interface LandingPill {
   url?: string;
 }
 
-export interface LandingGuideLink {
-  labelKey: string;
-  url?: string;
-}
-
-export interface LandingGuideCard {
-  titleKey: string;
-  descriptionKey: string;
-  links: LandingGuideLink[];
-}
-
 const DOCS_BASE = 'https://flashcat.cloud/product/nightingale/';
-const DOCS_V8_BASE = 'https://flashcat.cloud/docs/content/flashcat-monitor/nightingale-v9/';
 
 export const DOC_LINKS = {
   base: DOCS_BASE,
-  github: 'https://github.com/ccfos/nightingale',
+  github: 'https://github.com/hhhhuanzi/pharos-fe',
   categraf: 'https://flashcat.cloud/product/categraf/',
 };
 
 export const landingHero = {
   badgeKey: 'hero.badge',
-  title: 'Nightingale',
+  title: 'Pharos',
   highlightKey: 'hero.highlight',
   descriptionKey: 'hero.description',
   primaryAction: {
@@ -69,11 +57,12 @@ export const landingScenarioProducts: LandingCard[] = [
   { titleKey: 'matrix.scenario.aiAssistant.title', descriptionKey: 'matrix.scenario.aiAssistant.description', action: 'openAiChat' },
 ];
 
-/** 平台 · 统一观测 — pill 列表 */
+/** 平台 · 统一观测 — pill 列表（指标 / 日志 / 链路三大探索入口 + 告警治理） */
 export const landingObservabilityProducts: LandingPill[] = [
   { titleKey: 'matrix.observability.dashboard', url: '/dashboards' },
   { titleKey: 'matrix.observability.metricExplorer', url: '/metric/explorer' },
   { titleKey: 'matrix.observability.logExplorer', url: '/log/explorer' },
+  { titleKey: 'matrix.observability.traceExplorer', url: '/trace/explorer' },
   { titleKey: 'matrix.observability.alertRules', url: '/alert-rules' },
   { titleKey: 'matrix.observability.alertMutes', url: '/alert-mutes' },
   { titleKey: 'matrix.observability.alertSubscribes', url: '/alert-subscribes' },
@@ -98,7 +87,7 @@ export const landingCollectionProduct = {
   url: DOC_LINKS.categraf,
 };
 
-/** 数据 · 统一集成 — 数据源 chips */
+/** 数据 · 统一集成 — 数据源 chips（涵盖指标 / 日志 / 链路三类数据源） */
 export const landingIntegrationProducts: LandingChip[] = [
   { label: 'Prometheus', iconUrl: '/image/logos/prometheus.png', url: '/datasources' },
   { label: 'VictoriaMetrics', iconUrl: '/image/logos/victorialogs.png', url: '/datasources' },
@@ -110,6 +99,8 @@ export const landingIntegrationProducts: LandingChip[] = [
   { label: 'MySQL', iconUrl: '/image/logos/mysql.png', url: '/datasources' },
   { label: 'PostgreSQL', iconUrl: '/image/logos/pgsql.png', url: '/datasources' },
   { label: 'Doris', iconUrl: '/image/logos/doris.png', url: '/datasources' },
+  { label: 'Jaeger', iconUrl: '/image/logos/jaeger.png', url: '/datasources' },
+  { label: 'SkyWalking', iconUrl: '/image/logos/skywalking.png', url: '/datasources' },
 ];
 
 /** 模板中心入口 — 指向内置集成模板中心（70+ 内置集成），作为新人"从这里开始"的发现入口 */
@@ -137,41 +128,6 @@ export const landingFootnotes = {
   integration: 'matrix.footnotes.integration',
   notification: ['matrix.footnotes.notification.0', 'matrix.footnotes.notification.1'],
 };
-
-export const landingQuickStartCards: LandingGuideCard[] = [
-  {
-    titleKey: 'quickStart.ingest.title',
-    descriptionKey: 'quickStart.ingest.description',
-    links: [
-      { labelKey: 'quickStart.ingest.links.0', url: 'https://flashcat.cloud/docs/content/flashcat-monitor/categraf/2-installation/' },
-      { labelKey: 'quickStart.ingest.links.1', url: `${DOCS_V8_BASE}quickstart/datasource/` },
-    ],
-  },
-  {
-    titleKey: 'quickStart.observe.title',
-    descriptionKey: 'quickStart.observe.description',
-    links: [
-      { labelKey: 'quickStart.observe.links.0', url: `${DOCS_V8_BASE}quickstart/dashboard/` },
-      { labelKey: 'quickStart.observe.links.1', url: `${DOCS_V8_BASE}quickstart/ad-hoc/` },
-    ],
-  },
-  {
-    titleKey: 'quickStart.alert.title',
-    descriptionKey: 'quickStart.alert.description',
-    links: [
-      { labelKey: 'quickStart.alert.links.0', url: `${DOCS_V8_BASE}quickstart/metric-alerting/` },
-      { labelKey: 'quickStart.alert.links.1', url: `${DOCS_V8_BASE}usecase/media/` },
-    ],
-  },
-  {
-    titleKey: 'quickStart.ai.title',
-    descriptionKey: 'quickStart.ai.description',
-    links: [
-      { labelKey: 'quickStart.ai.links.0', url: `${DOCS_V8_BASE}usage/ai-config/builtin-skills/` },
-      { labelKey: 'quickStart.ai.links.1', url: `${DOCS_V8_BASE}usecase/processor/` },
-    ],
-  },
-];
 
 export const landingAiAssistant = {
   titleKey: 'aiAssistant.title',
