@@ -5,33 +5,45 @@ export const BOOLEAN_TYPES = ['bool', 'boolean'];
 export const IP_TYPES = ['ipv4', 'ipv6'];
 export const FILTERABLE_TYPES = [...NUMBER_TYPES, ...DATE_TYPES, ...STRING_TYPES, ...BOOLEAN_TYPES, ...IP_TYPES];
 
+// Operator constants align with ClickHouse native SQL surface:
+//   - Keywords use upper-case with single spaces (IN / NOT IN / IS NULL /
+//     BETWEEN AND / LIKE / ILIKE), matching CK SQL Reference verbatim.
+//   - Functions use camelCase (match / hasToken), matching CK function
+//     names verbatim. Negated function reads as keyword + function:
+//     `NOT match` mirrors the SQL the BE emits — `NOT match(f, 'p')` —
+//     because no CK OSS version has a `notMatch()` function.
+// See docs/ck-querybuilder-n9e-plus-fe-todo.md §2 for the full matrix.
 export const EQUAL_OPERATORS = ['=', '!='];
 export const COMPARISON_OPERATORS = ['>', '<', '>=', '<='];
-export const IN_OPERATORS = ['in', 'not-in'];
-export const NULL_OPERATORS = ['is-null', 'is-not-null'];
-export const BETWEEN_OPERATORS = ['between', 'not-between'];
-export const LIKE_OPERATORS = ['like', 'not-like', 'ilike', 'not_ilike'];
-export const MATCH_OPERATORS = ['match', 'not_match', 'has_token'];
+export const IN_OPERATORS = ['IN', 'NOT IN'];
+export const NULL_OPERATORS = ['IS NULL', 'IS NOT NULL'];
+export const BETWEEN_OPERATORS = ['BETWEEN AND', 'NOT BETWEEN AND'];
+export const LIKE_OPERATORS = ['LIKE', 'NOT LIKE', 'ILIKE', 'NOT ILIKE'];
+export const MATCH_OPERATORS = ['match', 'NOT match', 'hasToken'];
 
-const BASE_OPERATORS = [...EQUAL_OPERATORS, ...IN_OPERATORS, ...NULL_OPERATORS, ...BETWEEN_OPERATORS];
+const SCALAR_OPERATORS = [...EQUAL_OPERATORS, ...IN_OPERATORS, ...NULL_OPERATORS];
 const NUMBER_TYPE_OPERATORS = [...EQUAL_OPERATORS, ...COMPARISON_OPERATORS, ...IN_OPERATORS, ...NULL_OPERATORS, ...BETWEEN_OPERATORS];
-const STRING_TYPE_OPERATORS = [...EQUAL_OPERATORS, ...COMPARISON_OPERATORS, ...IN_OPERATORS, ...NULL_OPERATORS, ...BETWEEN_OPERATORS, ...LIKE_OPERATORS, ...MATCH_OPERATORS];
+const DATE_TYPE_OPERATORS = NUMBER_TYPE_OPERATORS;
+const STRING_TYPE_OPERATORS = [...EQUAL_OPERATORS, ...IN_OPERATORS, ...NULL_OPERATORS, ...LIKE_OPERATORS, ...MATCH_OPERATORS];
+const IP_TYPE_OPERATORS = [...EQUAL_OPERATORS, ...IN_OPERATORS, ...NULL_OPERATORS, ...BETWEEN_OPERATORS];
+const COMPLEX_TYPE_OPERATORS = NULL_OPERATORS;
 
 export const TYPE_OPERATOR_MAP: Record<string, string[]> = {
   long: NUMBER_TYPE_OPERATORS,
   number: NUMBER_TYPE_OPERATORS,
-  date: NUMBER_TYPE_OPERATORS,
+  date: DATE_TYPE_OPERATORS,
   text: STRING_TYPE_OPERATORS,
-  json: STRING_TYPE_OPERATORS,
-  map: STRING_TYPE_OPERATORS,
-  bool: BASE_OPERATORS,
-  boolean: BASE_OPERATORS,
-  ipv4: BASE_OPERATORS,
-  ipv6: BASE_OPERATORS,
+  json: COMPLEX_TYPE_OPERATORS,
+  map: COMPLEX_TYPE_OPERATORS,
+  bool: SCALAR_OPERATORS,
+  boolean: SCALAR_OPERATORS,
+  ipv4: IP_TYPE_OPERATORS,
+  ipv6: IP_TYPE_OPERATORS,
 };
 
 export const AGGREGATE_FUNCTION_TYPE_MAP: Record<string, string[]> = {
   COUNT: FILTERABLE_TYPES,
+  CPS: FILTERABLE_TYPES,
   AVG: NUMBER_TYPES,
   MAX: NUMBER_TYPES,
   MIN: NUMBER_TYPES,

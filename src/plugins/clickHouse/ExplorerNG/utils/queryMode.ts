@@ -3,25 +3,43 @@ import { OnValueFilterParams } from '@/pages/logExplorer/components/LogsViewer/t
 import { isCKDateType } from '../../constants';
 import { Field, FilterConfig } from '../types';
 
-const HIGHLIGHTABLE_OPERATORS = new Set(['=', 'in', 'like', 'ilike', 'has_token', 'match']);
+// Positive-text operators that BE PrepareHighlightTerms in
+// plus/datasource/ck/highlight.go accepts. Kept in canonical form (see
+// constants.ts) so the FE gate mirrors the BE contract exactly.
+const HIGHLIGHTABLE_OPERATORS = new Set(['=', 'IN', 'LIKE', 'ILIKE', 'hasToken', 'match']);
 
-export function buildCKFilterFromLogValue(params: OnValueFilterParams, indexData: Field[]): FilterConfig {
-  const path = params.key.split('.');
-  const field = indexData.some((item) => item.field === params.key) || path.length === 1 ? params.key : path;
+// Map the LogsViewer token-menu intent (AND/NOT/EXISTS) directly to a CK
+// operator. Negation lives entirely in the operator space (no `not` flag on
+// the filter) so the QueryBuilder chip renders truthfully and the BE payload
+// is unambiguous — see docs/ck-querybuilder-aggregate-golden-lessons-learned §K.
+export function buildCKFilterFromLogValue(params: OnValueFilterParams, indexData: Field[]): FilterConfig | undefined {
+  if (!indexData.some((item) => item.field === params.key)) return undefined;
+
+  const intent = params.operator.toUpperCase();
+  let operator: string;
+  if (intent === 'EXISTS') {
+    // Token menu "field exists" — always IS NOT NULL regardless of the
+    // triggering value.
+    operator = 'IS NOT NULL';
+  } else if (intent === 'NOT') {
+    operator = params.value === null ? 'IS NOT NULL' : '!=';
+  } else {
+    // 'AND' or unknown intent → positive filter
+    operator = params.value === null ? 'IS NULL' : '=';
+  }
 
   return {
     logic: 'and',
-    field,
-    operator: params.value === null ? 'is-null' : '=',
+    field: params.key,
+    operator,
     value: params.value,
-    not: params.operator.toUpperCase() === 'NOT',
   };
 }
 
 export function hasHighlightableFilter(filters: FilterConfig[] = []): boolean {
   return filters.some((filter) => {
-    const operator = (filter.operator || '').toLowerCase();
-    if (filter.not || operator.startsWith('not')) return false;
+    if (filter.disabled) return false;
+    const operator = filter.operator || '';
     if (!HIGHLIGHTABLE_OPERATORS.has(operator)) return false;
     const values = Array.isArray(filter.value) ? filter.value : [filter.value];
     return values.some((value) => typeof value === 'string' && value.length > 0);

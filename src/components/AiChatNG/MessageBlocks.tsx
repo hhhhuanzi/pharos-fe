@@ -5,6 +5,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { Sparkles } from 'lucide-react';
 
 import Markdown from '@/components/Markdown';
+import { IS_ENT } from '@/utils/constant';
 import { AiChatExecuteQueryForQueryContent, EAiChatContentType, IAiChatAction, IAiChatMessage, IAiChatMessageResponse } from './types';
 import { cn } from './utils';
 import QueryContentBlock from './ContentRenderer/QueryContentBlock';
@@ -93,7 +94,7 @@ export function ThinkingBlock({ title, content, isFinish }: { title: string; con
     >
       <Collapse.Panel header={<span className='text-sm font-medium text-main'>{displayTitle}</span>} key='thinking'>
         <div className='max-h-60 overflow-y-auto'>
-          <Markdown content={content || ''} />
+          <Markdown content={content || ''} showCodeCopy />
         </div>
       </Collapse.Panel>
     </Collapse>
@@ -114,7 +115,7 @@ export function HintBlock({ response }: { response: IAiChatMessageResponse }) {
 export function MarkdownBlock({ response }: { response: IAiChatMessageResponse }) {
   return (
     <div className='rounded-lg border border-transparent bg-transparent text-main'>
-      <Markdown content={response.content || ''} />
+      <Markdown content={response.content || ''} showCodeCopy />
     </div>
   );
 }
@@ -168,7 +169,7 @@ export function ResponseBlocks(props: IAiChatResponseBlocksProps) {
                 ns={NAME_SPACE}
                 i18nKey='message.no_llm_content'
                 components={{
-                  a: <a href='/ai-config/llm-configs' target='_blank' />,
+                  a: <a href={IS_ENT ? '/flashai/llm-configs' : '/ai-config/llm-configs'} target='_blank' />,
                 }}
               />
             }

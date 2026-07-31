@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Form, Space, Pagination, Empty, Popover, InputNumber, Select, Tag } from 'antd';
+import { Form, Space, Pagination, Empty, Popover, InputNumber, Select } from 'antd';
 import { useTranslation, Trans } from 'react-i18next';
 import _ from 'lodash';
 import moment from 'moment';
@@ -37,10 +37,6 @@ export function getFields(logs, DateField) {
     });
   });
   return _.sortBy(fields);
-}
-
-export function getFieldLabel(fieldKey: string, fieldConfig?: any) {
-  return fieldConfig?.attrs?.[fieldKey]?.alias || fieldKey;
 }
 
 interface Props {
@@ -369,58 +365,6 @@ export default function index(props: Props) {
 
   return (
     <>
-      {!_.isEmpty(queryValues?.filters) && (
-        <div className='flex flex-wrap gap-2 mb-2 children:mr-0'>
-          {_.map(queryValues.filters, (filter) => {
-            if (filter.operator === 'EXISTS') {
-              return (
-                <Tag
-                  key={JSON.stringify(filter)}
-                  closable
-                  onClose={(e) => {
-                    e.preventDefault();
-                    form.setFieldsValue({
-                      query: {
-                        filters: _.filter(queryValues.filters, (item) => {
-                          if (item.key === filter.key && item.operator === filter.operator && item.value === filter.value) return false;
-                          return true;
-                        }),
-                      },
-                    });
-                    executeQuery();
-                  }}
-                  className='whitespace-normal break-all'
-                >
-                  {getFieldLabel(filter.key, currentFieldConfig)}: exists
-                </Tag>
-              );
-            }
-            return (
-              <Tag
-                key={JSON.stringify(filter)}
-                closable
-                color={filter.operator === 'NOT' ? 'red' : undefined}
-                onClose={(e) => {
-                  e.preventDefault();
-                  form.setFieldsValue({
-                    query: {
-                      filters: _.filter(queryValues.filters, (item) => {
-                        if (item.key === filter.key && item.operator === filter.operator && item.value === filter.value) return false;
-                        return true;
-                      }),
-                    },
-                  });
-                  executeQuery();
-                }}
-                className='whitespace-normal break-all'
-              >
-                {filter.operator === 'NOT' ? 'NOT ' : ''}
-                {getFieldLabel(filter.key, currentFieldConfig)}: {filter.value}
-              </Tag>
-            );
-          })}
-        </div>
-      )}
       {refreshFlag ? (
         <>
           {!_.isEmpty(data?.list) || !_.isEmpty(histogramData?.data) ? (
@@ -429,6 +373,12 @@ export default function index(props: Props) {
               fieldConfig={currentFieldConfig}
               indexData={indexData}
               range={queryValues?.range}
+              drilldownContext={{
+                cate: DatasourceCateEnum.elasticsearch,
+                datasource_id: datasourceValue,
+                resource: { es_resource: { index: queryValues?.index, date_field: queryValues?.date_field } },
+                query: queryValues?.query,
+              }}
               // props
               id_key='__n9e_id_n9e__'
               raw_key='__n9e_raw_n9e__'
@@ -460,71 +410,73 @@ export default function index(props: Props) {
                           {moment(rangeRef.current?.from).format('YYYY-MM-DD HH:mm:ss.SSS')} ~ {moment(rangeRef.current?.to).format('YYYY-MM-DD HH:mm:ss.SSS')}
                         </>
                       )}
-                      <Popover
-                        trigger='click'
-                        content={
-                          <Space>
-                            <InputNumber
-                              value={interval?.value}
-                              min={1}
-                              onBlur={(e) => {
-                                const val = _.toNumber(e.target.value);
-                                if (val > 0) {
+                      {IS_PLUS && (
+                        <Popover
+                          trigger='click'
+                          content={
+                            <Space>
+                              <InputNumber
+                                value={interval?.value}
+                                min={1}
+                                onBlur={(e) => {
+                                  const val = _.toNumber(e.target.value);
+                                  if (val > 0) {
+                                    intervalFixedRef.current = true;
+                                    const newInterval = {
+                                      ...(interval || {}),
+                                      value: val,
+                                    } as Interval;
+                                    setInterval(newInterval);
+                                  }
+                                }}
+                                onPressEnter={(e: any) => {
+                                  const val = _.toNumber(e.target.value);
+                                  if (val > 0) {
+                                    intervalFixedRef.current = true;
+                                    const newInterval = {
+                                      ...(interval || {}),
+                                      value: val,
+                                    } as Interval;
+                                    setInterval(newInterval);
+                                  }
+                                }}
+                              />
+                              <Select
+                                style={{ width: 80 }}
+                                value={interval?.unit}
+                                onChange={(val) => {
                                   intervalFixedRef.current = true;
                                   const newInterval = {
                                     ...(interval || {}),
-                                    value: val,
+                                    unit: val,
                                   } as Interval;
                                   setInterval(newInterval);
-                                }
-                              }}
-                              onPressEnter={(e: any) => {
-                                const val = _.toNumber(e.target.value);
-                                if (val > 0) {
-                                  intervalFixedRef.current = true;
-                                  const newInterval = {
-                                    ...(interval || {}),
-                                    value: val,
-                                  } as Interval;
-                                  setInterval(newInterval);
-                                }
-                              }}
-                            />
-                            <Select
-                              style={{ width: 80 }}
-                              value={interval?.unit}
-                              onChange={(val) => {
-                                intervalFixedRef.current = true;
-                                const newInterval = {
-                                  ...(interval || {}),
-                                  unit: val,
-                                } as Interval;
-                                setInterval(newInterval);
-                              }}
-                              options={[
-                                {
-                                  label: t('common:time.second'),
-                                  value: 'second',
-                                },
-                                {
-                                  label: t('common:time.minute'),
-                                  value: 'min',
-                                },
-                                {
-                                  label: t('common:time.hour'),
-                                  value: 'hour',
-                                },
-                                {
-                                  label: t('common:time.day'),
-                                  value: 'day',
-                                },
-                              ]}
-                            />
-                          </Space>
-                        }
-                      >
-                        <a>{t('query.interval_label')}</a>
-                      </Popover>
+                                }}
+                                options={[
+                                  {
+                                    label: t('common:time.second'),
+                                    value: 'second',
+                                  },
+                                  {
+                                    label: t('common:time.minute'),
+                                    value: 'min',
+                                  },
+                                  {
+                                    label: t('common:time.hour'),
+                                    value: 'hour',
+                                  },
+                                  {
+                                    label: t('common:time.day'),
+                                    value: 'day',
+                                  },
+                                ]}
+                              />
+                            </Space>
+                          }
+                        >
+                          <a>{t('query.interval_label')}</a>
+                        </Popover>
+                      )}
                       {toggleNode}
                       {IS_PLUS && <DownloadModal marginLeft={0} queryData={{ ...form.getFieldsValue(), total: data?.total }} />}
                     </Space>
@@ -614,8 +566,8 @@ export default function index(props: Props) {
                 // 点击直方图某个柱子时设置时间范围
                 if (params.from && params.to) {
                   snapRangeRef.current = {
-                    from: params.from,
-                    to: params.to,
+                    from: params.from * 1000,
+                    to: params.to * 1000,
                   };
                   setServiceParams((prev) => ({
                     ...prev,
@@ -644,7 +596,7 @@ export default function index(props: Props) {
                 }
                 const parsedTime = moment(val);
                 if (parsedTime.isValid()) {
-                  return parsedTime.format('YYYY-MM-DD HH:mm:ss');
+                  return parsedTime.format('YYYY-MM-DD HH:mm:ss.SSS');
                 }
                 return val as string;
               }}
@@ -659,7 +611,7 @@ export default function index(props: Props) {
                 return formatedValue;
               }}
               logClusting={{
-                enabled: true,
+                enabled: IS_PLUS,
                 queryStrRef,
                 logTotal: data?.total || 0,
                 cate: DatasourceCateEnum.elasticsearch,

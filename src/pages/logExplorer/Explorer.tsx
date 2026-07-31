@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState, useRef } from 'react';
-import { Form } from 'antd';
+import { Alert, Form } from 'antd';
 import _ from 'lodash';
 import moment from 'moment';
 import { useLocation } from 'react-router-dom';
@@ -7,14 +7,15 @@ import { useTranslation } from 'react-i18next';
 
 import { CommonStateContext } from '@/App';
 import { setDefaultDatasourceValue } from '@/utils';
-import { DatasourceCateEnum, IS_PLUS } from '@/utils/constant';
+import { DatasourceCateEnum } from '@/utils/constant';
 import { allCates, getGraphProByCate, getPrimaryTypeByCate } from '@/components/AdvancedWrap/utils';
 import ViewSelect, { ModalState } from '@/components/ViewSelect';
 import { DatasourceSelectV3 } from '@/components/DatasourceSelect';
 import omitUndefinedDeep from '@/pages/logExplorer/utils/omitUndefinedDeep';
+import { filterLogExplorerDatasourceList, isLogExplorerDatasourceCateSupported } from '@/pages/logExplorer/utils/datasourceAvailability';
 
 import { DefaultFormValuesControl, RenderCommonSettingsParams } from './types';
-import { NAME_SPACE, ENABLED_VIEW_CATES } from './constants';
+import { NAME_SPACE } from './constants';
 import ExplorerContent from './ExplorerContent';
 
 // @ts-ignore
@@ -27,7 +28,16 @@ interface Props {
   defaultFormValuesControl?: DefaultFormValuesControl;
 }
 
-export default function Explorer(props: Props) {
+function areExplorerPropsEqual(prev: Props, next: Props) {
+  return (
+    prev.active === next.active &&
+    prev.tabKey === next.tabKey &&
+    prev.defaultFormValuesControl?.isInited === next.defaultFormValuesControl?.isInited &&
+    _.isEqual(prev.defaultFormValuesControl?.defaultFormValues, next.defaultFormValuesControl?.defaultFormValues)
+  );
+}
+
+function Explorer(props: Props) {
   const { t } = useTranslation(NAME_SPACE);
   const { datasourceList, datasourceCateOptions, groupedDatasourceList, logsDefaultRange } = useContext(CommonStateContext);
   const location = useLocation();
@@ -39,6 +49,7 @@ export default function Explorer(props: Props) {
 
   const cateGraphPro = getGraphProByCate(datasourceCate);
   const primaryType = getPrimaryTypeByCate(datasourceCate);
+  const hasDatasourceCate = !!datasourceCate;
 
   // 统一维护 ViewSelect 的状态，这样 ViewSelect 组件本身就是一个无状态组件
   const [viewSelectValue, setViewSelectValue] = useState<number>();
@@ -217,13 +228,7 @@ export default function Explorer(props: Props) {
             type={primaryType}
             datasourceCateList={datasourceCateOptions}
             ajustDatasourceList={(list) => {
-              return _.filter(list, (item) => {
-                const cateData = _.find(datasourceCateOptions, { value: item.plugin_type });
-                if (cateData && _.includes(cateData.type, 'logging') && _.includes(ENABLED_VIEW_CATES, item.plugin_type)) {
-                  return cateData.graphPro ? IS_PLUS : true;
-                }
-                return false;
-              });
+              return filterLogExplorerDatasourceList(list, datasourceCateOptions);
             }}
             onChange={(datasourceValue, datasourceCate) => {
               setDefaultDatasourceValue(datasourceCate, datasourceValue);
@@ -249,7 +254,9 @@ export default function Explorer(props: Props) {
           <Form.Item name='datasourceValue' hidden>
             <div />
           </Form.Item>
-          {cateGraphPro ? (
+          {!hasDatasourceCate ? null : !isLogExplorerDatasourceCateSupported(datasourceCate) ? (
+            <Alert showIcon className='m-4' type='error' message={t('unsupported_datasource_type', { type: datasourceCate })} />
+          ) : cateGraphPro ? (
             <PlusLogExplorer tabKey={tabKey} datasourceCate={datasourceCate} defaultFormValuesControl={defaultFormValuesControl} renderCommonSettings={renderCommonSettings} />
           ) : (
             <ExplorerContent tabKey={tabKey} datasourceCate={datasourceCate} defaultFormValuesControl={defaultFormValuesControl} renderCommonSettings={renderCommonSettings} />
@@ -259,3 +266,5 @@ export default function Explorer(props: Props) {
     </div>
   );
 }
+
+export default React.memo(Explorer, areExplorerPropsEqual);

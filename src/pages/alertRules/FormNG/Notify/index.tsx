@@ -6,40 +6,45 @@ import { PlusCircleOutlined, MinusCircleOutlined, QuestionCircleOutlined, RightO
 
 import AuthorizationWrapper from '@/components/AuthorizationWrapper';
 
+import RuleDropdownSelect from '@/pages/notificationRules/components/RuleDropdownSelect';
+
 import SectionCard, { SectionItem } from '../components/SectionCard';
-import shouldShowAdvancedSettings from '../utils/shouldShowAdvancedSettings';
 import { useFormNGData } from '../context';
 import TaskTpls from './TaskTpls';
-import NotificationRuleDropdownSelect from './NotificationRuleDropdownSelect';
 import VersionSwitch from './VersionSwitch';
 
-// @ts-ignore
-import NotifyExtraNG from 'plus:/parcels/AlertRule/NotifyExtraNG';
 // @ts-ignore
 import NotifyChannelsTpl from 'plus:/parcels/AlertRule/NotifyChannelsTpl';
 
 interface Props {
   item: SectionItem;
-  advancedItem: SectionItem;
+  sectionKeys: string[];
   sectionRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
   disabled?: boolean;
+  initiallyCollapsed?: boolean;
   expandSignal?: { key: string; ts: number } | null;
   toggleAllSignal?: { action: 'expand' | 'collapse'; ts: number } | null;
 }
 
-export default function index({ item, advancedItem, sectionRefs, disabled, expandSignal, toggleAllSignal }: Props) {
+export default function index({ item, sectionKeys, sectionRefs, disabled, initiallyCollapsed = false, expandSignal, toggleAllSignal }: Props) {
   const { t } = useTranslation('alertRules');
-  const { notifyChannels: contactList, teams: notifyGroups, webhooks, callbacks } = useFormNGData();
+  const {
+    notifyChannels: contactList,
+    teams: notifyGroups,
+    webhooks,
+    callbacks,
+    permissions,
+    notificationRules,
+    notificationRulesLoading,
+    refreshNotificationRules,
+  } = useFormNGData();
 
   const [notifyTargetCollapsed, setNotifyTargetCollapsed] = useState<boolean>(false);
-  const [effectiveCollapsed, setEffectiveCollapsed] = useState(true);
+  const [effectiveCollapsed, setEffectiveCollapsed] = useState(initiallyCollapsed);
 
-  const datasourceCate = Form.useWatch('cate');
   const notify_version = Form.useWatch('notify_version');
   const notify_channels = Form.useWatch('notify_channels');
   const callbacksValue = Form.useWatch('callbacks');
-
-  const showadvancedSettings = shouldShowAdvancedSettings(notify_version, datasourceCate);
 
   const globalFlashdutyPushConfigured = useMemo(() => {
     return _.some(webhooks, (item) => {
@@ -72,9 +77,8 @@ export default function index({ item, advancedItem, sectionRefs, disabled, expan
   return (
     <>
       <SectionCard
-        className={!showadvancedSettings ? 'mb-8' : ''}
         item={item}
-        index={5}
+        index={sectionKeys.indexOf(item.key)}
         collapsed={effectiveCollapsed}
         setCollapsed={setEffectiveCollapsed}
         sectionRef={(node) => {
@@ -140,7 +144,14 @@ export default function index({ item, advancedItem, sectionRefs, disabled, expan
             display: notify_version === 1 ? 'block' : 'none',
           }}
         >
-          <NotificationRuleDropdownSelect />
+          <RuleDropdownSelect
+            className='mb-4'
+            label={t('notify_rule_ids')}
+            notificationRules={notificationRules}
+            loading={notificationRulesLoading}
+            refresh={refreshNotificationRules}
+            isAuthorized={permissions.notificationRules}
+          />
         </div>
         <div className='mb-4'>
           <Space>
@@ -221,7 +232,7 @@ export default function index({ item, advancedItem, sectionRefs, disabled, expan
                   >
                     <InfoCircleOutlined />
                   </Tooltip>
-                  <PlusCircleOutlined className='control-icon-normal' onClick={() => add()} />
+                  <PlusCircleOutlined className='leading-[32px]' onClick={() => add()} />
                 </Space>
                 {fields.map((field) => (
                   <Row gutter={16} key={field.key}>
@@ -243,7 +254,7 @@ export default function index({ item, advancedItem, sectionRefs, disabled, expan
                       </Form.Item>
                     </Col>
                     <Col flex='40px'>
-                      <MinusCircleOutlined className='control-icon-normal' onClick={() => remove(field.name)} />
+                      <MinusCircleOutlined className='leading-[32px]' onClick={() => remove(field.name)} />
                     </Col>
                   </Row>
                 ))}
@@ -267,14 +278,6 @@ export default function index({ item, advancedItem, sectionRefs, disabled, expan
           </Space>
         </div>
       </SectionCard>
-      <NotifyExtraNG
-        advancedItem={advancedItem}
-        sectionRefs={sectionRefs}
-        contactList={contactList}
-        notifyGroups={notifyGroups}
-        expandSignal={expandSignal}
-        toggleAllSignal={toggleAllSignal}
-      />
     </>
   );
 }

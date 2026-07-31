@@ -18,6 +18,9 @@ const zh_CN = {
     syntax: '语法',
     sql: 'SQL',
     query: '查询条件',
+    index_placeholder: '索引 log-*（支持通配符）',
+    index_pattern_placeholder: '选择索引模式',
+    filter_placeholder: '过滤条件 status:500 AND method:GET',
     filters: '筛选',
     duration: '耗时',
     count: '条数',
@@ -53,6 +56,7 @@ const zh_CN = {
       operator_placeholder: '请选择操作符',
       value: '值',
       value_placeholder: '请选择值',
+      disabled: '禁用',
     },
     aggregates: {
       label: '聚合',

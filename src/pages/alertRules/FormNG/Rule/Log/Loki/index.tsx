@@ -15,13 +15,18 @@
  *
  */
 
-import React from 'react';
-import { Form, Row, Col, Space, Input, Button } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import React, { useContext } from 'react';
+import { Form, Space, Button, Tooltip } from 'antd';
+import { LokiMonacoEditor } from '@fc-components/monaco-editor';
+import { PlusOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import _ from 'lodash';
 
+import { CommonStateContext } from '@/App';
+import DocumentDrawer from '@/components/DocumentDrawer';
 import { IS_PLUS } from '@/utils/constant';
+import { FormStateContext } from '@/pages/alertRules/Form';
+import InputGroupWithFormItem from '@/components/InputGroupWithFormItem';
 import Severity from '@/pages/alertRules/Form/components/Severity';
 import Inhibit from '@/pages/alertRules/Form/components/Inhibit';
 import AdvancedSettings from '@/pages/alertRules/Form/Rule/Rule/Metric/Prometheus/components/AdvancedSettings';
@@ -29,7 +34,9 @@ import CardContainer, { CardContainerHeader } from '@/pages/alertRules/FormNG/co
 import FormItemLabel from '@/pages/alertRules/FormNG/components/FormItemLabel';
 
 export default function index(props: { datasourceCate: string; datasourceValue: number[] }) {
-  const { t } = useTranslation('alertRules');
+  const { t, i18n } = useTranslation('alertRules');
+  const { darkMode } = useContext(CommonStateContext);
+  const { disabled } = useContext(FormStateContext);
 
   return (
     <Form.List name={['rule_config', 'queries']}>
@@ -44,22 +51,41 @@ export default function index(props: { datasourceCate: string; datasourceValue: 
           {fields.map((field) => (
             <CardContainer key={field.key} onClose={fields.length > 1 ? () => remove(field.name) : undefined}>
               <CardContainerHeader>
-                <Row>
-                  <Col flex='80px'>
-                    <div style={{ marginTop: 6 }}>LogQL</div>
-                  </Col>
-                  <Col flex='auto'>
-                    <Form.Item
-                      {...field}
-                      name={[field.name, 'prom_ql']} //页面上展示LogQL，实际还是存prom_ql
-                      validateTrigger={['onBlur']}
-                      trigger='onChange'
-                      rules={[{ required: true, message: t('loki.required') }]}
-                    >
-                      <Input placeholder='Input logql to query. Press Shift+Enter for newlines'></Input>
-                    </Form.Item>
-                  </Col>
-                </Row>
+                <InputGroupWithFormItem
+                  label={
+                    <Space>
+                      {'LogQL'}
+                      <Tooltip title={t('common:click_to_view_doc')}>
+                        <QuestionCircleOutlined
+                          onClick={() => {
+                            DocumentDrawer({
+                              language: i18n.language,
+                              darkMode,
+                              title: t('common:page_help'),
+                              type: 'iframe',
+                              documentPath: 'https://flashcat.cloud/docs/content/flashcat-monitor/nightingale-v9/usage/alert-notify/rules/alert-rules/query-data/loki/',
+                            });
+                          }}
+                        />
+                      </Tooltip>
+                    </Space>
+                  }
+                >
+                  <Form.Item
+                    {...field}
+                    name={[field.name, 'prom_ql']} //页面上展示LogQL，实际还是存prom_ql
+                    validateTrigger={['onBlur']}
+                    trigger='onChange'
+                    rules={[{ required: true, message: t('loki.required') }]}
+                  >
+                    <LokiMonacoEditor
+                      theme={darkMode ? 'dark' : 'light'}
+                      placeholder='Input LogQL to query, press Shift+Enter for newlines'
+                      readOnly={disabled}
+                      enableAutocomplete
+                    />
+                  </Form.Item>
+                </InputGroupWithFormItem>
               </CardContainerHeader>
               <div className='mb-4'>
                 <Severity field={field} />

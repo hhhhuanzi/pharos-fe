@@ -1,14 +1,24 @@
 import React from 'react';
+import { Redirect } from 'react-router-dom';
+
+import { IS_ENT } from '@/utils/constant';
 
 import { PATH as agentPath } from './agents/constants';
 import { PATH as llmConfigPath } from './llmConfigs/constants';
 import { PATH as skillPath } from './skills/constants';
-import { PATH as mcpServerPath } from './mcpServers/constants';
 
 const AgentList = React.lazy(() => import('./agents/pages/List'));
 const LLMConfigList = React.lazy(() => import('./llmConfigs/pages/List'));
 const SkillList = React.lazy(() => import('./skills/pages/List'));
-const MCPServerList = React.lazy(() => import('./mcpServers/pages/List'));
+
+/** Soft-redirect legacy AI config list pages into FlashAI (ENT only). */
+function RedirectToFlashAiLlmConfigs() {
+  return <Redirect to='/flashai/llm-configs' />;
+}
+
+function RedirectToFlashAiSkills() {
+  return <Redirect to='/flashai/skills' />;
+}
 
 export default {
   routes: [
@@ -19,17 +29,13 @@ export default {
     },
     {
       path: `${llmConfigPath}`,
-      component: LLMConfigList,
+      // Open-source keeps standalone lists; ENT hosts them under /flashai/<item>.
+      component: IS_ENT ? RedirectToFlashAiLlmConfigs : LLMConfigList,
       exact: true,
     },
     {
       path: `${skillPath}`,
-      component: SkillList,
-      exact: true,
-    },
-    {
-      path: `${mcpServerPath}`,
-      component: MCPServerList,
+      component: IS_ENT ? RedirectToFlashAiSkills : SkillList,
       exact: true,
     },
   ],

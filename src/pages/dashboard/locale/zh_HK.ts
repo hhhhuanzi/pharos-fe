@@ -110,6 +110,8 @@ const zh_HK = {
     multi: '多選',
     allOption: '包含全選',
     allValue: '自定義全選值',
+    width: '寬度',
+    width_tip: '設置變數選擇框的寬度，留空則使用默認寬度 180px',
     textbox: {
       defaultValue: '預設值',
       defaultValue_tip: '可選，僅作為初次加載時的默認值',
@@ -245,6 +247,8 @@ const zh_HK = {
         last: '當前值',
         variance: '方差',
         stdDev: '標準差',
+        series: '序列',
+        seriesFilter: '篩選序列',
         columns: '顯示列',
         behaviour: {
           label: '點擊觸發的行為',

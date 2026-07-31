@@ -11,7 +11,8 @@ export interface SectionItem {
   key: string;
   title: string;
   description: string;
-  tag: 'default' | 'core' | 'optional';
+  tag: 'default' | 'core' | 'optional' | 'recommended';
+  icon?: React.ReactNode;
   helpDoc?: {
     documentPath: string;
   };
@@ -21,12 +22,14 @@ export const tagClassesMap: Record<SectionItem['tag'], string> = {
   default: 'bg-primary/10 text-primary border border-primary/20',
   core: 'bg-red-900/10 text-red-900 border border-red-900/20',
   optional: 'bg-fc-200 text-soft fc-border',
+  recommended: 'bg-amber-100 text-amber-800 border border-amber-200',
 };
 
 export const tagI18nKeys: Record<SectionItem['tag'], string> = {
   default: 'tag_default',
   core: 'tag_core',
   optional: 'tag_optional',
+  recommended: 'tag_recommended',
 };
 
 const sectionIcons: Record<string, React.ReactNode> = {
@@ -43,13 +46,15 @@ export default function SectionCard(props: {
   className?: string;
   item: SectionItem;
   index: number;
-  sectionRef: (node: HTMLDivElement | null) => void;
+  sectionRef?: (node: HTMLDivElement | null) => void;
   children?: React.ReactNode;
   empty?: boolean;
   collapsed?: boolean;
   setCollapsed?: (collapsed: boolean) => void;
+  /** 收起状态下在标题右侧展示的配置摘要 */
+  summary?: React.ReactNode;
 }) {
-  const { item, index, sectionRef, children, empty, setCollapsed: onSetCollapsed } = props;
+  const { item, index, sectionRef, children, empty, summary, setCollapsed: onSetCollapsed } = props;
   const { t, i18n } = useTranslation('alertRules');
   const { darkMode } = useContext(CommonStateContext);
   const [collapsed, setCollapsed] = useState(props.collapsed ?? item.tag === 'optional');
@@ -82,7 +87,7 @@ export default function SectionCard(props: {
           </div>
           <div className='min-w-0 flex-1'>
             <div className='flex items-center gap-2'>
-              <span className={classnames('pt-1', !collapsed ? 'text-[var(--fc-violet-11)]' : 'text-soft')}>{sectionIcons[item.key]}</span>
+              <span className={classnames('pt-1', !collapsed ? 'text-[var(--fc-violet-11)]' : 'text-soft')}>{item.icon ?? sectionIcons[item.key]}</span>
               <div className='text-l1 font-bold text-title'>{item.title}</div>
               <span className={'text-[10px] px-1.5 py-0.5 rounded leading-none ' + tagClassesMap[item.tag]}>{t(tagI18nKeys[item.tag])}</span>
             </div>
@@ -110,6 +115,7 @@ export default function SectionCard(props: {
               )}
             </div>
           </div>
+          {collapsed && summary && <div className='shrink min-w-0 max-w-[50%] truncate text-[12px] text-soft'>{summary}</div>}
           <div className='flex items-center self-start mt-1'>
             <DownOutlined className='text-soft text-[10px] transition-transform duration-200' style={{ transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }} />
           </div>

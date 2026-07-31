@@ -123,8 +123,8 @@ export default function index(props: Props) {
       let timeParams =
         fixedRangeRef.current === false
           ? {
-              from: moment(range.start).unix(),
-              to: moment(range.end).unix(),
+              from: moment(range.start).valueOf(),
+              to: moment(range.end).valueOf(),
             }
           : rangeRef.current!;
       if (snapRangeRef.current && snapRangeRef.current.from && snapRangeRef.current.to) {
@@ -240,8 +240,8 @@ export default function index(props: Props) {
             database: queryValues.database,
             table: queryValues.table,
             time_field: queryValues.time_field,
-            from: moment(range.start).unix(),
-            to: moment(range.end).unix(),
+            from: moment(range.start).valueOf(),
+            to: moment(range.end).valueOf(),
             query: queryValues.query,
             query_builder_filter: queryValues.query_builder_filter,
             group_by: stackByField,
@@ -335,6 +335,18 @@ export default function index(props: Props) {
               }}
               enableLogTextSelectMenu
               timeField={queryValues?.time_field}
+              drilldownContext={{
+                cate: DatasourceCateEnum.doris,
+                datasource_id: datasourceValue,
+                resource: {
+                  doris_resource: {
+                    database: queryValues?.database,
+                    table: queryValues?.table,
+                    time_field: queryValues?.time_field,
+                  },
+                },
+                query: queryValues?.query,
+              }}
               histogramLoading={histogramLoading}
               histogram={histogramData?.data || []}
               histogramHash={histogramData?.hash}
@@ -389,7 +401,7 @@ export default function index(props: Props) {
                     <Space>
                       {rangeRef.current && (
                         <>
-                          {moment.unix(rangeRef.current?.from).format('YYYY-MM-DD HH:mm:ss.SSS')} ~ {moment.unix(rangeRef.current?.to).format('YYYY-MM-DD HH:mm:ss.SSS')}
+                          {moment(rangeRef.current.from).format('YYYY-MM-DD HH:mm:ss.SSS')} ~ {moment(rangeRef.current.to).format('YYYY-MM-DD HH:mm:ss.SSS')}
                         </>
                       )}
                       {toggleNode}
@@ -469,8 +481,8 @@ export default function index(props: Props) {
                 // 点击直方图某个柱子时设置时间范围
                 if (params.from && params.to) {
                   snapRangeRef.current = {
-                    from: params.from,
-                    to: params.to,
+                    from: params.from * 1000,
+                    to: params.to * 1000,
                   };
                   setServiceParams((prev) => ({
                     ...prev,

@@ -5,7 +5,7 @@ import _ from 'lodash';
 import moment from 'moment';
 import { useRequest, useGetState } from 'ahooks';
 
-import { DatasourceCateEnum } from '@/utils/constant';
+import { DatasourceCateEnum, IS_PLUS } from '@/utils/constant';
 import { parseRange } from '@/components/TimeRangePicker';
 import { NAME_SPACE as logExplorerNS } from '@/pages/logExplorer/constants';
 import LogsViewer from '@/pages/logExplorer/components/LogsViewer';
@@ -27,10 +27,12 @@ import { Field } from '../../types';
 import { getOptionsFromLocalstorage, setOptionsToLocalstorage } from '../../utils/optionsLocalstorage';
 import filteredFields from '../../utils/filteredFields';
 import { scrollToTop, getIsAtBottom } from '../../utils/tableElementMethods';
-import { hasHighlightableFilter } from '../../utils/queryMode';
 import { PinIcon, UnPinIcon } from '../../SideBarNav/FieldsSidebar/PinIcon';
 import { HandleValueFilterParams } from '../../types';
 import QueryBuilderFilters from './QueryBuilderFilters';
+
+// @ts-ignore
+import DownloadModal from 'plus:/components/LogDownload/DownloadModal';
 
 interface Props {
   tableSelector: {
@@ -57,7 +59,6 @@ interface Props {
 
   stackByField?: string;
   setStackByField: (field?: string) => void;
-  defaultSearchField?: string;
 }
 
 export default function index(props: Props) {
@@ -149,7 +150,7 @@ export default function index(props: Props) {
             lines: serviceParams.pageSize,
             offset: (serviceParams.current - 1) * serviceParams.pageSize,
             reverse: serviceParams.reverse,
-            highlight: hasHighlightableFilter(queryValues.query_builder_filter),
+            highlight: true,
           },
         ],
       };
@@ -307,6 +308,7 @@ export default function index(props: Props) {
     {
       cate: DatasourceCateEnum.ck,
       datasource_id: form.getFieldValue('datasourceValue'),
+      resource: { clickhouse_resource: { database: queryValues?.database, table: queryValues?.table } },
     },
     refreshFlag,
   );
@@ -323,6 +325,18 @@ export default function index(props: Props) {
           {!_.isEmpty(data?.list) || !_.isEmpty(histogramData?.data) ? (
             <LogsViewer
               timeField={queryValues?.time_field}
+              drilldownContext={{
+                cate: DatasourceCateEnum.ck,
+                datasource_id: datasourceValue,
+                resource: {
+                  clickhouse_resource: {
+                    database: queryValues?.database,
+                    table: queryValues?.table,
+                    time_field: queryValues?.time_field,
+                  },
+                },
+                query: queryValues?.query,
+              }}
               histogramLoading={histogramLoading}
               histogram={histogramData?.data || []}
               histogramHash={histogramData?.hash}
@@ -381,6 +395,7 @@ export default function index(props: Props) {
                         </>
                       )}
                       {toggleNode}
+                      {IS_PLUS && <DownloadModal marginLeft={0} queryData={{ ...form.getFieldsValue(), mode: 'query', total: data?.total }} />}
                     </Space>
                   );
                 }

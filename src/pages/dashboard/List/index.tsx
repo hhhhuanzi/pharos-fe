@@ -32,8 +32,9 @@ import { getBusiGroupsDashboards, getBusiGroupsPublicDashboards, cloneDashboard,
 import PageLayout from '@/components/pageLayout';
 import { CommonStateContext } from '@/App';
 import BusinessGroupSideBarWithAll, { getDefaultGidsInDashboard } from '@/components/BusinessGroup/BusinessGroupSideBarWithAll';
+import { getDashboardCompatibleGids } from '@/components/BusinessGroup/presetFilters';
 import EnhancedTable from '@/components/EnhancedTable';
-import { dateColumn, userColumn } from '@/components/EnhancedTable/columns';
+import { dateColumn, updateByColumn } from '@/components/EnhancedTable/columns';
 import Tags from '@/components/TableTags/Tags';
 import EllipsisText from '@/components/EllipsisText';
 import usePagination from '@/components/usePagination';
@@ -53,6 +54,7 @@ import './style.less';
 
 const N9E_GIDS_LOCALKEY = 'N9E_BOARD_NODE_ID';
 const SEARCH_SESSION_STORAGE_KEY = 'n9e_dashboard_search';
+const DASHBOARD_PAGE_SESSION_KEY = 'n9e_dashboard_page';
 const PUBLIC_SELECT_GIDS_LOCALKEY = 'N9E_PUBLIC_SELECT_GIDS';
 const getDefaultPublicSelectGids = (localKey: string) => {
   const valueStr = localStorage.getItem(localKey);
@@ -64,11 +66,15 @@ export default function index() {
   const { t } = useTranslation('dashboard');
   const { businessGroup, perms } = useContext(CommonStateContext);
   const queryParams = queryString.parse(useLocation().search);
-  const [gids, setGids] = useState<string | undefined>(getDefaultGidsInDashboard(queryParams, N9E_GIDS_LOCALKEY, businessGroup));
+  const [gids, setGids] = useState<string | undefined>(() => getDashboardCompatibleGids(getDefaultGidsInDashboard(queryParams, N9E_GIDS_LOCALKEY, businessGroup)));
   const [list, setList] = useState<any[]>([]);
   const [selectRowKeys, setSelectRowKeys] = useState<number[]>([]);
   const [refreshKey, setRefreshKey] = useState(_.uniqueId('refreshKey_'));
   const [searchVal, setsearchVal] = useState<string>(sessionStorage.getItem(SEARCH_SESSION_STORAGE_KEY) || '');
+  const [current, setCurrent] = useState<number>(() => {
+    const saved = sessionStorage.getItem(DASHBOARD_PAGE_SESSION_KEY);
+    return saved ? Number(saved) : 1;
+  });
   const [selectedBusinessGroup, setSelectedBusinessGroup] = useState<number[] | undefined>(getDefaultPublicSelectGids(PUBLIC_SELECT_GIDS_LOCALKEY)); // 目前只有公开仪表盘会用到
   const [busiGroups, setBusiGroups] = useState<any[]>([]);
   const pagination = usePagination({ PAGESIZE_KEY: 'dashboard-pagesize' });
@@ -77,9 +83,11 @@ export default function index() {
   const [importData, setImportData] = useState<{ visible: boolean; busiId?: number; type?: ModalType }>({ visible: false });
 
   useUpdateEffect(() => {
-    setGids(businessGroup.ids);
+    setGids(getDashboardCompatibleGids(businessGroup.ids));
     setsearchVal('');
+    setCurrent(1);
     sessionStorage.removeItem(SEARCH_SESSION_STORAGE_KEY);
+    sessionStorage.removeItem(DASHBOARD_PAGE_SESSION_KEY);
   }, [businessGroup.ids]);
 
   useEffect(() => {
@@ -139,7 +147,9 @@ export default function index() {
             searchVal={searchVal}
             onSearchChange={(val) => {
               setsearchVal(val);
+              setCurrent(1);
               sessionStorage.setItem(SEARCH_SESSION_STORAGE_KEY, val);
+              sessionStorage.setItem(DASHBOARD_PAGE_SESSION_KEY, '1');
             }}
             visibleColumns={visibleColumns}
             setVisibleColumns={setVisibleColumns}
@@ -210,7 +220,7 @@ export default function index() {
                   render: (text: string) => <EllipsisText text={text} />,
                 },
                 dateColumn({ title: t('common:table.update_at'), dataIndex: 'update_at', unix: true, sortable: true }),
-                userColumn({ title: t('common:table.update_by'), dataIndex: 'update_by', nickname: 'update_by_nickname', sortable: true }),
+                updateByColumn({ title: t('common:table.update_by'), dataIndex: 'update_by', nickname: 'update_by_nickname' }),
                 {
                   title: t('public.name'),
                   width: 150,
@@ -376,7 +386,14 @@ export default function index() {
                 setSelectRowKeys(selectedRowKeys);
               },
             }}
-            pagination={pagination}
+            pagination={{
+              ...pagination,
+              current,
+              onChange: (page: number) => {
+                setCurrent(page);
+                sessionStorage.setItem(DASHBOARD_PAGE_SESSION_KEY, String(page));
+              },
+            }}
             locale={{
               emptyText: (
                 <EmptyGuide

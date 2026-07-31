@@ -18,6 +18,9 @@ const en_US = {
     syntax: 'Syntax',
     sql: 'SQL',
     query: 'Query',
+    index_placeholder: 'Index log-* (wildcards supported)',
+    index_pattern_placeholder: 'Select index pattern',
+    filter_placeholder: 'Filter status:500 AND method:GET',
     filters: 'Filters',
     duration: 'Duration',
     count: 'Count',
@@ -53,6 +56,7 @@ const en_US = {
       operator_placeholder: 'Please select an operator',
       value: 'Value',
       value_placeholder: 'Please select a value',
+      disabled: 'Disabled',
     },
     aggregates: {
       label: 'Aggregates',

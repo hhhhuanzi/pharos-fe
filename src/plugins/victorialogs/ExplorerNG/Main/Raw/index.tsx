@@ -10,6 +10,7 @@ import { DatasourceCateEnum, IS_PLUS } from '@/utils/constant';
 import { parseRange } from '@/components/TimeRangePicker';
 import { NAME_SPACE as logExplorerNS } from '@/pages/logExplorer/constants';
 import LogsViewer from '@/pages/logExplorer/components/LogsViewer';
+import { OnValueFilterParams } from '@/pages/logExplorer/components/LogsViewer/types';
 import calcColWidthByData from '@/pages/logExplorer/components/LogsViewer/utils/calcColWidthByData';
 
 import { NAME_SPACE } from '../../../constants';
@@ -20,6 +21,7 @@ import filteredFields, { filterOutBuiltinFields } from '../../utils/filteredFiel
 import { getOptionsFromLocalstorage, setOptionsToLocalstorage } from '../../utils/optionsLocalstorage';
 import renderBuiltinFields from '../../utils/renderBuiltinFields';
 import renderLogViewerFieldValueWithoutFilters from '../../utils/renderLogViewerFieldValueWithoutFilters';
+import useFieldConfig from '@/pages/logExplorer/components/RenderValue/useFieldConfig';
 import { getIsAtBottom, scrollToTop } from '../../utils/tableElementMethods';
 
 // @ts-ignore
@@ -33,6 +35,8 @@ interface Props {
   indexData: Field[];
   setExecuteLoading: (loading: boolean) => void;
   executeQuery: () => void;
+  onValueFilter: (params: OnValueFilterParams) => void;
+  snapRangeResetKey?: string;
 }
 
 interface LogsData {
@@ -72,7 +76,7 @@ function isNoDataError(error: any) {
 
 export default function Raw(props: Props) {
   const { t } = useTranslation(NAME_SPACE);
-  const { tableSelector, indexData, setExecuteLoading, executeQuery } = props;
+  const { tableSelector, indexData, setExecuteLoading, executeQuery, onValueFilter, snapRangeResetKey } = props;
   const form = Form.useFormInstance();
   const refreshFlag = Form.useWatch('refreshFlag');
   const datasourceValue = Form.useWatch('datasourceValue');
@@ -85,6 +89,7 @@ export default function Raw(props: Props) {
   const [serviceParams, setServiceParams] = useState({
     current: 1,
     pageSize: DEFAULT_LOGS_PAGE_SIZE,
+    reverse: true,
     refreshFlag: undefined as string | undefined,
   });
   const rangeRef = useRef<{
@@ -95,6 +100,13 @@ export default function Raw(props: Props) {
     from?: number;
     to?: number;
   }>({});
+  const snapRangeResetKeyRef = useRef<string>();
+  const serviceParamsEffectReadyRef = useRef(false);
+
+  if (snapRangeResetKey && snapRangeResetKeyRef.current !== snapRangeResetKey) {
+    snapRangeRef.current = {};
+    snapRangeResetKeyRef.current = snapRangeResetKey;
+  }
 
   const updateOptions = (newOptions, reload?: boolean) => {
     const mergedOptions = {
@@ -108,6 +120,7 @@ export default function Raw(props: Props) {
       setServiceParams({
         current: 1,
         pageSize: DEFAULT_LOGS_PAGE_SIZE,
+        reverse: true,
         refreshFlag: _.uniqueId('refreshFlag_'),
       });
     }
@@ -135,11 +148,12 @@ export default function Raw(props: Props) {
         query: [
           {
             query: _.trim(latestQueryValues.query || '*') || '*',
-            start: moment(timeParams.from).unix(),
-            end: moment(timeParams.to).unix(),
+            start: moment(timeParams.from).valueOf(),
+            end: moment(timeParams.to).valueOf(),
             limit: serviceParams.pageSize,
             offset: (serviceParams.current - 1) * serviceParams.pageSize,
             ref: 'A',
+            reverse: serviceParams.reverse,
           },
         ],
       })
@@ -213,7 +227,7 @@ export default function Raw(props: Props) {
     loading,
     run: fetchLogs,
   } = useRequest<LogsData, any>(service, {
-    refreshDeps: [JSON.stringify(serviceParams)],
+    manual: true,
   });
 
   const histogramService = () => {
@@ -226,8 +240,8 @@ export default function Raw(props: Props) {
         query: [
           {
             query: _.trim(latestQueryValues.query || '*') || '*',
-            start: moment(range.start).unix(),
-            end: moment(range.end).unix(),
+            start: moment(range.start).valueOf(),
+            end: moment(range.end).valueOf(),
           },
         ],
       })
@@ -275,18 +289,48 @@ export default function Raw(props: Props) {
   }, [refreshFlag]);
 
   useEffect(() => {
+    if (!serviceParamsEffectReadyRef.current) {
+      serviceParamsEffectReadyRef.current = true;
+      return;
+    }
+    if (refreshFlag) {
+      fetchLogs();
+    }
+  }, [JSON.stringify(serviceParams)]);
+
+  useEffect(() => {
     setExecuteLoading(loading || histogramLoading);
   }, [loading, histogramLoading, setExecuteLoading]);
+
+  const organizeFields = options.organizeFields;
+  const setOrganizeFields = (newOrganizeFields?: string[]) => {
+    updateOptions({ organizeFields: newOrganizeFields || [] });
+  };
+
+  const currentFieldConfig = useFieldConfig(
+    {
+      cate: DatasourceCateEnum.victorialogs,
+      datasource_id: datasourceValue,
+      query: queryValues?.query,
+    },
+    refreshFlag,
+  );
 
   return refreshFlag ? (
     <>
       {!_.isEmpty(data?.list) || !_.isEmpty(histogramData?.data) ? (
         <LogsViewer
+          fieldConfig={currentFieldConfig}
           indexData={indexData}
           range={queryValues?.range}
           id_key='__n9e_id_n9e__'
           raw_key='__n9e_raw_n9e__'
           timeField={DEFAULT_TIME_FIELD}
+          drilldownContext={{
+            cate: DatasourceCateEnum.victorialogs,
+            datasource_id: datasourceValue,
+            query: queryValues?.query,
+          }}
           histogramLoading={histogramLoading}
           histogram={histogramData?.data || []}
           histogramHash={histogramData?.hash}
@@ -294,11 +338,13 @@ export default function Raw(props: Props) {
           logs={data?.list || []}
           logsHash={data?.hash}
           fields={data?.fields || []}
-          showTopNSettings
           hideTypeIcon
           options={options}
-          filterFields={(fieldKeys) => filteredFields(fieldKeys)}
-          logViewerFilterFields={(log) => filteredFields(_.keys(log))}
+          organizeFields={organizeFields}
+          setOrganizeFields={setOrganizeFields}
+          filterFields={(fieldKeys) => filteredFields(fieldKeys, organizeFields)}
+          onAddToQuery={onValueFilter}
+          logViewerFilterFields={(log) => filteredFields(_.keys(log), organizeFields)}
           logViewerRenderCustomTagsArea={renderBuiltinFields}
           customLogFieldRender={renderLogViewerFieldValueWithoutFilters}
           renderHistogramAddonAfterRender={(toggleNode) => {
@@ -311,7 +357,7 @@ export default function Raw(props: Props) {
                     </>
                   )}
                   {toggleNode}
-                  {IS_PLUS && <DownloadModal marginLeft={0} queryData={{ ...form.getFieldsValue(), mode: 'query', total: data?.total }} />}
+                  {IS_PLUS && <DownloadModal marginLeft={0} queryData={{ ...form.getFieldsValue(), mode: 'raw', total: data?.total }} />}
                 </Space>
               );
             }
@@ -387,8 +433,8 @@ export default function Raw(props: Props) {
           onLogRequestParamsChange={(params) => {
             if (params.from && params.to) {
               snapRangeRef.current = {
-                from: params.from,
-                to: params.to,
+                from: params.from * 1000,
+                to: params.to * 1000,
               };
               setServiceParams((prev) => ({
                 ...prev,
@@ -400,6 +446,7 @@ export default function Raw(props: Props) {
               setServiceParams((prev) => ({
                 ...prev,
                 current: 1,
+                reverse: params.reverse,
               }));
             }
           }}

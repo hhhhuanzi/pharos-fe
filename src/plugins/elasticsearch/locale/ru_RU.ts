@@ -18,6 +18,9 @@ const ru_RU = {
     syntax: 'Синтаксис',
     sql: 'SQL',
     query: 'Условия запроса',
+    index_placeholder: 'Индекс log-* (поддерживаются подстановочные знаки)',
+    index_pattern_placeholder: 'Выберите шаблон индекса',
+    filter_placeholder: 'Фильтр status:500 AND method:GET',
     filters: 'Фильтры',
     duration: 'Продолжительность',
     count: 'Количество',
@@ -53,6 +56,7 @@ const ru_RU = {
       operator_placeholder: 'Пожалуйста, выберите оператор',
       value: 'Значение',
       value_placeholder: 'Пожалуйста, выберите значение',
+      disabled: 'Отключено',
     },
     aggregates: {
       label: 'Агрегации',

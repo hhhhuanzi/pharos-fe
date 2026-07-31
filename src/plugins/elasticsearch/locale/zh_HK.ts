@@ -18,6 +18,9 @@ const zh_HK = {
     syntax: '語法',
     sql: 'SQL',
     query: '查詢條件',
+    index_placeholder: '索引 log-*（支持通配符）',
+    index_pattern_placeholder: '選擇索引模式',
+    filter_placeholder: '過濾條件 status:500 AND method:GET',
     filters: '篩選',
     duration: '耗時',
     count: '條數',
@@ -53,6 +56,7 @@ const zh_HK = {
       operator_placeholder: '請選擇操作符',
       value: '值',
       value_placeholder: '請選擇值',
+      disabled: '禁用',
     },
     aggregates: {
       label: '聚合',

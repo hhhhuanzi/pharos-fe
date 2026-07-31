@@ -110,6 +110,8 @@ const en_US = {
     multi: 'Multi select',
     allOption: 'Include all option',
     allValue: 'Custom all value',
+    width: 'Width',
+    width_tip: 'Set the width of the variable selector. Leave empty to use the default 180px.',
     textbox: {
       defaultValue: 'Default value',
       defaultValue_tip: 'Optional, only as default on initial load',
@@ -245,6 +247,8 @@ const en_US = {
         last: 'Last',
         variance: 'Variance',
         stdDev: 'StdDev',
+        series: 'Series',
+        seriesFilter: 'Filter series',
         columns: 'Columns',
         behaviour: {
           label: 'Behavior triggered by click',

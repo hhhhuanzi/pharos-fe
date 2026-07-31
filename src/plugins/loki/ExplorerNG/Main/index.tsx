@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { Badge, Button, Col, Form, InputNumber, Row, Segmented } from 'antd';
+import { Badge, Button, Col, Form, InputNumber, Modal, Row, Segmented } from 'antd';
 import _ from 'lodash';
 import { useTranslation } from 'react-i18next';
 
@@ -14,6 +14,7 @@ import { BUILDER_PINNED_CACHE_KEY, DEFAULT_RAW_LOG_LIMIT, MAX_RAW_LOG_LIMIT, MET
 import { Field } from '../types';
 import Builder from '../Builder';
 import MainMoreOperations from '../components/MainMoreOperations';
+import { hasRangeAggregation } from '../utils/logsQL';
 import Metric from './Metric';
 import QueryInput from './QueryInput';
 import Raw from './Raw';
@@ -35,6 +36,7 @@ export default function Main(props: Props) {
   const [queryBuilderPinned, setQueryBuilderPinned] = useState(() => localStorage.getItem(BUILDER_PINNED_CACHE_KEY) === 'true');
   const [queryBuilderVisible, setQueryBuilderVisible] = useState(false);
   const [isContentChangedDotVisible, setIsContentChangedDotVisible] = useState(false);
+  const [snapRangeResetKey, setSnapRangeResetKey] = useState<string>();
 
   useEffect(() => {
     setExecuteLoading(false);
@@ -68,7 +70,12 @@ export default function Main(props: Props) {
     setIsContentChangedDotVisible(true);
   };
 
+  const resetSnapRange = () => {
+    setSnapRangeResetKey(_.uniqueId('snap_range_reset_'));
+  };
+
   const executeCommittedQuery = () => {
+    resetSnapRange();
     setIsContentChangedDotVisible(false);
     executeQuery();
   };
@@ -88,6 +95,24 @@ export default function Main(props: Props) {
                 const nextMode = val as 'raw' | 'metric';
                 const currentQuery = _.trim(queryValues?.query);
                 const isDefaultQuery = currentQuery === RAW_DEFAULT_QUERY || currentQuery === METRIC_DEFAULT_QUERY;
+                if (mode === 'metric' && nextMode === 'raw' && !isDefaultQuery && hasRangeAggregation(currentQuery)) {
+                  Modal.confirm({
+                    title: t('mode_switch.confirm_title'),
+                    content: t('mode_switch.confirm_content'),
+                    okText: t('mode_switch.confirm_ok'),
+                    cancelText: t('mode_switch.confirm_cancel'),
+                    onOk: () => {
+                      form.setFieldsValue({
+                        query: {
+                          ...queryValues,
+                          mode: nextMode,
+                          query: RAW_DEFAULT_QUERY,
+                        },
+                      });
+                    },
+                  });
+                  return;
+                }
                 form.setFieldsValue({
                   query: {
                     ...queryValues,
@@ -100,10 +125,7 @@ export default function Main(props: Props) {
           </Col>
           <Col flex='auto' style={{ minWidth: 0 }}>
             <QueryInput
-              executeQuery={() => {
-                setIsContentChangedDotVisible(false);
-                executeQuery();
-              }}
+              executeQuery={executeCommittedQuery}
               queryBuilderPinned={queryBuilderPinned}
               queryBuilderVisible={!queryBuilderPinned ? queryBuilderVisible : true}
               onLableClick={() => {
@@ -205,6 +227,7 @@ export default function Main(props: Props) {
                 limit: nextLimit,
               },
             });
+            resetSnapRange();
             executeQuery();
             setIsContentChangedDotVisible(false);
             setQueryBuilderVisible(false);
@@ -224,7 +247,7 @@ export default function Main(props: Props) {
         {mode === 'metric' ? (
           <Metric indexData={indexData} setExecuteLoading={setExecuteLoading} executeQuery={executeCommittedQuery} />
         ) : (
-          <Raw indexData={indexData} setExecuteLoading={setExecuteLoading} executeQuery={executeCommittedQuery} />
+          <Raw indexData={indexData} setExecuteLoading={setExecuteLoading} executeQuery={executeCommittedQuery} snapRangeResetKey={snapRangeResetKey} />
         )}
       </div>
     </div>

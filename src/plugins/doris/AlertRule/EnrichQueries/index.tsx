@@ -15,7 +15,9 @@ import { normalizeTime } from '@/pages/alertRules/Form/utils';
 import { NS as EVENT_PIPELINE_NS } from '@/pages/eventPipeline/constants';
 import CardContainer, { CardContainerHeader } from '@/pages/alertRules/FormNG/components/CardContainer';
 
-import { NAME_SPACE } from '../../constants';
+import { ANNOTATIONS_ENRICH_QUERIES_DOC_URL } from '@/pages/alertRules/constants';
+
+import { NAME_SPACE, DORIS_SQL_MODE_DOC_URL } from '../../constants';
 import GraphPreview from '../GraphPreview';
 
 interface IProps {
@@ -40,7 +42,7 @@ export default function index({ prefixField = {}, fullPrefixName = [], prefixNam
             <div className='mb-2'>
               <Space>
                 {t('enrich_queries.title')}
-                <Tooltip title={t('alertRules:enrich_queries.tip')}>
+                <Tooltip title={t('alertRules:enrich_queries.tip')} overlayStyle={{ maxWidth: 400 }}>
                   <InfoCircleOutlined />
                 </Tooltip>
                 <PlusCircleOutlined
@@ -51,6 +53,19 @@ export default function index({ prefixField = {}, fullPrefixName = [], prefixNam
                     });
                   }}
                 />
+                <a
+                  onClick={() => {
+                    DocumentDrawer({
+                      language: i18n.language,
+                      darkMode,
+                      type: 'iframe',
+                      title: t('common:page_help'),
+                      documentPath: ANNOTATIONS_ENRICH_QUERIES_DOC_URL,
+                    });
+                  }}
+                >
+                  {t('common:page_help')}
+                </a>
               </Space>
             </div>
             <div className='mb-4'>
@@ -75,7 +90,7 @@ export default function index({ prefixField = {}, fullPrefixName = [], prefixNam
                                       language: i18n.language === 'zh_CN' ? 'zh_CN' : 'en_US',
                                       title: t('common:document_title'),
                                       type: 'iframe',
-                                      documentPath: 'https://flashcat.cloud/docs/content/flashcat/log/discover/what-is-sql-mode-in-doris-discover/',
+                                      documentPath: DORIS_SQL_MODE_DOC_URL,
                                     });
                                   }}
                                 />
@@ -148,7 +163,7 @@ export default function index({ prefixField = {}, fullPrefixName = [], prefixNam
                           }
                           addonAfter={
                             <Form.Item {...field} name={[field.name, 'interval_unit']} initialValue='min'>
-                              <Select disabled={disabled} style={{ width: 80 }}>
+                              <Select disabled={disabled} style={{ width: 80 }} dropdownMatchSelectWidth={false}>
                                 <Select.Option value='second'>{t('common:time.second')}</Select.Option>
                                 <Select.Option value='min'>{t('common:time.minute')}</Select.Option>
                                 <Select.Option value='hour'>{t('common:time.hour')}</Select.Option>

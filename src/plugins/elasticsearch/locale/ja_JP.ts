@@ -18,6 +18,9 @@ const ja_JP = {
     syntax: '構文',
     sql: 'SQL',
     query: 'クエリ',
+    index_placeholder: 'インデックス log-*（ワイルドカード対応）',
+    index_pattern_placeholder: 'インデックスパターンを選択',
+    filter_placeholder: 'フィルター status:500 AND method:GET',
     filters: 'フィルター',
     duration: '所要時間',
     count: '件数',
@@ -53,6 +56,7 @@ const ja_JP = {
       operator_placeholder: '演算子を選択してください',
       value: '値',
       value_placeholder: '値を選択してください',
+      disabled: '無効',
     },
     aggregates: {
       label: '集計',

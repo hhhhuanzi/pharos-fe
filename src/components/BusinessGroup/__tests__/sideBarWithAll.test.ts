@@ -44,6 +44,7 @@ jest.mock('@/components/BusinessGroup/style.less', () => ({}), { virtual: true }
 jest.mock('@/components/BusinessGroup', () => ({ getCleanBusinessGroupIds: (ids: any) => ids?.replace(/^group,/, '') }), { virtual: true });
 
 import { getDefaultGids, getDefaultGidsInDashboard } from '../BusinessGroupSideBarWithAll';
+import { getDashboardCompatibleGids, getTargetsCompatibleGids } from '../presetFilters';
 
 const localeKey = 'N9E_TEST_KEY';
 const businessGroup = { ids: '1,2', id: 1, key: 'group,1,2', isLeaf: false };
@@ -108,20 +109,27 @@ describe('getDefaultGidsInDashboard', () => {
     localStorage.clear();
   });
 
+  it('URL 的 ids 参数优先于其他筛选来源', () => {
+    localStorage.setItem(localeKey, '-1');
+    const result = getDefaultGidsInDashboard({ ids: '0', 'preset-filter': 'public' }, localeKey, businessGroup);
+    expect(result).toBe('0');
+  });
+
   it('preset-filter=public 时返回 -1', () => {
     const result = getDefaultGidsInDashboard({ 'preset-filter': 'public' }, localeKey, businessGroup);
     expect(result).toBe('-1');
   });
 
-  it('无 preset-filter 时读取 localStorage', () => {
+  it('无 URL 筛选时优先读取当前业务组', () => {
     localStorage.setItem(localeKey, '-2');
     const result = getDefaultGidsInDashboard({}, localeKey, businessGroup);
-    expect(result).toBe('-2');
+    expect(result).toBe('1,2');
   });
 
-  it('无缓存时回退到 businessGroup.ids', () => {
-    const result = getDefaultGidsInDashboard({}, localeKey, businessGroup);
-    expect(result).toBe('1,2');
+  it('当前业务组为空时回退到 localStorage', () => {
+    localStorage.setItem(localeKey, '-2');
+    const result = getDefaultGidsInDashboard({}, localeKey, {});
+    expect(result).toBe('-2');
   });
 
   it('全部回退都无值时返回 -1', () => {
@@ -133,5 +141,22 @@ describe('getDefaultGidsInDashboard', () => {
     localStorage.setItem(localeKey, '-2');
     const result = getDefaultGidsInDashboard({ 'preset-filter': 'public' }, localeKey, businessGroup);
     expect(result).toBe('-1');
+  });
+});
+
+describe('页面间预置筛选兼容', () => {
+  it('仪表盘不支持机器列表的未分组值 0', () => {
+    expect(getDashboardCompatibleGids('0')).toBe('-2');
+  });
+
+  it('机器列表不支持仪表盘的公开值 -1', () => {
+    expect(getTargetsCompatibleGids('-1')).toBe('-2');
+  });
+
+  it('普通业务组和共同的全部值保持不变', () => {
+    expect(getDashboardCompatibleGids('1,2')).toBe('1,2');
+    expect(getDashboardCompatibleGids('-2')).toBe('-2');
+    expect(getTargetsCompatibleGids('1,2')).toBe('1,2');
+    expect(getTargetsCompatibleGids('-2')).toBe('-2');
   });
 });

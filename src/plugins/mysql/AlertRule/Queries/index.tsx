@@ -1,14 +1,15 @@
 import React, { useContext } from 'react';
-import { Form, Space, Row, Col, Button } from 'antd';
-import { InfoCircleOutlined, PlusOutlined } from '@ant-design/icons';
+import { Form, Space, Row, Col, Button, Tooltip } from 'antd';
+import { QuestionCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import _ from 'lodash';
 import { useTranslation } from 'react-i18next';
 
 import { CommonStateContext } from '@/App';
+import { SqlMonacoEditor } from '@fc-components/monaco-editor';
+import { WandSparkles } from 'lucide-react';
 import InputGroupWithFormItem from '@/components/InputGroupWithFormItem';
 import QueryName, { generateQueryName } from '@/components/QueryName';
-import LogQL from '@/components/LogQL';
-import { DatasourceCateEnum, IS_PLUS } from '@/utils/constant';
+import { IS_PLUS } from '@/utils/constant';
 import DocumentDrawer from '@/components/DocumentDrawer';
 import FormItemLabel from '@/pages/alertRules/FormNG/components/FormItemLabel';
 import CardContainer, { CardContainerHeader } from '@/pages/alertRules/FormNG/components/CardContainer';
@@ -57,12 +58,12 @@ export default function index({ form, prefixField = {}, fullPrefixName = [], pre
                         </Form.Item>
                       </Col>
                       <Col flex='auto'>
-                        <div className='tdengine-discover-query'>
-                          <InputGroupWithFormItem
-                            label={
-                              <Space>
-                                {t('query.query')}
-                                <InfoCircleOutlined
+                        <InputGroupWithFormItem
+                          label={
+                            <Space>
+                              {t('query.query')}
+                              <Tooltip title={t('common:click_to_view_doc')}>
+                                <QuestionCircleOutlined
                                   onClick={() => {
                                     DocumentDrawer({
                                       language: i18n.language,
@@ -73,20 +74,34 @@ export default function index({ form, prefixField = {}, fullPrefixName = [], pre
                                     });
                                   }}
                                 />
-                              </Space>
-                            }
+                              </Tooltip>
+                            </Space>
+                          }
+                        >
+                          <Form.Item
+                            {...field}
+                            name={[field.name, 'sql']}
+                            validateTrigger={['onBlur']}
+                            trigger='onChange'
+                            rules={[{ required: true, message: t('datasource:query.query_required') }]}
                           >
-                            <Form.Item {...field} name={[field.name, 'sql']}>
-                              <LogQL
-                                datasourceCate={DatasourceCateEnum.mysql}
-                                datasourceValue={datasourceID}
-                                query={{}}
-                                historicalRecords={[]}
-                                placeholder={t('query.query_placeholder2')}
-                              />
-                            </Form.Item>
-                          </InputGroupWithFormItem>
-                        </div>
+                            <SqlMonacoEditor
+                              disabled={disabled}
+                              maxHeight={200}
+                              placeholder='SELECT count(*) as count FROM db_name.table_name'
+                              theme={darkMode ? 'dark' : 'light'}
+                              enableAutocomplete={true}
+                              enableFormat
+                              renderFormatButton={() => {
+                                return (
+                                  <Tooltip title={t('common:format_sql')}>
+                                    <Button size='small' type='text' icon={<WandSparkles size={12} strokeWidth={1} />} />
+                                  </Tooltip>
+                                );
+                              }}
+                            />
+                          </Form.Item>
+                        </InputGroupWithFormItem>
                       </Col>
                     </Row>
                   </CardContainerHeader>

@@ -112,6 +112,8 @@ const ja_JP = {
     multi: '複数選択',
     allOption: '全選択を含む',
     allValue: 'カスタム全選択値',
+    width: '幅',
+    width_tip: '変数セレクターの幅を設定します。空の場合はデフォルトの180pxが使用されます',
     textbox: {
       defaultValue: 'デフォルト値',
       defaultValue_tip: 'オプション、初回のロード時のデフォルト値としてのみ使用',
@@ -248,6 +250,8 @@ const ja_JP = {
         last: '現在値',
         variance: '分散',
         stdDev: '標準偏差',
+        series: '系列',
+        seriesFilter: '系列をフィルタ',
         columns: '表示列',
         behaviour: {
           label: 'クリックで行動',

@@ -18,14 +18,17 @@ import { BusinessGroupSelectWithAll } from '@/components/BusinessGroup';
 import { getAlertCards } from '@/services/warning';
 import { parseRange } from '@/components/TimeRangePicker';
 
-import { NS, MY_GRPUPS_CACHE_KEY } from '../../constants';
+// @ts-ignore
+import { getBrainLicense } from 'plus:/components/License/services';
+
+import { AGGR_RULE_ID_CACHE_KEY, MY_GRPUPS_CACHE_KEY, NS } from '../../constants';
 import getFilterByURLQuery from '../../utils/getFilter';
 import deleteAlertEventsModal from '../../utils/deleteAlertEventsModal';
 import { ALERT_CUR_EVENT_TAGS_EXPANDED_TABLE_KEY, readAlertEventTagsExpanded, writeAlertEventTagsExpanded } from '../../utils/eventColumnExpandedStorage';
 import getProdOptions from '../../utils/getProdOptions';
 import getRequestParamsByFilter from '../../utils/getRequestParamsByFilter';
 import { ackEvents } from '../../services';
-import { CardType, FilterType } from '../../types';
+import { FilterType } from '../../types';
 import DatasourceCheckbox from './DatasourceCheckbox';
 import AggrRuleDropdown from './AggrRuleDropdown';
 import AlertCard, { isEqualEventIds } from './AlertCard';
@@ -99,6 +102,13 @@ const AlertCurEvent: React.FC = () => {
       if (_.has(patch, 'range')) {
         setRange(nextFilter.range);
       }
+      if (_.has(patch, 'aggr_rule_id')) {
+        if (nextFilter.aggr_rule_id) {
+          localStorage.setItem(AGGR_RULE_ID_CACHE_KEY, String(nextFilter.aggr_rule_id));
+        } else {
+          localStorage.removeItem(AGGR_RULE_ID_CACHE_KEY);
+        }
+      }
     },
     [history, normalizeFilterForUrl],
   );
@@ -111,8 +121,17 @@ const AlertCurEvent: React.FC = () => {
   );
   const [refreshFlag, setRefreshFlag] = useState<string>(_.uniqueId('refresh_'));
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
+  const [alertEscalationEnable, setAlertEscalationEnable] = useState(false);
   const [eventColumnExpanded, setEventColumnExpanded] = useState(() => readAlertEventTagsExpanded(ALERT_CUR_EVENT_TAGS_EXPANDED_TABLE_KEY));
   const params = getRequestParamsByFilter(filter);
+
+  useEffect(() => {
+    if (!IS_PLUS || !getBrainLicense) return;
+
+    getBrainLicense().then((res) => {
+      setAlertEscalationEnable(res?.['alert-escalation-enable'] === true);
+    });
+  }, []);
 
   type RuleCardsRequestParams = {
     view_id: number;
@@ -362,7 +381,7 @@ const AlertCurEvent: React.FC = () => {
                       >
                         {t('common:btn.batch_delete')}
                       </Button>
-                      {IS_PLUS && (
+                      {IS_PLUS && alertEscalationEnable && (
                         <>
                           <Button
                             className='ant-dropdown-menu-item'
@@ -400,6 +419,7 @@ const AlertCurEvent: React.FC = () => {
                       params={params}
                       setRefreshFlag={setRefreshFlag}
                       eventColumnExpanded={eventColumnExpanded}
+                      alertEscalationEnable={alertEscalationEnable}
                     />
                   </div>
                 </div>

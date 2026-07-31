@@ -11,6 +11,13 @@ const ja_JP = {
     raw_logs: 'ログ本文',
     statistical_charts: '統計グラフ',
   },
+  mode_switch: {
+    confirm_title: 'モード切り替え確認',
+    confirm_content:
+      '現在の統計グラフモードのクエリにパイプ演算子（|）が含まれています。この構文はログ本文モードでは使用できません。切り替えると現在のクエリがクリアされます。続行しますか？',
+    confirm_ok: '切り替え',
+    confirm_cancel: 'キャンセル',
+  },
   before_query: '<b>検索</b>をクリックして、データを表示してください',
   loading: 'データ読み込み中 ...',
   no_data: 'データが見つかりません',
@@ -126,6 +133,8 @@ const ja_JP = {
     filterAllAnd: 'すべてを現在の検索に追加',
     filterAllNot: 'すべてを現在の検索から除外',
     filterExists: 'このフィールドを持つドキュメントをフィルタ',
+    add_drilldown_link: 'ドリルダウンリンクを追加',
+    drilldown_link_default_name: 'ドリルダウンリンク',
     total: 'ログ件数',
     stack_group_by_tip: 'このフィールド値で積み上げトレンドチャートを表示',
     collapse: '折りたたむ',

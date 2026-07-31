@@ -8,6 +8,7 @@ import _ from 'lodash';
 import { SIZE } from '@/utils/constant';
 import { postItem as postWorkflow, putItem as putWorkflow } from '@/pages/eventPipeline/services';
 import { DEFAULT_VALUES, NS as EVENTPIPELINE_NS } from '@/pages/eventPipeline/constants';
+import { hasRunnableProcessors } from '@/pages/eventPipeline/utils/processors';
 import TestModal from '@/pages/eventPipeline/pages/Form/TestModal';
 
 import { useFormNGData } from '../context';
@@ -61,6 +62,7 @@ const WorkflowItem = React.forwardRef<WorkflowItemRef, Props>((props, ref) => {
   const processors = Form.useWatch([...prefixNamePath, ...namePath, 'processors']);
   const item = workflowId ? workflowMap[workflowId] : undefined;
   const loading = permissions.eventPipelines && !!workflowId && !item && (workflowItemsLoading || workflowsLoading);
+  const shouldAutoEnable = !workflowEnabled && (!processors || processors.length === 0);
 
   useEffect(() => {
     if (workflowId && item?.processors) {
@@ -130,6 +132,12 @@ const WorkflowItem = React.forwardRef<WorkflowItemRef, Props>((props, ref) => {
     const name = saveWorkflowName.trim();
     if (!name) {
       message.error(t('pipeline_configuration_ng.workflow_name_required'));
+      return;
+    }
+    // 这里不走告警规则表单的 validateFields，typ 的必填校验拦不到，必须自己挡一次：
+    // 类型为空或一个处理器都没有时落库，工作流执行时必然失败
+    if (!hasRunnableProcessors(processors)) {
+      message.error(t(`${EVENTPIPELINE_NS}:processor.typ_required`));
       return;
     }
 
@@ -208,6 +216,9 @@ const WorkflowItem = React.forwardRef<WorkflowItemRef, Props>((props, ref) => {
                       const currentValues = _.cloneDeep(form.getFieldsValue());
                       _.unset(currentValues, [...prefixNamePath, ...namePath, 'pipeline_id']);
                       _.set(currentValues, [...prefixNamePath, ...namePath, 'processors'], [DEFAULT_VALUES.processors[0]]);
+                      if (shouldAutoEnable) {
+                        _.set(currentValues, [...prefixNamePath, ...namePath, 'enable'], true);
+                      }
                       form.setFieldsValue(currentValues);
                     }}
                   >
@@ -223,6 +234,9 @@ const WorkflowItem = React.forwardRef<WorkflowItemRef, Props>((props, ref) => {
                           const currentValues = _.cloneDeep(form.getFieldsValue());
                           _.set(currentValues, [...prefixNamePath, ...namePath, 'pipeline_id'], workflow.id);
                           _.set(currentValues, [...prefixNamePath, ...namePath, 'processors'], []);
+                          if (shouldAutoEnable) {
+                            _.set(currentValues, [...prefixNamePath, ...namePath, 'enable'], true);
+                          }
                           form.setFieldsValue(currentValues);
                         }}
                       >
@@ -290,11 +304,22 @@ const WorkflowItem = React.forwardRef<WorkflowItemRef, Props>((props, ref) => {
                   config={{
                     processors,
                   }}
-                  namePath={[...prefixNamePath, ...namePath, 'processors']}
                 />
               </Col>
               <Col flex='auto'>
-                <Button className='w-full' type='dashed' onClick={() => add(DEFAULT_VALUES.processors[0])} icon={<PlusOutlined />}>
+                <Button
+                  className='w-full'
+                  type='dashed'
+                  onClick={() => {
+                    add(DEFAULT_VALUES.processors[0]);
+                    if (shouldAutoEnable) {
+                      const currentValues = _.cloneDeep(form.getFieldsValue());
+                      _.set(currentValues, [...prefixNamePath, ...namePath, 'enable'], true);
+                      form.setFieldsValue(currentValues);
+                    }
+                  }}
+                  icon={<PlusOutlined />}
+                >
                   {t(`${EVENTPIPELINE_NS}:processor.add_btn`)}
                 </Button>
               </Col>

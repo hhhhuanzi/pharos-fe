@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Input, Space, Select, Dropdown, Menu, Table, Divider, Tooltip, Modal, message } from 'antd';
-import { ReloadOutlined, SearchOutlined, DownOutlined, QuestionCircleOutlined, CopyOutlined, ApartmentOutlined } from '@ant-design/icons';
+import { ReloadOutlined, SearchOutlined, DownOutlined, QuestionCircleOutlined, CopyOutlined, ApartmentOutlined, DownloadOutlined, AppstoreAddOutlined } from '@ant-design/icons';
 import _ from 'lodash';
 import semver from 'semver';
 import { useAntdTable } from 'ahooks';
@@ -31,7 +31,10 @@ import VersionSelect from 'plus:/parcels/Targets/VersionSelect';
 
 import { NS } from '../../constants';
 import { Item, OperateType } from '../../types';
-import { getList } from '../../services';
+import { getList, getCategrafInstallMeta, CategrafInstallMeta } from '../../services';
+import InstallCategraf from './InstallCategraf';
+import { normalizeServerAddr } from './InstallCategraf/buildCommand';
+import CollectSetup from './CollectSetup';
 import getAuthLevelDisplayMap from '../../utils/getAuthLevelDisplayMap';
 import VersionIcon from './VersionIcon';
 import Tags from './Tags';
@@ -39,6 +42,18 @@ import { formatBeatTimeDisplay } from './formatBeatTimeDisplay';
 import AuthLevelDropdown from './AuthLevelDropdown';
 
 const downtimeOptions = [1, 2, 3, 5, 10, 30];
+/** 老后端拿不到 installMeta 时文档里手动安装的兜底版本，随 categraf release 更新（2026-07 时为最新版） */
+/**
+ * 工具栏单行放不下时，先把右侧动作按钮的文案收起来只留图标（Tooltip 兜住语义），
+ * 这比整组换行更省空间也更稳。阈值按视口宽度算，没算可折叠的业务组侧栏，
+ * 实际观感偏早或偏晚就调这一处断点。
+ *
+ * 用 inline-block 而非 inline 复原，是为了跟 antd 的 `.ant-btn > span` 保持一致
+ * （那条规则特异性 (0,1,1) 高于 `.hidden`，靠仓库全局 important: true 才压得住）。
+ */
+const ACTION_LABEL_CLASS = 'hidden 2xl:inline-block';
+
+const FALLBACK_CATEGRAF_VERSION = 'v0.5.15';
 const AI_TASK_AGENT_MIN_VERSION = '0.5.27';
 const AI_TASK_WINDOWS_AGENT_MIN_VERSION = '0.5.30';
 
@@ -117,7 +132,7 @@ interface Props {
 export default function List(props: Props) {
   const { t, i18n } = useTranslation(NS);
   const { t: tTargets } = useTranslation('targets');
-  const { darkMode } = useContext(CommonStateContext);
+  const { darkMode, siteInfo } = useContext(CommonStateContext);
   const pagination = usePagination({ PAGESIZE_KEY: 'hosts-ng' });
 
   const { allCollapseNode, editable = true, explorable = true, gids, selectedRows, setSelectedRows, refreshFlag, setRefreshFlag, setOperateType, aiTaskMode = false } = props;
@@ -128,6 +143,10 @@ export default function List(props: Props) {
   const [metaDrawerOpen, setMetaDrawerOpen] = useState(false);
   const [metaDrawerIdent, setMetaDrawerIdent] = useState('');
   const [upgradeTargetIdent, setUpgradeTargetIdent] = useState<string | null>(null);
+  // null 表示后端不支持一键安装（老版本 / 企业版），此时不展示入口，避免死按钮
+  const [installMeta, setInstallMeta] = useState<CategrafInstallMeta | null>(null);
+  const [installVisible, setInstallVisible] = useState(false);
+  const [collectVisible, setCollectVisible] = useState(false);
 
   const [searchValue, setSearchValue] = useState('');
   const [params, setParams] = useState<{
@@ -184,12 +203,22 @@ export default function List(props: Props) {
     }
   }, [refreshFlag]);
 
+  useEffect(() => {
+    if (aiTaskMode) return;
+    getCategrafInstallMeta().then(setInstallMeta);
+  }, []);
+
   const openCategrafDoc = () => {
     DocumentDrawer({
       language: i18n.language,
       darkMode,
       title: t('categraf_doc'),
       documentPath: '/n9e-docs/categraf',
+      variables: {
+        // site_url 是站点设置里的自由文本，可能缺协议或带尾斜杠，统一 normalize 后再进文档
+        server_addr: normalizeServerAddr(installMeta?.base_url || siteInfo?.site_url) || window.location.origin,
+        categraf_version: installMeta?.version || FALLBACK_CATEGRAF_VERSION,
+      },
     });
   };
 
@@ -219,12 +248,13 @@ export default function List(props: Props) {
 
   return (
     <>
+      {/* flex-wrap + Space wrap：窄屏时右侧动作组整体换行，而不是被挤出可视区裁掉 */}
       <div
-        className={classNames('flex-shrink-0 flex justify-between', {
+        className={classNames('flex-shrink-0 flex flex-wrap justify-between gap-y-2', {
           'bg-fc-100 fc-border rounded-lg p-4': !aiTaskMode,
         })}
       >
-        <Space>
+        <Space wrap>
           {allCollapseNode}
           <Button
             icon={<ReloadOutlined />}
@@ -233,7 +263,8 @@ export default function List(props: Props) {
             }}
           />
           <Input
-            style={{ width: 300 }}
+            // 窄屏收窄，把宽度让给右侧动作区，推迟整行换行的临界点
+            className='w-[180px] xl:w-[300px]'
             prefix={<SearchOutlined />}
             placeholder={t('search_placeholder')}
             allowClear
@@ -310,7 +341,22 @@ export default function List(props: Props) {
             />
           )}
         </Space>
-        <Space>
+        <Space wrap>
+          {/* 接入类动作与「批量操作」同属操作区，放右侧，左侧留给筛选控件 */}
+          {!aiTaskMode && installMeta && (
+            <Tooltip title={t('install.entry')}>
+              <Button type='primary' ghost icon={<DownloadOutlined />} onClick={() => setInstallVisible(true)}>
+                <span className={ACTION_LABEL_CLASS}>{t('install.entry')}</span>
+              </Button>
+            </Tooltip>
+          )}
+          {!aiTaskMode && installMeta?.collect && (
+            <Tooltip title={t('collect.entry')}>
+              <Button type='primary' ghost icon={<AppstoreAddOutlined />} onClick={() => setCollectVisible(true)}>
+                <span className={ACTION_LABEL_CLASS}>{t('collect.entry')}</span>
+              </Button>
+            </Tooltip>
+          )}
           {editable && aiTaskMode === false && (
             <Dropdown
               trigger={['click']}
@@ -402,8 +448,8 @@ export default function List(props: Props) {
                   description={t('empty_guide.desc')}
                   actions={
                     <>
-                      <Button type='primary' onClick={openCategrafDoc}>
-                        {t('empty_guide.deploy_btn')}
+                      <Button type='primary' onClick={() => (installMeta ? setInstallVisible(true) : openCategrafDoc())}>
+                        {installMeta ? t('install.entry') : t('empty_guide.deploy_btn')}
                       </Button>
                       <a onClick={openCategrafDoc}>{t('categraf_doc')}</a>
                     </>
@@ -953,6 +999,33 @@ export default function List(props: Props) {
         }}
       />
       <CollectsDrawer visible={collectsDrawerVisible} setVisible={setCollectsDrawerVisible} ident={collectsDrawerIdent} />
+      {installVisible && installMeta && (
+        <InstallCategraf
+          meta={installMeta}
+          onClose={(detected) => {
+            setInstallVisible(false);
+            // 只有确实检测到新机器才刷新，避免随手打开又关闭时无谓地重拉列表
+            if (detected) setRefreshFlag(_.uniqueId('refreshFlag_'));
+          }}
+          detectedExtra={
+            installMeta.collect ? (
+              <Button
+                size='small'
+                type='primary'
+                onClick={() => {
+                  // 承接安装引导：机器上报后顺手进入采集配置，安装弹窗关闭时正常走刷新逻辑
+                  setInstallVisible(false);
+                  setRefreshFlag(_.uniqueId('refreshFlag_'));
+                  setCollectVisible(true);
+                }}
+              >
+                {t('collect.next_entry')}
+              </Button>
+            ) : undefined
+          }
+        />
+      )}
+      {collectVisible && installMeta?.collect && <CollectSetup meta={installMeta} defaultIdents={selectedIdents} onClose={() => setCollectVisible(false)} />}
       {upgradeTargetIdent && (
         <UpgradeAgent
           selectedIdents={[upgradeTargetIdent]}
