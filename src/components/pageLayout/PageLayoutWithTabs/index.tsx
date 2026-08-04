@@ -19,7 +19,7 @@ import { useHistory, useLocation } from 'react-router-dom';
 import querystring from 'query-string';
 import { useTranslation } from 'react-i18next';
 import { Space, Button } from 'antd';
-import { RollbackOutlined, HistoryOutlined, GithubOutlined, CalendarOutlined } from '@ant-design/icons';
+import { RollbackOutlined, HistoryOutlined } from '@ant-design/icons';
 
 import AdvancedWrap, { License } from '@/components/AdvancedWrap';
 import { CommonStateContext } from '@/App';
@@ -28,7 +28,6 @@ import { findMenuByPath, getCurrentMenuList } from '@/components/SideMenu/utils'
 import { MenuMatchResult } from '@/components/SideMenu/types';
 import FlashAiButton from '@/components/AiChatNG/FlashAiButton';
 
-import DocLink, { getProductDocumentLink } from './DocLink';
 import PageDocLink, { shouldShowPageDocLink } from './PageDocLink';
 import { TabMenu } from './TabMenu';
 import Version from '../Version';
@@ -54,8 +53,6 @@ interface IPageLayoutProps {
   productDocLink?: string;
   tabGroup?: string;
   docButtonText?: string;
-  /** 隐藏顶部「产品文档 / 提交问题 / 预约交流」链接，供首页等不需要这些入口的页面使用 */
-  hideDocAndCommunityLinks?: boolean;
 }
 
 const PageLayout: React.FC<IPageLayoutProps> = ({
@@ -68,12 +65,10 @@ const PageLayout: React.FC<IPageLayoutProps> = ({
   showBack,
   backPath,
   doc,
-  productDocLink,
   tabGroup,
   docButtonText,
-  hideDocAndCommunityLinks,
 }) => {
-  const { t, i18n } = useTranslation('pageLayout');
+  const { i18n } = useTranslation('pageLayout');
   const history = useHistory();
   const location = useLocation();
   const query = querystring.parse(location.search);
@@ -81,7 +76,6 @@ const PageLayout: React.FC<IPageLayoutProps> = ({
   const embed = localStorage.getItem('embed') === '1' && window.self !== window.top;
   const [currentMenu, setCurrentMenu] = useState<MenuMatchResult | null>(null);
   const menuList = getCurrentMenuList();
-  const documentUrl = getProductDocumentLink({ productDocLink, doc, siteDocumentUrl: siteInfo?.document_url });
 
   useEffect(() => {
     const result = findMenuByPath(location.pathname, menuList);
@@ -155,23 +149,6 @@ const PageLayout: React.FC<IPageLayoutProps> = ({
                     )}
                     <FlashAiButton />
                     {rightArea}
-                    {!hideDocAndCommunityLinks && <DocLink link={documentUrl} />}
-                    {!hideDocAndCommunityLinks && !IS_ENT && !IS_PLUS && (
-                      <Button className='text-hint text-[11px]' target='_blank' href='https://github.com/ccfos/nightingale/issues' size='small' icon={<GithubOutlined />}>
-                        {t('submit_issue')}
-                      </Button>
-                    )}
-                    {!hideDocAndCommunityLinks && !IS_ENT && !IS_PLUS && ['zh_CN', 'zh_HK'].includes(i18n.language) && (
-                      <Button
-                        className='text-hint text-[11px]'
-                        target='_blank'
-                        href='https://c9xudyniiq.feishu.cn/scheduler/00d06ce64941261b'
-                        size='small'
-                        icon={<CalendarOutlined />}
-                      >
-                        {t('book_meeting')}
-                      </Button>
-                    )}
                     <AdvancedWrap var='VITE_IS_PRO,VITE_IS_ENT'>
                       <License />
                     </AdvancedWrap>

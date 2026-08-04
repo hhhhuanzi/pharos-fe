@@ -117,7 +117,7 @@ export default function Landing() {
   );
 
   return (
-    <PageLayout title={t('pageTitle')} hideDocAndCommunityLinks>
+    <PageLayout title={t('pageTitle')}>
       <div className='n9e-landing-page best-looking-scroll'>
         <div className='n9e-landing-surface'>
           {/* Section 1 · Hero */}
