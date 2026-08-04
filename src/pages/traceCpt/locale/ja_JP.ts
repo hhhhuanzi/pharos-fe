@@ -28,6 +28,8 @@ const ja_JP = {
   all_groups: "すべてのグループ",
   instance: "インスタンス",
   all_instances: "すべてのインスタンス",
+  all_services: "すべての Service",
+  all_operations: "すべての Operation",
   label: "ラベル",
   label_tip:
     "\n    <0>\n      値サポート\n      <1>logfmt</1>\n      フォーマット\n    </0>\n    <2>スペースで分割</2>\n    <3>スペースを含む文字列は引用符で囲む必要があります</3>\n    ",

@@ -121,18 +121,12 @@ export default function Index(props: IProps) {
       const serviceRes = await getTraceServices(dataSourceId, pluginType, startMs, endMs);
       setServices(serviceRes);
       setGroup('');
-      if (serviceRes.length > 0) {
-        const first = serviceRes[0];
-        setSearch((prev) => ({
-          ...prev,
-          service: first.value,
-          plugin_type: pluginType,
-        }));
-        await fetchOperation(dataSourceId, first.value, pluginType);
-        await fetchInstances(dataSourceId, first.value, pluginType);
-      } else {
-        setInstances([]);
-      }
+      // Leave service unselected (means "all services"); only reload the option list here,
+      // never auto-pick the first one. Operation/Instance are service-dependent, so they reset too.
+      setSearch((prev) => ({ ...prev, service: '', instance: undefined, plugin_type: pluginType }));
+      form.setFieldsValue({ operation: undefined });
+      setOperations([]);
+      setInstances([]);
       setLoading(false);
     } catch (e) {
       setLoading(false);
@@ -146,7 +140,6 @@ export default function Index(props: IProps) {
       const endMs = moment(parsedRange.end).valueOf();
       const operationRes = await getTraceOperation(dataSourceId, service, pluginType, startMs, endMs);
       setOperations(operationRes.map((operation) => ({ label: operation, value: operation })));
-      operationRes.length > 0 && form.setFieldsValue({ operation: operationRes[0] });
       setLoading(false);
     } catch (e) {
       setLoading(false);
@@ -172,7 +165,7 @@ export default function Index(props: IProps) {
   const handleCateChange = (next: TracePluginType) => {
     setCate(next);
     setSearch((prev) => ({ ...prev, plugin_type: next, service: '' }));
-    form.setFieldsValue({ operation: '' });
+    form.setFieldsValue({ operation: undefined });
   };
 
   const handlePluginChange = async (id: number) => {
@@ -183,7 +176,7 @@ export default function Index(props: IProps) {
       onSearch({ data_source_id: id, traceID, plugin_type: cate });
     } else {
       setSearch((prev) => ({ ...prev, service: '', data_source_id: id, plugin_type: cate }));
-      form.setFieldsValue({ operation: '' });
+      form.setFieldsValue({ operation: undefined });
       fetchService(id, cate);
     }
   };
@@ -198,26 +191,28 @@ export default function Index(props: IProps) {
       form.setFieldsValue({ traceId: '' });
     }
   };
-  const handleServiceChange = async (service: string) => {
-    setSearch({ ...search, service, plugin_type: cate });
-    fetchOperation(curPlugin!, service, cate);
-    fetchInstances(curPlugin!, service, cate);
-  };
-
-  const handleGroupChange = (nextGroup?: string) => {
-    const g = nextGroup || '';
-    setGroup(g);
-    const filtered = g ? services.filter((item) => item.group === g) : services;
-    const first = filtered[0];
-    setSearch((prev) => ({ ...prev, service: first ? first.value : '', plugin_type: cate }));
-    form.setFieldsValue({ operation: '' });
-    if (first && curPlugin) {
-      fetchOperation(curPlugin, first.value, cate);
-      fetchInstances(curPlugin, first.value, cate);
+  const handleServiceChange = (nextService?: string) => {
+    const service = nextService || '';
+    setSearch((prev) => ({ ...prev, service, instance: undefined, plugin_type: cate }));
+    form.setFieldsValue({ operation: undefined });
+    if (service && curPlugin) {
+      fetchOperation(curPlugin, service, cate);
+      fetchInstances(curPlugin, service, cate);
     } else {
       setOperations([]);
       setInstances([]);
     }
+  };
+
+  // Group only narrows the Service option list; it never re-selects a Service on its own,
+  // so switching group always clears the (now possibly invalid) Service/Operation/Instance selection.
+  const handleGroupChange = (nextGroup?: string) => {
+    const g = nextGroup || '';
+    setGroup(g);
+    setSearch((prev) => ({ ...prev, service: '', instance: undefined, plugin_type: cate }));
+    form.setFieldsValue({ operation: undefined });
+    setOperations([]);
+    setInstances([]);
   };
 
   const handleInstanceChange = (nextInstance?: string) => {
@@ -320,7 +315,9 @@ export default function Index(props: IProps) {
                       dropdownMatchSelectWidth={false}
                       style={{ width: '100%' }}
                       onChange={handleServiceChange}
-                      value={search.service}
+                      value={search.service || undefined}
+                      allowClear
+                      placeholder={t('all_services')}
                       className='ellipse-when-overflow'
                       showSearch
                       filterOption={(input, option: any) => (option.children || '').indexOf(input) >= 0}
@@ -358,7 +355,15 @@ export default function Index(props: IProps) {
                 <Col span={searchColSpan}>
                   <LabelField label='Operation'>
                     <Form.Item name='operation' style={{ width: '100%' }}>
-                      <Select dropdownMatchSelectWidth={false} style={{ width: '100%' }} className='ellipse-when-overflow' showSearch allowClear>
+                      <Select
+                        dropdownMatchSelectWidth={false}
+                        style={{ width: '100%' }}
+                        className='ellipse-when-overflow'
+                        showSearch
+                        allowClear
+                        placeholder={t('all_operations')}
+                        disabled={!search.service}
+                      >
                         {operations.map((item) => (
                           <Select.Option value={item.value} key={item.value}>
                             {item.label}

@@ -28,6 +28,8 @@ const ru_RU = {
   all_groups: 'Все группы',
   instance: 'Инстанс',
   all_instances: 'Все инстансы',
+  all_services: 'Все Service',
+  all_operations: 'Все Operation',
   label: 'Тег',
   label_tip:
     '\n    <0>\n      Поддерживаются различные форматы\n      <1>logfmt</1>\n       \n    </0>\n    <2>Разделитель пробелов</2>\n    <3>Строки, содержащие пробелы, должны быть заключены в кавычки</3>\n    ',

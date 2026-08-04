@@ -28,6 +28,8 @@ const zh_HK = {
   all_groups: '全部分組',
   instance: '實例',
   all_instances: '全部實例',
+  all_services: '全部 Service',
+  all_operations: '全部 Operation',
   label: '標籤',
   label_tip: `
     <0>

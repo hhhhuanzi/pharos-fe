@@ -28,6 +28,8 @@ const zh_CN = {
   all_groups: '全部分组',
   instance: '实例',
   all_instances: '全部实例',
+  all_services: '全部 Service',
+  all_operations: '全部 Operation',
   label: '标签',
   label_tip: `
     <0>

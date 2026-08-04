@@ -28,6 +28,8 @@ const en_US = {
   all_groups: 'All Groups',
   instance: 'Instance',
   all_instances: 'All Instances',
+  all_services: 'All Services',
+  all_operations: 'All Operations',
   label: 'Label',
   label_tip: `
     <0>
