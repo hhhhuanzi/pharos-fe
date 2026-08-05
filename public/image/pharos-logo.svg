@@ -1,21 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg width="120px" height="120px" viewBox="0 0 120 120" version="1.1" xmlns="http://www.w3.org/2000/svg">
+<svg width="24px" height="24px" viewBox="0 0 24 24" version="1.1" xmlns="http://www.w3.org/2000/svg">
     <title>pharos</title>
+    <defs>
+        <linearGradient id="pharosBeamL" x1="100%" y1="0%" x2="0%" y2="0%">
+            <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.7"></stop>
+            <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.12"></stop>
+        </linearGradient>
+        <linearGradient id="pharosBeamR" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.7"></stop>
+            <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.12"></stop>
+        </linearGradient>
+    </defs>
     <g fill="none" fill-rule="evenodd">
-        <g stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" opacity="0.55">
-            <line x1="58" y1="15" x2="24" y2="5"></line>
-            <line x1="62" y1="15" x2="96" y2="5"></line>
-        </g>
-        <g fill="#FFFFFF" opacity="0.55">
-            <circle cx="24" cy="5" r="4"></circle>
-            <circle cx="96" cy="5" r="4"></circle>
+        <g stroke-width="1.8" stroke-linecap="round">
+            <line x1="10.2" y1="5.8" x2="4.2" y2="3.8" stroke="url(#pharosBeamL)"></line>
+            <line x1="13.8" y1="5.8" x2="19.8" y2="3.8" stroke="url(#pharosBeamR)"></line>
         </g>
         <g fill="#FFFFFF">
-            <rect x="44" y="99" width="32" height="6" rx="3"></rect>
-            <path d="M52,44 L68,44 L73,99 L47,99 Z"></path>
-            <rect x="49" y="68" width="22" height="4" rx="2" opacity="0.55"></rect>
-            <circle cx="60" cy="29" r="7"></circle>
+            <path d="M12,2.4 L15.4,5.6 L8.6,5.6 Z"></path>
+            <rect x="8.9" y="5.6" width="6.2" height="4.2" rx="1"></rect>
+            <rect x="7.9" y="9.8" width="8.2" height="1.5" rx="0.75"></rect>
+            <path d="M9.7,11.3 L14.3,11.3 L16.2,19 L7.8,19 Z"></path>
+            <rect x="6.2" y="18.8" width="11.6" height="2.8" rx="1.4"></rect>
         </g>
-        <path d="M60,14 L72,21 L72,37 L60,44 L48,37 L48,21 Z" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linejoin="round"></path>
     </g>
 </svg>
