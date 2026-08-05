@@ -24,6 +24,14 @@ src/
 └── main.tsx
 ```
 
+## 技术栈红线（不可违反）
+
+- React 17 + antd **4.21.0**（`package.json` 里是锁死的精确版本）。
+- **不升级 antd 5**；**不引入 `@ant-design/pro-components`**；**不使用 ProTable / ProForm / ProCard / PageContainer / StatisticCard**；不引入新的大型 UI 框架；不要再推荐 Ant Design Pro。
+- 不要使用 antd 5 才有的 API（`ConfigProvider theme` / `theme.useToken` / `Modal open` / `Tabs items` / `Dropdown menu` 等）。
+- 原因：Pro Components 主线依赖 antd v5，兼容 antd4 的老版本已停止维护；升级 antd5 会造成大范围 diff，破坏 upstream merge 能力。
+- UI 设计细则（主题变量、排版间距档位、Dashboard 卡片规范、自检清单）见 `.cursor/skills/pharos-ui-design-system/SKILL.md`，做 UI 改动前先读，不要把细则复制到本文件。
+
 ## 技术栈与风格
 
 - TypeScript + React Hooks；优先函数组件，避免 class 组件。
