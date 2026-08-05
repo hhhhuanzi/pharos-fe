@@ -6,14 +6,16 @@ import _ from 'lodash';
 import { Trace, SearchTraceIDType } from './type';
 import { getTraceByID } from './services';
 import { transformTraceData } from './utils';
+import type { TracePluginType } from '@/dh/trace';
 
 interface IProps {
   init?: string;
   initPluginId?: number;
+  initPluginType?: TracePluginType;
 }
 
 export default function TraceCpt(props: IProps) {
-  const { init, initPluginId } = props;
+  const { init, initPluginId, initPluginType } = props;
   const [search, setSearch] = useState<SearchTraceType | SearchTraceIDType>();
   const [curTrace, setCurTrace] = useState<Trace | null>();
   const [resultLoading, setResultLoading] = useState(false);
@@ -25,6 +27,7 @@ export default function TraceCpt(props: IProps) {
       <Search
         init={init}
         initPluginId={initPluginId}
+        initPluginType={initPluginType}
         onSearch={async (v) => {
           if (hasTraceId(v)) {
             try {

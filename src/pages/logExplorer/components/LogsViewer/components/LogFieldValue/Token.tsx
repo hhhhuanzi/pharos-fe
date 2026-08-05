@@ -9,6 +9,7 @@ import { parseRange } from '@/components/TimeRangePicker';
 import { getHighlightHtml, getTokenHighlights } from '@/pages/logExplorer/utils/highlight/highlight_html';
 import { LOG_FIELD_SELECT_POPOVER_CLASS, LOG_VIEWER_IGNORE_CLICK_AWAY_CLASS } from '@/pages/logExplorer/components/LogsViewer/utils/clickAway';
 import { NAME_SPACE } from '@/pages/logExplorer/constants';
+import { useTraceLinkFieldConfig } from '@/dh/logTrace';
 
 import { TokenActionMenuContent } from './tokenActionMenu';
 import { getHighlightSource, getTokenDisplayValue } from './tokenValue';
@@ -53,7 +54,7 @@ function eventTargetToElement(target: EventTarget | null): Element | null {
 
 function TokenWithContext(props: Props & { indexData: Field[] }) {
   const { t } = useTranslation(NAME_SPACE);
-  const { raw_key, fieldConfig, range, getAddToQueryInfo, drilldownContext, openAddDrilldownLink: openAddDrilldownLinkFromContext } = useContext(LogsViewerStateContext);
+  const { raw_key, fieldConfig: baseFieldConfig, range, getAddToQueryInfo, drilldownContext, openAddDrilldownLink: openAddDrilldownLinkFromContext } = useContext(LogsViewerStateContext);
 
   const {
     segmented,
@@ -82,6 +83,7 @@ function TokenWithContext(props: Props & { indexData: Field[] }) {
   const rootRef = useRef<HTMLSpanElement>(null);
   const selectionStartedInsideRef = useRef(false);
 
+  const fieldConfig = useTraceLinkFieldConfig(baseFieldConfig, { name, parentKey, fieldValue });
   const relatedLinks = fieldConfig?.linkArr?.filter((item) => (parentKey ? item.field === parentKey : item.field === name));
 
   const parsedRange = range ? parseRange(range) : null;

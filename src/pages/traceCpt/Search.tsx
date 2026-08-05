@@ -18,6 +18,7 @@ import type { TracePluginType } from '@/dh/trace';
 interface IProps {
   init?: string;
   initPluginId?: number;
+  initPluginType?: TracePluginType;
   onSearch: (item: SearchTraceType | SearchTraceIDType) => void;
   resultLoading: boolean;
 }
@@ -54,11 +55,11 @@ function getGroupOptions(services: { label: string; value: string; group?: strin
 export default function Index(props: IProps) {
   const { t } = useTranslation('trace');
   const { groupedDatasourceList } = useContext(CommonStateContext);
-  const { onSearch, resultLoading, init, initPluginId } = props;
-  const [cate, setCate] = useState<TracePluginType>('jaeger');
+  const { onSearch, resultLoading, init, initPluginId, initPluginType } = props;
+  const [cate, setCate] = useState<TracePluginType>(initPluginType || 'jaeger');
   const datasourceList = groupedDatasourceList[cate] || [];
   const [curPlugin, setCurPlugin] = useState<number>();
-  const [isTraceId, setIsTraceId] = useState(false);
+  const [isTraceId, setIsTraceId] = useState(!!init);
   const [services, setServices] = useState<{ label: string; value: string; group?: string }[]>([]);
   const [group, setGroup] = useState<string>('');
   const [operations, setOperations] = useState<{ label: string; value: string }[]>([]);
@@ -86,6 +87,8 @@ export default function Index(props: IProps) {
   const [form] = Form.useForm();
 
   useEffect(() => {
+    // A deep link already fixes the cate, don't override it
+    if (initPluginType) return;
     // Prefer a cate that actually has configured datasources
     const preferred =
       TRACING_PLUGIN_TYPES.find((item) => (groupedDatasourceList[item.value] || []).length > 0)?.value || 'jaeger';
