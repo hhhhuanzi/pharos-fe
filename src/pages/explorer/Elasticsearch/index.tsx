@@ -140,7 +140,7 @@ const getDefaultMode = (query, isOpenSearch, esIndexMode, value?) => {
   if (query?.data_source_id && query?.index_name) {
     return IMode.indices;
   }
-  return value || IMode.indices;
+  return value || IMode.indexPatterns;
 };
 
 export default function index(props: IProps) {

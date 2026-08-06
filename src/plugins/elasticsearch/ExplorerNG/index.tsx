@@ -209,7 +209,7 @@ export default function index(props: Props) {
             {renderCommonSettings({
               getDefaultQueryValues: (queryValues: Record<string, any>) => {
                 return {
-                  mode: queryValues.mode || (esIndexMode !== 'all' ? esIndexMode : 'indices'),
+                  mode: queryValues.mode || (esIndexMode !== 'all' ? esIndexMode : isOpenSearch ? 'indices' : 'index-patterns'),
                   syntax: queryValues.syntax || 'kuery',
                 };
               },

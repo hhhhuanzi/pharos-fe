@@ -185,7 +185,11 @@ export default function indexCpt(props: Props) {
     <>
       <div className='min-h-0 flex-1 h-full flex flex-col'>
         <div className='flex-shrink-0'>
-          <Form.Item name={['query', 'mode']} initialValue={esIndexMode !== 'all' ? esIndexMode : 'indices'} hidden={isOpenSearch || esIndexMode !== 'all'}>
+          <Form.Item
+            name={['query', 'mode']}
+            initialValue={esIndexMode !== 'all' ? esIndexMode : isOpenSearch ? 'indices' : 'index-patterns'}
+            hidden={isOpenSearch || esIndexMode !== 'all'}
+          >
             <OutlinedSelect
               label={t('query.mode')}
               options={[

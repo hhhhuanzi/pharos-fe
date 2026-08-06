@@ -198,6 +198,10 @@ export const getMenuList = (embeddedProductMenu: MenuItem[] = [], hideDeprecated
           label: 'menu.alert_servers',
         },
         {
+          key: '/audit-log',
+          label: 'menu.audit_log',
+        },
+        {
           key: '/system/version',
           label: 'menu.about',
         },
