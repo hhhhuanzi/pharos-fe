@@ -4,7 +4,9 @@ import { Form } from 'antd';
 import moment from 'moment';
 
 import { parseRange } from '@/components/TimeRangePicker';
-import FieldsList, { Field } from '@/pages/logExplorer/components/FieldsList';
+import { Field } from '@/pages/logExplorer/components/FieldsList';
+// dh: 字段侧栏分组增强（常用字段置顶 + 空字段折叠），实现见 src/dh/fieldsSidebar
+import FieldsList from '@/dh/fieldsSidebar/FieldsList';
 
 import { LOGS_OPTIONS_CACHE_KEY } from '../../../constants';
 import { getESVersion, getFieldTopTerms } from '../../../services';
@@ -50,6 +52,7 @@ export default function index(props: IProps) {
   return (
     <div className='h-full flex flex-col flex-shrink-0'>
       <FieldsList
+        scope={{ datasourceValue, index: queryValues?.index }} // dh
         loading={loading}
         organizeFieldNames={organizeFields}
         onOperClick={(field, type) => {

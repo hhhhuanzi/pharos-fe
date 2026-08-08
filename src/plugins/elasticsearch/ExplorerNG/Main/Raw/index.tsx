@@ -13,6 +13,8 @@ import LogsViewer from '@/pages/logExplorer/components/LogsViewer';
 import calcColWidthByData from '@/pages/logExplorer/components/LogsViewer/utils/calcColWidthByData';
 import useFieldConfig from '@/pages/logExplorer/components/RenderValue/useFieldConfig';
 import { getDateTokenDisplayValue } from '@/pages/logExplorer/components/LogsViewer/components/LogFieldValue/tokenValue';
+// dh: 把结果里真正出现过的字段发布给字段侧栏，用于区分「可用字段」与「空字段」
+import { useResultFieldsPublisher } from '@/dh/fieldsSidebar/resultFieldsStore';
 
 import { NAME_SPACE, LOGS_OPTIONS_CACHE_KEY, DEFAULT_LOGS_PAGE_SIZE, LOGS_TABLE_COLUMNS_WIDTH_CACHE_KEY } from '../../../constants';
 import { getLogsQuery, getHistogram } from '../../../services';
@@ -281,6 +283,9 @@ export default function index(props: Props) {
   >(service, {
     refreshDeps: [JSON.stringify(serviceParams)],
   });
+
+  // dh
+  useResultFieldsPublisher({ datasourceValue, index: queryValues?.index, logs: data?.list, hash: data?.hash, rawKey: '__n9e_raw_n9e__' });
 
   const histogramService = () => {
     const queryValues = form.getFieldValue('query'); // 实时获取最新的查询条件
