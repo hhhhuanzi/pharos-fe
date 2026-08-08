@@ -2,8 +2,9 @@ import React from 'react';
 import { Form, Button, Space, Dropdown, Menu } from 'antd';
 import { MoreOutlined, ApartmentOutlined, DownloadOutlined } from '@ant-design/icons';
 
-import { IS_PLUS } from '@/utils/constant';
+import { IS_PLUS, DatasourceCateEnum } from '@/utils/constant';
 import { ShareLinkText } from '@/pages/logExplorer/components/Share';
+import { LogExportMenuItem } from '@/dh/logExport';
 
 // @ts-ignore
 import ExportModal from 'plus:/components/LogDownload/ExportModal';
@@ -38,6 +39,10 @@ export default function MainMoreOperations() {
     {
       label: <ShareLinkText hideText={false} />,
       key: 'share',
+    },
+    {
+      label: <LogExportMenuItem cate={DatasourceCateEnum.elasticsearch} />,
+      key: 'log-export',
     },
   ];
 
