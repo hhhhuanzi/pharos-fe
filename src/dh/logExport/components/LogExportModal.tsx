@@ -70,11 +70,32 @@ export default function LogExportModal(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  // 导出结束后用 toast 反馈，不常驻弹窗
+  const columnsCount = format === 'csv' ? (allFields ? fieldOptions.length || 10 : columns.length || 1) : 1;
+
+  // 导出结束后用 toast 反馈，不常驻弹窗；撞字节闸门时文件仍然下载，但要用 Modal.info
+  // 承载降级建议（§10.7），一条自动消失的 toast 放不下这个信息量
   useEffect(() => {
     if (progress.phase === 'done') {
       if (progress.fetched === 0) {
         message.info(t('result.empty'));
+      } else if (progress.stopReason === 'byte_limit') {
+        Modal.info({
+          title: t('byteLimit.title'),
+          width: 520,
+          content: (
+            <div>
+              <p>{t('byteLimit.content', { count: progress.fetched, size: formatBytes(progress.accumulatedChars), total: progress.total ?? progress.fetched })}</p>
+              <p>{t('byteLimit.suggestTitle')}</p>
+              <ol>
+                <li>{t('byteLimit.suggest1')}</li>
+                <li>{t('byteLimit.suggest2')}</li>
+                <li>{t('byteLimit.suggest3', { count: columnsCount })}</li>
+                <li>{t('byteLimit.suggest4')}</li>
+              </ol>
+            </div>
+          ),
+          okText: t('byteLimit.ok'),
+        });
       } else if (progress.stopReason === 'target') {
         message.success(t('result.success_target', { count: progress.fetched, size: formatBytes(progress.accumulatedChars), total: progress.total ?? progress.fetched }));
       } else {
@@ -86,8 +107,6 @@ export default function LogExportModal(props: Props) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress.phase]);
-
-  const columnsCount = format === 'csv' ? (allFields ? fieldOptions.length || 10 : columns.length || 1) : 1;
   const showWarn = rows > WARN_ROWS;
   const estSeconds = (rows / BATCH_SIZE_TIER2) * 1.5;
   const estBytes = rows * columnsCount * 20;
