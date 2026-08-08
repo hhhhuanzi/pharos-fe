@@ -160,12 +160,16 @@ export default function useLogExport(): UseLogExportReturn {
           if (res.rows.length > 0) writeRows(session, res.rows);
           session.fetched += res.rows.length;
           session.cursor = res.cursor;
+          // 首批完成后就能给出实测速率（条/毫秒），供 UI 估算剩余时间（§10.3）
+          const elapsedMs = Date.now() - session.startedAt;
+          const rate = session.fetched > 0 && elapsedMs > 0 ? session.fetched / elapsedMs : undefined;
           setProgress({
             phase: 'fetching',
             fetched: session.fetched,
             target: session.target,
             total: session.total,
             accumulatedChars: session.accumulatedChars,
+            rate,
           });
 
           if (res.rows.length === 0 || res.exhausted) {

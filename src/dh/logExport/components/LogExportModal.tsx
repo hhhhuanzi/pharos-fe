@@ -147,7 +147,12 @@ export default function LogExportModal(props: Props) {
                 <span>{t('progress.fetched', { fetched: progress.fetched, target: progress.target })}</span>
                 {progress.total != null && <span>{t('progress.total', { total: progress.total })}</span>}
               </Space>
-              <span>{t('progress.size', { size: formatBytes(progress.accumulatedChars) })}</span>
+              <Space size={24}>
+                <span>{t('progress.size', { size: formatBytes(progress.accumulatedChars) })}</span>
+                {!!progress.rate && progress.target > progress.fetched && (
+                  <span>{t('progress.remaining', { time: formatDuration((progress.target - progress.fetched) / progress.rate / 1000) })}</span>
+                )}
+              </Space>
             </Space>
           )}
           <div className='mt-3 text-right'>
@@ -176,6 +181,7 @@ export default function LogExportModal(props: Props) {
           {isPermissionOrPrepareFailure && <Alert type='error' showIcon message={progress.errorMessage} className='mb-3' />}
 
           <div className='mb-3 p-3 bg-[var(--fc-fill-1)] rounded'>
+            <div className='text-xs text-[var(--fc-text-3)] mb-2'>{t('modal.query_condition')}</div>
             <div className='text-sm'>
               {t('modal.datasource')}: {ctx.datasourceName} ({ctx.cate})
             </div>
