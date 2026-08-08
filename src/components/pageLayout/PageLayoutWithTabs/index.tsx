@@ -14,12 +14,11 @@
  * limitations under the License.
  *
  */
-import React, { ReactNode, useContext, useState, useEffect, useLayoutEffect } from 'react';
+import React, { ReactNode, useContext, useState, useEffect } from 'react';
 import { useHistory, useLocation } from 'react-router-dom';
 import querystring from 'query-string';
-import { useTranslation } from 'react-i18next';
-import { Space, Button } from 'antd';
-import { RollbackOutlined, HistoryOutlined } from '@ant-design/icons';
+import { Space } from 'antd';
+import { RollbackOutlined } from '@ant-design/icons';
 
 import AdvancedWrap, { License } from '@/components/AdvancedWrap';
 import { CommonStateContext } from '@/App';
@@ -68,7 +67,6 @@ const PageLayout: React.FC<IPageLayoutProps> = ({
   tabGroup,
   docButtonText,
 }) => {
-  const { i18n } = useTranslation('pageLayout');
   const history = useHistory();
   const location = useLocation();
   const query = querystring.parse(location.search);
@@ -83,21 +81,6 @@ const PageLayout: React.FC<IPageLayoutProps> = ({
       setCurrentMenu(result);
     }
   }, [location.pathname]);
-
-  useLayoutEffect(() => {
-    if (!IS_ENT && !IS_PLUS) {
-      // 如果 Headway 不存在，则每隔 1 秒尝试初始化一次
-      const timer = setInterval(() => {
-        if ((window as any).Headway) {
-          clearInterval(timer);
-          (window as any).Headway?.init({
-            selector: '.product-changelog',
-            account: i18n.language !== 'zh_CN' ? 'yB4rM7' : '7XMr1J',
-          });
-        }
-      }, 1000);
-    }
-  }, [i18n.language]);
 
   return (
     <div className={'page-wrapper'}>
@@ -142,11 +125,6 @@ const PageLayout: React.FC<IPageLayoutProps> = ({
                   <span className='page-layout-intro-container'>{introIcon}</span>
                   <div className='page-header-action-group'>
                     <Version />
-                    {!IS_ENT && !IS_PLUS && (
-                      <Button size='small' type='text' icon={<HistoryOutlined />} className='relative'>
-                        <div className='product-changelog absolute bottom-[2px] left-[7px]'></div>
-                      </Button>
-                    )}
                     <FlashAiButton />
                     {rightArea}
                     <AdvancedWrap var='VITE_IS_PRO,VITE_IS_ENT'>

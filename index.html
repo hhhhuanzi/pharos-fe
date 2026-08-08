@@ -128,14 +128,5 @@
     <div id="root"></div>
     <div id="hoc-renderer-root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script type="module">
-      // 根据环境变量决定是否加载 Headway widget
-      if (!import.meta.env.VITE_IS_PRO && !import.meta.env.VITE_IS_PRO) {
-        // 动态加载 Headway widget 脚本
-        const script = document.createElement('script');
-        script.src = '/js/widget.js';
-        document.head.appendChild(script);
-      }
-    </script>
   </body>
 </html>
