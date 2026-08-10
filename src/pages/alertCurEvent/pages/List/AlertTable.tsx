@@ -1,4 +1,4 @@
-import React, { useState, useContext, useRef, useEffect } from 'react';
+import React, { useState, useContext, useRef, useEffect, useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tag, Space } from 'antd';
 import { useHistory, useLocation } from 'react-router-dom';
@@ -21,6 +21,7 @@ import { FilterType } from '../../types';
 import EventDetailDrawer from './EventDetailDrawer';
 import EnhancedTable from '@/components/EnhancedTable';
 import Tags from '@/components/TableTags/Tags';
+import type { AlertEventTagsDisplayMode } from '../../utils/eventColumnExpandedStorage';
 
 interface IProps {
   filter: FilterType;
@@ -30,7 +31,7 @@ interface IProps {
   selectedRowKeys: number[];
   setSelectedRowKeys: (selectedRowKeys: number[]) => void;
   setRefreshFlag: (refreshFlag: string) => void;
-  eventColumnExpanded: boolean;
+  tagDisplayMode: AlertEventTagsDisplayMode;
   alertEscalationEnable: boolean;
 }
 
@@ -58,7 +59,7 @@ function formatDuration(ms: number) {
 }
 
 export default function AlertTable(props: IProps) {
-  const { filter, setFilter, selectedRowKeys, setSelectedRowKeys, params, setRefreshFlag, eventColumnExpanded, alertEscalationEnable } = props;
+  const { filter, setFilter, selectedRowKeys, setSelectedRowKeys, params, setRefreshFlag, tagDisplayMode, alertEscalationEnable } = props;
   const history = useHistory();
   const { t } = useTranslation(NS);
   const { datasourceList } = useContext(CommonStateContext);
@@ -70,6 +71,8 @@ export default function AlertTable(props: IProps) {
     visible: false,
   });
   const lastInitiatedViewIdRef = useRef<number | null>(null);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const [tableHeaderHeight, setTableHeaderHeight] = useState<number>();
 
   useEffect(() => {
     const parsed = queryString.parse(location.search);
@@ -135,8 +138,8 @@ export default function AlertTable(props: IProps) {
                 </a>
               </Space>
             </div>
-            {eventColumnExpanded ? (
-              // 展开态：全部标签内联铺开（双击加入筛选）
+            {tagDisplayMode === 'all' ? (
+              // 所有：全部标签内联铺开（双击加入筛选）
               <div className='alert-event-tags is-expanded'>
                 {_.map(tags, (item) => (
                   <Tag key={item} style={{ maxWidth: '100%' }} onDoubleClick={() => addTagToFilter(item)}>
@@ -144,10 +147,10 @@ export default function AlertTable(props: IProps) {
                   </Tag>
                 ))}
               </div>
-            ) : (
-              // 收起态：公共 Tags 组件，固定展示前 3 个（对齐原逻辑）+ N 悬浮弹层展示全部标签 + 复制（单击标签加入筛选）
+            ) : tagDisplayMode === 'compact' ? (
+              // 精简：固定展示前 3 个，+N 悬浮弹层展示全部标签（单击标签加入筛选）
               <Tags data={tags} type='outline' maxCount={3} onTagClick={(item) => addTagToFilter(item as string)} />
-            )}
+            ) : null}
           </div>
         );
       },
@@ -155,7 +158,6 @@ export default function AlertTable(props: IProps) {
     {
       title: t('trigger_time'),
       dataIndex: 'trigger_time',
-      fixed: 'right' as const,
       render(value) {
         return (
           <div
@@ -171,7 +173,6 @@ export default function AlertTable(props: IProps) {
     {
       title: t('duration'),
       dataIndex: 'duration',
-      fixed: 'right' as const,
       render(_, record) {
         const duration = moment().diff(moment(record.first_trigger_time * 1000));
         const maxGrids = 12;
@@ -200,13 +201,27 @@ export default function AlertTable(props: IProps) {
         );
       },
     },
+    {
+      title: t('trigger_value'),
+      dataIndex: 'trigger_value',
+      render(value) {
+        return (
+          <div
+            style={{
+              minWidth: getTextWidth(t('trigger_value')),
+            }}
+          >
+            {value}
+          </div>
+        );
+      },
+    },
   ];
 
   if (import.meta.env.VITE_IS_PRO === 'true') {
     columns.splice(3, 0, {
       title: t('claimant'),
       dataIndex: 'claimant',
-      fixed: 'right',
       render: (value, record) => {
         return (
           <div
@@ -249,12 +264,32 @@ export default function AlertTable(props: IProps) {
 
   const pagination = usePagination({ PAGESIZE_KEY: EVENTS_TABLE_PAGESIZE_CACHE_KEY });
 
+  useLayoutEffect(() => {
+    const container = tableContainerRef.current;
+    if (!container) return;
+
+    const measure = () => {
+      const header = container.querySelector('.ant-table-thead') as HTMLElement | null;
+      if (!header) return;
+
+      const nextHeight = Math.ceil(header.getBoundingClientRect().height);
+      setTableHeaderHeight((currentHeight) => (currentHeight === nextHeight ? currentHeight : nextHeight));
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    const header = container.querySelector('.ant-table-thead');
+    if (header) observer.observe(header);
+
+    return () => observer.disconnect();
+  }, [tableProps.dataSource]);
+
   return (
-    <div className='n9e-antd-table-height-full'>
+    <div ref={tableContainerRef} className='n9e-antd-table-height-full'>
       <EnhancedTable
         size='small'
         tableLayout='auto'
-        scroll={!_.isEmpty(tableProps.dataSource) ? { x: 'max-content', y: 'calc(100% - 37px)' } : undefined} // TODO: 临时解决空数据时会出现滚动条问题
+        scroll={!_.isEmpty(tableProps.dataSource) && tableHeaderHeight !== undefined ? { x: 'max-content', y: `calc(100% - ${tableHeaderHeight}px)` } : undefined}
         rowKey={(record) => record.id}
         columns={columns}
         {...tableProps}

@@ -21,6 +21,7 @@ const ru_RU = {
   shield: 'Заблокировать',
   prod: 'Тип мониторинга',
   duration: 'Продолжительность',
+  trigger_value: 'Значение триггера',
   aggregate_rule: 'Правило сбора',
   aggregate_rule_mgs: 'Выберите правило сбора',
   aggregate_rule_tip: `Агрегируйте и классифицируйте оповещения на основе атрибутов и тегов события для удобного просмотра. Используйте Go Template для ссылки на поля события, например:
@@ -52,6 +53,10 @@ const ru_RU = {
   my_groups: 'Мои бизнес-группы',
   all_groups: 'Все бизнес-группы',
   datasources: 'Источники данных',
+  tag_display: 'Отображение меток',
+  tag_display_all: 'Все',
+  tag_display_compact: 'Кратко',
+  tag_display_off: 'Скрыть',
   detail_title: 'Детали события',
 };
 

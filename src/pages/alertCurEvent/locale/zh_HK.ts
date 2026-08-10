@@ -21,6 +21,7 @@ const zh_HK = {
   shield: '屏蔽',
   prod: '監控類型',
   duration: '持續時長',
+  trigger_value: '觸發時值',
   aggregate_rule: '聚合規則',
   aggregate_rule_mgs: '請選擇聚合規則',
   aggregate_rule_tip: `根據事件的屬性和標籤對告警做聚合歸類，方便查看，使用 Go Template 引用事件字段，舉例：
@@ -51,6 +52,10 @@ const zh_HK = {
   my_groups: '我的業務組',
   all_groups: '全部業務組',
   datasources: '數據源',
+  tag_display: '標籤顯示',
+  tag_display_all: '所有',
+  tag_display_compact: '精簡',
+  tag_display_off: '關閉',
   detail_title: '告警詳情',
 };
 

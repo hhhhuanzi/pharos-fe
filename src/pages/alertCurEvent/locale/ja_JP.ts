@@ -21,6 +21,7 @@ const ja_JP = {
   shield: 'シールド',
   prod: '監視タイプ',
   duration: '持続時間',
+  trigger_value: 'トリガ値',
   aggregate_rule: '集計ルール',
   aggregate_rule_mgs: '集計ルールを選択してください',
   aggregate_rule_tip: `イベントの属性とタグに基づいてアラートを集計して分類し、表示を簡素化します。Go Templateを使用してイベントフィールドを参照します。例：
@@ -52,6 +53,10 @@ const ja_JP = {
   my_groups: '私のビジネスグループ',
   all_groups: 'すべてのビジネスグループ',
   datasources: 'データソース',
+  tag_display: 'タグ表示',
+  tag_display_all: 'すべて',
+  tag_display_compact: '簡易',
+  tag_display_off: '非表示',
   detail_title: 'アラート詳細',
 };
 

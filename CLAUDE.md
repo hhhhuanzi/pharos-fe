@@ -26,7 +26,7 @@ src/
 
 ## 技术栈红线（不可违反）
 
-- React 17 + antd **4.21.0**（`package.json` 里是锁死的精确版本）。
+- React 18 + antd **4.21.0**（与 upstream v9.1.0 对齐；`antd` 在 `package.json` 里仍是锁死的精确版本）。
 - **不升级 antd 5**；**不引入 `@ant-design/pro-components`**；**不使用 ProTable / ProForm / ProCard / PageContainer / StatisticCard**；不引入新的大型 UI 框架；不要再推荐 Ant Design Pro。
 - 不要使用 antd 5 才有的 API（`ConfigProvider theme` / `theme.useToken` / `Modal open` / `Tabs items` / `Dropdown menu` 等）。
 - 原因：Pro Components 主线依赖 antd v5，兼容 antd4 的老版本已停止维护；升级 antd5 会造成大范围 diff，破坏 upstream merge 能力。
@@ -50,6 +50,7 @@ src/
 
 - 弹窗、抽屉等临时容器组件在卸载时，必须显式清理表单数据和本地状态（如 `form.resetFields()`、loading、临时选择值），避免再次打开时回显旧数据。
 - 注意 `form.setFieldsValue` 是增量更新：未传入的字段会保留原值。需要全量覆盖场景时，先重置表单（如 `form.resetFields()`）再设置新值。
+- `antd` 的 `Collapse.Panel` 初始折叠时不会挂载内容。若面板内的 `Form.Item` / `Form.List` 需要参与校验、回填或提交，必须添加 `forceRender`，确保字段注册到 Form；纯展示内容无需添加。
 
 ## 样式与颜色
 

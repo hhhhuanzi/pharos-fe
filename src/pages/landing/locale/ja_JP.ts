@@ -1,5 +1,27 @@
 const ja_JP = {
   pageTitle: 'Pharos へようこそ',
+  onboarding: {
+    dismiss: '今後表示しない',
+    title: 'はじめに',
+    subtitle: '数ステップで監視を立ち上げましょう',
+    progress: '{{done}}/{{total}} 完了',
+    hostTrack: 'ホスト監視',
+    dataTrack: 'データ連携',
+    aiTrack: 'AI アシスタント',
+    optional: '任意',
+    steps: {
+      machine: { title: 'コレクタをデプロイ', desc: 'ホストに Categraf をデプロイすると、ホスト一覧に表示されます' },
+      collectVerified: { title: '収集を設定してデータを確認', desc: 'コンポーネントごとに Categraf 設定を生成し、メトリクスの到達を確認' },
+      hostDashboard: { title: 'ホストダッシュボードを適用', desc: '組み込みのホストダッシュボードをワンクリックで取り込み、すぐにデータを確認' },
+      hostAlert: { title: 'ホストアラートを有効化', desc: '組み込みのホストアラートルールをワンクリックで取り込んで有効化' },
+      testDelivered: { title: 'テストアラートを送信', desc: 'モックイベントで通知が実際に届くことを確認' },
+      datasource: { title: 'データソースを設定', desc: 'Prometheus / VictoriaMetrics などを接続' },
+      dashboard: { title: 'ダッシュボードを作成', desc: '関心のあるメトリクスを可視化' },
+      alert: { title: 'アラートルールを設定', desc: '重要なメトリクスに最初のアラートルールを設定' },
+      notification: { title: '通知を設定', desc: 'DingTalk / メールなどでアラートを実際に届ける' },
+      llm: { title: 'LLM を接続', desc: 'LLM を設定して AI アシスタントと分析を有効化' },
+    },
+  },
   hero: {
     badge: 'エンタープライズ統合可観測性プラットフォーム',
     highlight: 'メトリクス・ログ・トレースを、ひとつの入口でまるごと把握',
