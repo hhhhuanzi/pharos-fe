@@ -1,7 +1,7 @@
 import { Field } from '@/pages/logExplorer/types';
 
 import flattenLogFields from './flattenLogFields';
-import groupFields from './groupFields';
+import groupFields, { hasResultInfo } from './groupFields';
 import getRecommendedRank from './recommendedFields';
 
 const toFields = (names: readonly string[]): Field[] => names.map((field) => ({ field, indexable: true, type: 'string' }));
@@ -54,11 +54,28 @@ describe('flattenLogFields', () => {
   });
 });
 
+describe('hasResultInfo', () => {
+  it('undefined 或空数组都算「还没有结果信息」', () => {
+    expect(hasResultInfo(undefined)).toBe(false);
+    expect(hasResultInfo([])).toBe(false);
+  });
+
+  it('非空数组算「已有结果信息」', () => {
+    expect(hasResultInfo(['message'])).toBe(true);
+  });
+});
+
 describe('groupFields', () => {
   it('没有结果信息时不产生空字段分组，行为退回官方两组', () => {
     const groups = groupFields({ fields: toFields(MAPPING) });
     expect(groups.empty).toHaveLength(0);
     expect(groups.selected).toHaveLength(0);
+    expect(groups.popular.concat(groups.available)).toHaveLength(MAPPING.length);
+  });
+
+  it('结果样本为空数组时同样退回官方两组（而不是把所有字段判成空字段）', () => {
+    const groups = groupFields({ fields: toFields(MAPPING), resultFields: [] });
+    expect(groups.empty).toHaveLength(0);
     expect(groups.popular.concat(groups.available)).toHaveLength(MAPPING.length);
   });
 

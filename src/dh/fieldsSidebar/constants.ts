@@ -21,3 +21,9 @@ export const FLATTEN_MAX_DEPTH = 12;
 
 /** resultFields store 最多缓存多少个 scope（多 tab 场景），超出按写入顺序淘汰 */
 export const RESULT_FIELDS_MAX_SCOPES = 8;
+
+/** 查询结果样本字段的 localStorage key 前缀，实际 key 为 `${前缀}@${datasourceValue}@${index}` */
+export const RESULT_FIELDS_CACHE_KEY = 'dh-log-explorer-result-fields';
+
+/** 单个 scope 最多持久化多少个结果字段路径，超出时按字母序截断，避免 localStorage 膨胀 */
+export const RESULT_FIELDS_MAX_CACHED = 200;

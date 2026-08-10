@@ -9,7 +9,8 @@ import { TYPE_MAP } from '@/pages/logExplorer/components/FieldsList/constants';
 import { Field, StatsResult } from '@/pages/logExplorer/components/FieldsList/types';
 
 import { NS } from '../constants';
-import groupFields from '../groupFields';
+import groupFields, { hasResultInfo } from '../groupFields';
+import { useIndexFieldsPublisher } from '../indexFieldsStore';
 import { FieldsScope, PopularCounts, getPopularFields, increasePopularField } from '../popularFields';
 import { getScopeKey, useResultFields } from '../resultFieldsStore';
 
@@ -88,10 +89,22 @@ export default function DhFieldsList(props: Props) {
     setPopularCounts(getPopularFields(scope ?? {}));
   }, [scopeKey]);
 
+  // dh: 把侧栏这里已经拿到的完整 mapping 字段名发布出去，供导出弹窗直接复用同一份数组、
+  // 过同一个 groupFields()——从根上消除「两条独立链路各自请求/解析，算出不同结果」的风险，
+  // 不再依赖 getFields()/getFullFields() 两个 mapping 解析函数的兼容范围是否一致。
+  const indexFieldNames = useMemo(() => fields.map((item) => item.field), [fields]);
+  useIndexFieldsPublisher(scope ?? {}, indexFieldNames, loading);
+
   const groups = useMemo(
     () => groupFields({ fields, organizeFieldNames, popularCounts, resultFields }),
     [fields, organizeFieldNames, popularCounts, resultFields],
   );
+  // 还没有结果样本时「可用字段」等于 mapping 全量、不会拆出「空字段」，容易让人以为字段数不合理，加提示解释
+  const availableFieldsTip = hasResultInfo(resultFields) ? undefined : t('available_fields_no_result_tip');
+  // 同理，「常用字段」在没有结果样本时也只是「mapping 全量套内置推荐词表」算出来的候选，
+  // isPresent() 恒为 true 起不到过滤作用，词表本身覆盖 ts/msg/body 这类不少索引其实用不到
+  // 的通用别名——加提示说明这批是候选而非确认有值的字段，避免被当成这个索引"真实"常用字段
+  const popularFieldsTip = hasResultInfo(resultFields) ? t('popular_fields_tip') : t('popular_fields_no_result_tip');
 
   const searchTokens = useMemo(() => fieldsSearch.trim().toLowerCase().split(/\s+/).filter(Boolean), [fieldsSearch]);
   const filterBySearch = (list: Field[]) => {
@@ -188,7 +201,7 @@ export default function DhFieldsList(props: Props) {
           {popular.length > 0 &&
             renderGroup({
               title: t('popular_fields'),
-              tip: t('popular_fields_tip'),
+              tip: popularFieldsTip,
               list: popular,
               operType: 'available',
               collapsed: popularCollapsed,
@@ -196,6 +209,7 @@ export default function DhFieldsList(props: Props) {
             })}
           {renderGroup({
             title: tLogExplorer('field_list.available_fields'),
+            tip: availableFieldsTip,
             list: available,
             operType: 'available',
             collapsed: availableCollapsed,

@@ -45,12 +45,22 @@ function buildPresentSet(resultFields: string[]): Set<string> {
   return present;
 }
 
+/**
+ * 是否已经拿到「结果样本里出现过哪些字段」这份信息。
+ * 为 false 时（还没执行过查询，或本次结果为空）`groupFields` 退回官方「显示字段 / 可用字段」
+ * 两组行为，「可用字段」等于 mapping 全量、不产生「空字段」分组——这是有意的兜底，不是 bug。
+ * 单独导出是为了让 UI 层（如「可用字段」标题旁的提示）能用同一份判断依据，不用各自重复条件。
+ */
+export function hasResultInfo(resultFields?: string[]): boolean {
+  return Array.isArray(resultFields) && resultFields.length > 0;
+}
+
 export default function groupFields(params: GroupFieldsParams): FieldGroups {
   const { fields, organizeFieldNames, popularCounts = {}, resultFields, popularGroupMax = POPULAR_GROUP_MAX } = params;
 
   const selectedNames = organizeFieldNames ?? [];
-  const hasResultInfo = Array.isArray(resultFields) && resultFields.length > 0;
-  const presentSet = hasResultInfo ? buildPresentSet(resultFields as string[]) : undefined;
+  const resultInfoAvailable = hasResultInfo(resultFields);
+  const presentSet = resultInfoAvailable ? buildPresentSet(resultFields as string[]) : undefined;
   const isPresent = (field: Field) => (presentSet ? presentSet.has(field.field) : true);
 
   const selected: Field[] = [];
@@ -86,7 +96,7 @@ export default function groupFields(params: GroupFieldsParams): FieldGroups {
   const empty: Field[] = [];
   rest.forEach((item) => {
     if (popularNames.has(item.field)) return;
-    if (hasResultInfo && !isPresent(item)) {
+    if (resultInfoAvailable && !isPresent(item)) {
       empty.push(item);
     } else {
       available.push(item);
