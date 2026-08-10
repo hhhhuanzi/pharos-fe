@@ -1,4 +1,5 @@
 import { csvHeader, formatCellValue, rowsToCsvChunk, sanitizeCsvCell, toCsvField } from './csv';
+import { MAX_CELL_CHARS } from './constants';
 
 describe('sanitizeCsvCell', () => {
   it('prefixes = with a single quote (formula injection)', () => {
@@ -50,6 +51,22 @@ describe('formatCellValue', () => {
 
   it('array -> JSON string', () => {
     expect(formatCellValue([1, 2])).toBe('[1,2]');
+  });
+
+  /**
+   * 兜底截断：`guardRowValueSize`（serialize.ts）只处理字符串值，`flatten()` 在
+   * maxDepth 截断处残留的裸对象引用要到这里 JSON.stringify 之后才第一次变成
+   * 字符串，所以这里也必须有一次独立的上限检查，否则依然可能产出异常巨大的单元格。
+   */
+  it('异常巨大的嵌套对象经 JSON.stringify 后依然会被截断', () => {
+    const huge = { blob: 'z'.repeat(MAX_CELL_CHARS + 100) };
+    const result = formatCellValue(huge);
+    expect(result.length).toBeLessThan(JSON.stringify(huge).length);
+    expect(result).toContain('TRUNCATED');
+  });
+
+  it('普通大小的对象不受截断影响', () => {
+    expect(formatCellValue({ a: 1, b: 'ok' })).toBe('{"a":1,"b":"ok"}');
   });
 });
 

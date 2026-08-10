@@ -23,7 +23,7 @@ function buildCtx(overrides: Partial<LogExportContext> = {}): LogExportContext {
 function buildAdapter(digest: string): LogExportAdapter {
   return {
     cate: DatasourceCateEnum.elasticsearch,
-    rawKey: 'message',
+    csvPresetColumns: ['message'],
     getMaxRows: jest.fn(),
     prepare: jest.fn(),
     fetchPage: jest.fn(),

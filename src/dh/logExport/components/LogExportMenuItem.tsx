@@ -6,6 +6,8 @@ import { useTranslation } from 'react-i18next';
 import { CommonStateContext } from '@/App';
 import { parseRange } from '@/components/TimeRangePicker';
 import { DatasourceCateEnum } from '@/utils/constant';
+import { useIndexFields } from '@/dh/fieldsSidebar/indexFieldsStore';
+import { useResultFields } from '@/dh/fieldsSidebar/resultFieldsStore';
 
 import { getLogExportAdapter } from '../adapters';
 import { NS, OP_LOG_EXPORT } from '../constants';
@@ -29,6 +31,12 @@ export default function LogExportMenuItem(props: Props) {
   const datasourceId = Form.useWatch('datasourceValue', form);
   const query = Form.useWatch('query', form);
   const [visible, setVisible] = useState(false);
+  // 与 ExplorerNG/Main/Raw 发布的 scope（datasourceValue + index）保持一致，才能订阅到
+  // 同一份「当前查询结果里出现过的字段」，供导出勾选「全部字段」时收窄 _source 白名单
+  const resultFields = useResultFields({ datasourceValue: datasourceId, index: (query as { index?: string } | undefined)?.index });
+  // 与字段侧栏 FieldsList 发布的同一个 scope 订阅同一份 mapping 字段名列表，让「常用字段」
+  // 默认列与侧栏用的是同一个数组、同一个 groupFields()，见 indexFieldsStore.ts 顶部说明
+  const indexFields = useIndexFields({ datasourceValue: datasourceId, index: (query as { index?: string } | undefined)?.index });
 
   const adapter = getLogExportAdapter(cate);
   if (!perms?.includes(OP_LOG_EXPORT) || !adapter) return null;
@@ -50,6 +58,8 @@ export default function LogExportMenuItem(props: Props) {
       // 页面上的排序方向是 Main 组件的局部状态，没有向上传递到这里；导出统一按页面
       // 默认的「新到旧」排序，不随页面上临时切换的排序方向变化（见二开落点说明）。
       reverse: true,
+      resultFields,
+      indexFields,
     };
   })();
 

@@ -23,6 +23,26 @@ export interface LogExportContext {
   query: Record<string, unknown>;
   /** 排序方向，继承页面当前设置 */
   reverse: boolean;
+  /**
+   * 本次查询结果样本中实际出现过的叶子字段路径，来自 `src/dh/fieldsSidebar/resultFieldsStore`
+   * （与侧边栏「可用字段/空字段」分组同一份数据）。undefined 表示暂无样本（如页面还没查询出结果）。
+   *
+   * 用途：勾选「全部字段」导出时，用它代替整份 `_mapping` 作为 `_source` 白名单——
+   * 宽索引（如跨多个 pod、多种日志格式的 `k8s-pod*`）的 mapping 字段是所有文档字段的并集，
+   * 远超单条日志实际拥有的字段数；用当前查询结果样本能显著收窄导出体积与列数。
+   */
+  resultFields?: string[];
+  /**
+   * 当前索引 mapping 的完整字段名列表，来自 `src/dh/fieldsSidebar/indexFieldsStore`
+   * （与侧边栏 `FieldsList` 渲染「常用字段/可用字段」用的是同一个数组）。undefined
+   * 表示还没有侧栏发布过（如宿主页面没有接入字段侧栏，或侧栏 mapping 还在加载中）。
+   *
+   * 用途：`resolveDefaultColumns()` 算「常用字段」默认列时优先用它作候选字段集合，
+   * 不再自己另发一次 `_mapping` 请求、另用一套解析函数——避免两条独立链路各自解析
+   * 同一份响应却算出不同结果（历史上出过至少两轮这类不一致）。只有它不可用时才退回
+   * `getFields()` 兜底。
+   */
+  indexFields?: string[];
 }
 
 /** adapter.fetchPage 的入参 */
@@ -34,6 +54,12 @@ export interface FetchPageParams {
   size: number;
   /** 上一批返回的游标，首批为 undefined */
   cursor?: unknown;
+  /**
+   * 只需要这些字段（ES 侧转成 `_source` 白名单）。
+   * `undefined` 表示需要完整文档 —— JSONL / 原始文本，或勾了「全部字段」却拿不到
+   * 结果样本时（见 resolveSourceFields）。
+   */
+  sourceFields?: string[];
   signal: AbortSignal;
 }
 
@@ -46,6 +72,8 @@ export interface FetchPageResult {
   total?: number;
   /** 为 true 表示后端已无更多数据，即使还没取够 requestedRows 也应停止 */
   exhausted?: boolean;
+  /** 本批命中 `guardRowValueSize` 截断上限的字段值个数，供 UI 提示「有字段被截断」 */
+  truncatedCells?: number;
 }
 
 export interface LogExportPrepareResult {
@@ -60,8 +88,8 @@ export interface LogExportPrepareResult {
 
 export interface LogExportAdapter {
   cate: DatasourceCateEnum;
-  /** 原始日志正文字段名，供 format='raw' 使用 */
-  rawKey: string;
+  /** CSV 默认强制包含的字段；仅用于默认列计算，不影响 raw/jsonl */
+  csvPresetColumns: string[];
   /** 本 adapter 在给定条数下能用的最大值。ES 在支持 PIT 时返回 MAX_ROWS_TIER2 */
   getMaxRows: (ctx: LogExportContext) => Promise<number>;
   /** 决定本次导出用哪种策略；可能需要一次探测请求（如建 PIT） */
@@ -89,16 +117,42 @@ export type StopReason = 'target' | 'exhausted' | 'byte_limit';
 
 export interface ExportProgress {
   phase: ExportPhase;
+  /**
+   * 本次导出实际采用的策略，`prepare()` 返回后才有值。
+   *
+   * UI 拿它做「进度呈现分档」的唯一判断依据：`from_size`（≤1 万条，通常几秒）走无感
+   * 直接下载，`pit_search_after`（大额，分钟级）才展示进度面板。用它而不是用用户填的
+   * 条数，是因为「请求 10 万条但 PIT 不可用而降级到 1 万条」这种情况必须算小额。
+   */
+  strategy?: ExportStrategy;
   fetched: number;
-  /** 目标条数（clamp 之后） */
+  /**
+   * 【展示用】进度条分母、剩余时间预估的基准。
+   *
+   * 首批响应之前（`total` 还未知）等于请求条数（架构上限，如 10 万）——这是唯一能用的
+   * 分母，但通常远大于真实命中数，UI 应避免据此展示一个看起来精确、实则注定要跳变的
+   * 百分比（见 `LogExportModal.tsx` 的 `totalUnknown` 判断）。首批响应之后自动收窄为
+   * `min(请求条数, total)`：真实命中数一旦已知，就没理由再让用户盯着一个不可能达到的
+   * 分母。只会在首批返回时单向收窄一次（`total` 之后不再变化），不会导致百分比倒退。
+   */
   target: number;
-  /** 查询命中总数，可能为 undefined */
+  /**
+   * 查询命中总数。首批响应前为 `undefined`（还不知道），此后固定不变——ES 只在首批
+   * `track_total_hits: true` 时返回它，本身就是免费拿到的信息，不需要额外探测请求。
+   */
   total?: number;
   /** 已累计写入 parts[] 的字符数，用于字节闸门与「已生成 xx MB」的展示 */
   accumulatedChars: number;
+  /** 累计有多少个字段值命中 MAX_CELL_CHARS 被截断（异常巨大的单值，如整段 stack trace） */
+  truncatedCells?: number;
   /** 停止原因，决定完成提示的文案 */
   stopReason?: StopReason;
   errorMessage?: string;
+  /**
+   * 进度区的临时提示，如「本批超时，已把批大小降到 2500 条重试」。
+   * 有它是因为自动缩批重试期间进度数字不动，不解释一句就和「卡死」长得一模一样。
+   */
+  notice?: string;
   /** 首批完成后的实测速率（条/毫秒），用于估算剩余时间 */
   rate?: number;
   startedAt?: number;

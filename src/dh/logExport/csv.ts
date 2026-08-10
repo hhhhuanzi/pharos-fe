@@ -1,3 +1,10 @@
+import { MAX_CELL_CHARS } from './constants';
+
+/** 附加在被截断字段值末尾的标记：ASCII，避免在导出文件里引入编码/locale 相关字符 */
+export function truncationMarker(originalLength: number): string {
+  return `...[TRUNCATED, original length ${originalLength} chars > ${MAX_CELL_CHARS}]`;
+}
+
 /**
  * Excel / WPS 会把以 = + - @ 以及 Tab / CR 开头的单元格当作公式求值。
  * 日志内容是完全不可信的输入（攻击者可以往被采集的应用里写一行
@@ -18,17 +25,26 @@ export function sanitizeCsvCell(value: string): string {
  * - null / undefined → ''（不是字符串 "null"）
  * - object / array   → JSON.stringify（嵌套字段在 CSV 里只能这样）
  * - 其它             → String(v)
+ *
+ * 兜底截断：正常字符串值已经在 `guardRowValueSize`（serialize.ts）里截断过，走到这里
+ * 不会再超限；这里只兜住 `flatten()` 在 maxDepth 截断处残留的裸对象引用——这类值
+ * 不是字符串，逃过了 `guardRowValueSize` 的检查，只有在这里 JSON.stringify 之后
+ * 才第一次变成字符串，因此必须在这一步也做一次上限检查，否则依然可能产出一个
+ * 异常巨大的 CSV 单元格。
  */
 export function formatCellValue(value: unknown): string {
   if (value == null) return '';
+  let text: string;
   if (typeof value === 'object') {
     try {
-      return JSON.stringify(value);
+      text = JSON.stringify(value);
     } catch {
-      return String(value);
+      text = String(value);
     }
+  } else {
+    text = String(value);
   }
-  return String(value);
+  return text.length > MAX_CELL_CHARS ? text.slice(0, MAX_CELL_CHARS) + truncationMarker(text.length) : text;
 }
 
 /** 单元格值 → CSV 字段：中和公式 → 转义双引号 → 整体加引号 */
