@@ -10,6 +10,8 @@ import { parseRange } from '@/components/TimeRangePicker';
 import { DefaultFormValuesControl, RenderCommonSettings } from '@/pages/logExplorer/types';
 import { OnValueFilterParams } from '@/pages/logExplorer/components/LogsViewer/types';
 import SideBar from '@/pages/logExplorer/components/SideBar';
+// dh: 首次进入页面、必要条件都就绪后自动查询一次，不用等用户手动点「查询」，见该文件顶部说明
+import useAutoQueryOnReady from '@/dh/autoQuery/useAutoQueryOnReady';
 
 import { NAME_SPACE, QUERY_CACHE_KEY, QUERY_CACHE_PICK_KEYS, DEFAULT_LOGS_PAGE_SIZE } from '../constants';
 import { Field, Interval } from './types';
@@ -36,6 +38,7 @@ export default function index(props: Props) {
 
   const form = Form.useFormInstance();
   const datasourceValue = Form.useWatch('datasourceValue', form);
+  const queryValues = Form.useWatch('query', form);
 
   const [organizeFields, setOrganizeFields] = useState<string[]>([]);
   const urlOrganizeFieldsRef = useRef<string[]>([]);
@@ -108,6 +111,13 @@ export default function index(props: Props) {
       });
     }, 0);
   };
+
+  // dh: 只在必要条件第一次全部就绪时自动查询一次，不打断用户已经开始编辑的查询条件
+  useAutoQueryOnReady(
+    { datasourceValue, index: queryValues?.index, dateField: queryValues?.date_field, range: queryValues?.range, queryText: queryValues?.query, filters: queryValues?.filters },
+    executeQuery,
+    () => !!form.getFieldValue('refreshFlag'),
+  );
 
   const handleValueFilter = (params: OnValueFilterParams) => {
     const { key, value, operator } = params;
