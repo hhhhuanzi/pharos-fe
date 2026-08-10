@@ -116,7 +116,7 @@ export default function TraceResult(props: IProps) {
     getTraceSearch(search)
       .then((res) => {
         try {
-          setTraces(sortTraces(res.map(transformTraceData), sort || 'MOST_RECENT'));
+          setTraces(sortTraces(toTraceList(res), sort || 'MOST_RECENT'));
         } catch (e) {
           console.log(e);
         }

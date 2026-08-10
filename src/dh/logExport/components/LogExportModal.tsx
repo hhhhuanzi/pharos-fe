@@ -99,7 +99,7 @@ export default function LogExportModal(props: Props) {
       getFields(ctx.datasourceId, query.index)
         .then((res) => {
           if (cancelled) return;
-          setFallbackFieldOptions(res.allFields.map((f) => f.field));
+          setFallbackFieldOptions(res.allFields);
         })
         .catch(() => {
           // 拉取失败时保持为空，resolveDefaultColumns 会退回预填列兜底，不阻断导出

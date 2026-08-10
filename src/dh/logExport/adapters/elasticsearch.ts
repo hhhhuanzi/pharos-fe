@@ -44,7 +44,7 @@ interface PitState {
  * 通常只要其中 3~5 列。不裁剪的话每批 5000 条要传几十 MB，绝大部分当场被丢掉。
  */
 function buildEsSearchBody(ctx: LogExportContext, size: number, sourceFields?: string[]): Record<string, any> {
-  const q = ctx.query as EsQuery;
+  const q = ctx.query as unknown as EsQuery;
   const ndjson = dslBuilder({
     index: q.index,
     date_field: q.date_field,
@@ -95,7 +95,7 @@ function flattenEsHits(hits: any[]): { rows: LogRow[]; truncatedCells: number } 
 }
 
 async function fetchPageFromSize({ ctx, fetched, size, sourceFields, signal }: FetchPageParams): Promise<FetchPageResult> {
-  const q = ctx.query as EsQuery;
+  const q = ctx.query as unknown as EsQuery;
   const body = buildEsSearchBody(ctx, size, sourceFields);
   body.from = fetched;
   // 精确统计总数在大索引上很贵，只有首批需要（UI 的「共命中 N 条」拿到一次就够）
@@ -120,7 +120,7 @@ async function fetchPageFromSize({ ctx, fetched, size, sourceFields, signal }: F
 
 /** 建 PIT。400/404（ES < 7.10 或该功能被禁用）时抛错，调用方（prepare）据此降级到 T1 */
 async function createPit(ctx: LogExportContext, signal: AbortSignal): Promise<string> {
-  const q = ctx.query as EsQuery;
+  const q = ctx.query as unknown as EsQuery;
   const res = await request(`/api/${N9E_PATHNAME}/proxy/${ctx.datasourceId}/${encodeURIComponent(q.index)}/_pit`, {
     method: RequestMethod.Post,
     params: { keep_alive: ES_PIT_KEEP_ALIVE },
@@ -147,7 +147,7 @@ async function deletePit(ctx: LogExportContext, pitId: string): Promise<void> {
  * 因为 ES 可能在响应中轮换 pit_id（§5.4.2）。
  */
 async function fetchPageSearchAfter({ ctx, size, cursor, state, sourceFields, signal }: FetchPageParams & { state?: unknown }): Promise<FetchPageResult> {
-  const q = ctx.query as EsQuery;
+  const q = ctx.query as unknown as EsQuery;
   const pitState = state as PitState;
   const body = buildEsSearchBody(ctx, size, sourceFields);
   delete body.from;
@@ -227,7 +227,7 @@ async function cleanup(ctx: LogExportContext, state?: unknown): Promise<void> {
 }
 
 function getQueryDigest(ctx: LogExportContext): string {
-  const q = ctx.query as EsQuery;
+  const q = ctx.query as unknown as EsQuery;
   return q.index || '';
 }
 
