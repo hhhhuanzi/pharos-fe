@@ -60,9 +60,13 @@ export function getMenuPerm() {
   return request(`/api/${N9E_PATHNAME}/self/perms`, {
     method: RequestMethod.Get,
   }).then((res) => {
-    // TODO 这里是为了处理一些菜单地址不便设置为权限点，但是又希望走统一的权限控制逻辑
-    const whitelist = ['/event-pipelines-executions'];
-    let perms = _.concat(res.dat || [], whitelist);
+    // 部分菜单 key 不便单独做成权限点，但要走统一 perms 过滤：仅在已有对应权限时注入别名 key。
+    // 切勿无条件 whitelist，否则 tabs 子项会让整组菜单对所有人可见（曾导致「工作流」默认开放）。
+    let perms = res.dat || [];
+    // 执行记录页菜单 key 与权限点不同，有「事件管道 - 查看」时一并放行
+    if (_.includes(perms, '/event-pipelines')) {
+      perms = _.concat(perms, ['/event-pipelines-executions']);
+    }
     // 如果存在 /embedded-products 权限点时就插入 /embedded-product 权限点，确保集成系统的详情页权限控制正常
     if (_.includes(perms, '/embedded-products')) {
       perms = _.concat(perms, ['/embedded-product']);
