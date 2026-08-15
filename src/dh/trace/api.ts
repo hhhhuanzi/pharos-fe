@@ -1,4 +1,6 @@
 import { TraceByIdParams, TracePluginType, TraceSearchParams, UnifiedServiceOption, TracePageResult } from './types';
+import { PharosTraceListResult, PharosTraceSummary, traceResponseToSummary } from './contract';
+import type { TraceResponse } from '@/pages/traceCpt/type';
 import * as jaeger from './adapters/jaeger';
 import * as skywalking from './adapters/skywalking';
 import * as otel from './adapters/otel';
@@ -11,11 +13,7 @@ export const TRACING_PLUGIN_TYPES: Array<{ label: string; value: TracePluginType
   { label: 'SkyWalking', value: 'skywalking' },
 ];
 
-export async function getTraceServices(
-  pluginType: TracePluginType,
-  dataSourceId: number,
-  range?: { start: number; end: number },
-): Promise<UnifiedServiceOption[]> {
+export async function getTraceServices(pluginType: TracePluginType, dataSourceId: number, range?: { start: number; end: number }): Promise<UnifiedServiceOption[]> {
   if (pluginType === 'skywalking') {
     const end = range?.end ?? Date.now();
     const start = range?.start ?? end - 12 * 60 * 60 * 1000;
@@ -28,12 +26,7 @@ export async function getTraceServices(
   return jaeger.getJaegerServices(dataSourceId);
 }
 
-export async function getTraceOperations(
-  pluginType: TracePluginType,
-  dataSourceId: number,
-  service: string,
-  range?: { start: number; end: number },
-): Promise<string[]> {
+export async function getTraceOperations(pluginType: TracePluginType, dataSourceId: number, service: string, range?: { start: number; end: number }): Promise<string[]> {
   if (pluginType === 'skywalking') {
     // `service` is already the SW service id (Select value).
     return skywalking.getSkyWalkingOperations(dataSourceId, service);
@@ -79,6 +72,52 @@ export async function searchTracesPaged(params: TraceSearchParams): Promise<Trac
     return skywalking.searchSkyWalkingTracesPaged(params);
   }
   return { traces: [], hasMore: false };
+}
+
+/** Rows requested when the backend has a dedicated lightweight list query. */
+export const TRACE_LIST_SUMMARY_LIMIT = 100;
+/** Deliberately lower: on this path every row drags all of its spans over the wire (P-46). */
+export const TRACE_LIST_FULL_LIMIT = 20;
+
+/**
+ * Per-datasource memo of whether `/api/v3/trace-summaries` exists, so a Jaeger build without it is
+ * probed once instead of on every search.
+ */
+const traceSummariesSupport = new Map<number, boolean>();
+
+function toSummaries(responses: TraceResponse[]): PharosTraceSummary[] {
+  return responses.reduce<PharosTraceSummary[]>((acc, res) => {
+    const summary = traceResponseToSummary(res);
+    if (summary) acc.push(summary);
+    return acc;
+  }, []);
+}
+
+/**
+ * Search result list in Pharos shape. Prefers the backend's lightweight summary query and falls
+ * back to deriving the rows from a full-span search when there isn't one (SkyWalking, and Jaeger
+ * builds predating `FindTraceSummaries`).
+ */
+export async function searchTraceSummaries(params: TraceSearchParams): Promise<PharosTraceListResult> {
+  if (params.plugin_type === 'jaeger' && traceSummariesSupport.get(params.data_source_id) !== false) {
+    const limit = params.num_traces || TRACE_LIST_SUMMARY_LIMIT;
+    const summaries = await jaeger.findJaegerTraceSummaries({ ...params, num_traces: limit });
+    if (summaries) {
+      traceSummariesSupport.set(params.data_source_id, true);
+      return { summaries, source: 'summaries', truncated: summaries.length >= limit };
+    }
+    traceSummariesSupport.set(params.data_source_id, false);
+  }
+
+  const limit = params.num_traces || TRACE_LIST_FULL_LIMIT;
+  if (params.plugin_type === 'skywalking') {
+    // SkyWalking pages its list query; the table shows one page and relies on the truncation hint
+    // plus the form's "result count" field rather than an incremental "load more".
+    const page = await skywalking.searchSkyWalkingTracesPaged({ ...params, page_num: 1, page_size: limit });
+    return { summaries: toSummaries(page.traces), source: 'full-traces', truncated: page.hasMore };
+  }
+  const traces = await searchTraces({ ...params, num_traces: limit });
+  return { summaries: toSummaries(traces), source: 'full-traces', truncated: traces.length >= limit };
 }
 
 export async function getTraceByID(params: TraceByIdParams) {

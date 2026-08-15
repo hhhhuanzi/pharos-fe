@@ -1,4 +1,11 @@
-import { getJaegerServices, getJaegerOperations, searchJaegerTraces, getJaegerTraceById, getJaegerDependencies } from './jaeger';
+import {
+  getJaegerServices,
+  getJaegerOperations,
+  searchJaegerTraces,
+  findJaegerTraceSummaries,
+  getJaegerTraceById,
+  getJaegerDependencies,
+} from './jaeger';
 import { transformTraceData } from '@/pages/traceCpt/utils';
 import { TraceSearchParams, TraceByIdParams } from '../types';
 
@@ -201,7 +208,12 @@ describe('jaeger adapter (api_v3)', () => {
       // 1700000000000000000ns -> 1700000000000000us
       expect(root.startTime).toBe(1700000000000000);
       expect(root.duration).toBe(500000);
-      expect(root.tags).toEqual(expect.arrayContaining([{ key: 'span.kind', value: 'server' }, { key: 'http.status_code', value: 200 }]));
+      expect(root.tags).toEqual(
+        expect.arrayContaining([
+          { key: 'span.kind', value: 'server' },
+          { key: 'http.status_code', value: 200 },
+        ]),
+      );
       expect(root.references).toEqual([]);
 
       expect(child.references).toEqual([{ refType: 'CHILD_OF', spanID: '1000000000000001', traceID: 'aaaa000000000000000000000000aa' }]);
@@ -213,7 +225,15 @@ describe('jaeger adapter (api_v3)', () => {
           { key: 'otel.scope.name', value: 'my-instrumentation' },
         ]),
       );
-      expect(child.logs).toEqual([{ timestamp: 1700000000150000, fields: [{ key: 'event', value: 'exception' }, { key: 'exception.message', value: 'boom' }] }]);
+      expect(child.logs).toEqual([
+        {
+          timestamp: 1700000000150000,
+          fields: [
+            { key: 'event', value: 'exception' },
+            { key: 'exception.message', value: 'boom' },
+          ],
+        },
+      ]);
 
       // Round-trip through the real traceCpt transform used by the waterfall view — must not throw
       // and must preserve the parent/child depth relationship.
@@ -226,6 +246,78 @@ describe('jaeger adapter (api_v3)', () => {
     it('returns [] when the trace is not found (404)', async () => {
       mockRequest.mockRejectedValue({ status: 404, message: 'trace not found' });
       expect(await getJaegerTraceById(params)).toEqual([]);
+    });
+  });
+
+  describe('findJaegerTraceSummaries', () => {
+    const baseParams: TraceSearchParams = {
+      data_source_id: 1,
+      plugin_type: 'jaeger',
+      service: 'svc-a',
+      start_time_min: 1731000000000,
+      start_time_max: 1731000060000,
+      num_traces: 50,
+    };
+
+    it('hits /api/v3/trace-summaries with search_depth and maps into Pharos summaries', async () => {
+      mockRequest.mockResolvedValue({
+        result: {
+          summaries: [
+            {
+              traceId: 'AAAA000000000000000000000000AA',
+              rootServiceName: 'gateway',
+              rootOperationName: 'GET /orders',
+              minStartTimeUnixNano: '1700000000000000000',
+              maxEndTimeUnixNano: '1700000000500000000',
+              spanCount: 3,
+              errorSpanCount: 1,
+              orphanSpanCount: 0,
+              services: [
+                { name: 'order', spanCount: 2, errorSpanCount: 1 },
+                { name: 'gateway', spanCount: 1, errorSpanCount: 0 },
+              ],
+            },
+          ],
+        },
+      });
+      const result = await findJaegerTraceSummaries(baseParams);
+      expect(mockRequest).toHaveBeenCalledWith(
+        '/api/n9e/proxy/1/api/v3/trace-summaries',
+        expect.objectContaining({
+          method: 'Get',
+          silence: true,
+          params: expect.objectContaining({
+            'query.service_name': 'svc-a',
+            'query.search_depth': '50',
+          }),
+        }),
+      );
+      expect(result).toEqual([
+        {
+          traceId: 'aaaa000000000000000000000000aa',
+          rootService: 'gateway',
+          rootOperation: 'GET /orders',
+          startTimeUs: 1700000000000000,
+          durationUs: 500000,
+          spanCount: 3,
+          errorSpanCount: 1,
+          orphanSpanCount: 0,
+          services: [
+            { name: 'order', spanCount: 2, errorSpanCount: 1 },
+            { name: 'gateway', spanCount: 1, errorSpanCount: 0 },
+          ],
+        },
+      ]);
+    });
+
+    it('returns [] when the endpoint exists but no traces match', async () => {
+      mockRequest.mockRejectedValue({ status: 404, message: 'No traces found' });
+      expect(await findJaegerTraceSummaries(baseParams)).toEqual([]);
+    });
+
+    it('returns null when the endpoint is missing so callers can fall back', async () => {
+      mockRequest.mockRejectedValue({ status: 404, message: 'Not Found' });
+      expect(await findJaegerTraceSummaries(baseParams)).toBeNull();
     });
   });
 

@@ -36,6 +36,7 @@ import request from '@/utils/request';
 import { RequestMethod } from '@/store/common';
 import { N9E_PATHNAME } from '@/utils/constant';
 import { TraceByIdParams, TraceSearchParams, UnifiedServiceOption } from '../types';
+import { PharosTraceSummary } from '../contract';
 import { TraceResponse, TraceSpanData, TraceKeyValuePair } from '@/pages/traceCpt/type';
 
 // ---------------------------------------------------------------------------
@@ -322,8 +323,17 @@ export async function getJaegerOperations(dataSourceId: number, service: string)
   return (res?.operations || []).map((op) => op.name);
 }
 
-/** Builds `FindTraces` query params using api_v3's original (and still universally supported) snake_case naming — see file header. */
-function buildFindTracesParams(params: TraceSearchParams): Record<string, string> {
+/**
+ * Builds `TraceQueryParameters` query params using api_v3's original (and still universally
+ * supported) snake_case naming — see file header.
+ *
+ * `limitParam` exists because the result-limit field was renamed `num_traces` -> `search_depth` in
+ * the proto. grpc-gateway rejects unknown query params outright, so we can't just send both:
+ * `/api/v3/traces` keeps the historical `num_traces` (widest compatibility), while
+ * `/api/v3/trace-summaries` uses `search_depth` — that endpoint only exists in builds new enough
+ * to have the renamed field anyway.
+ */
+function buildFindTracesParams(params: TraceSearchParams, limitParam: 'num_traces' | 'search_depth' = 'num_traces'): Record<string, string> {
   const q: Record<string, string> = {
     'query.service_name': params.service,
     'query.start_time_min': msToRfc3339(params.start_time_min),
@@ -332,7 +342,7 @@ function buildFindTracesParams(params: TraceSearchParams): Record<string, string
   if (params.operation) q['query.operation_name'] = params.operation;
   if (params.duration_min) q['query.duration_min'] = params.duration_min;
   if (params.duration_max) q['query.duration_max'] = params.duration_max;
-  if (params.num_traces) q['query.num_traces'] = String(params.num_traces);
+  if (params.num_traces) q[`query.${limitParam}`] = String(params.num_traces);
   if (params.attributes && !_.isEmpty(params.attributes)) {
     // The HTTP gateway expects a URL-encoded JSON string map here, not a nested query object.
     q['query.attributes'] = JSON.stringify(params.attributes);
@@ -344,6 +354,105 @@ export async function searchJaegerTraces(params: TraceSearchParams): Promise<Tra
   const envelope = await requestApiV3Traces(`/api/${N9E_PATHNAME}/proxy/${params.data_source_id}/api/v3/traces`, buildFindTracesParams(params));
   if (!envelope?.result) return [];
   return otlpTracesDataToJaegerResponses(envelope.result);
+}
+
+// ---------------------------------------------------------------------------
+// FindTraceSummaries (`GET /api/v3/trace-summaries`)
+//
+// The lightweight counterpart of FindTraces, added to the api_v3 proto specifically for the search
+// results page: it returns root service/operation, span & error counts and start/end nanos instead
+// of every span of every matched trace. Using it removes the "one screen of results downloads all
+// spans of all traces" problem (P-46) — but it is a recent addition, so `findJaegerTraceSummaries`
+// reports back whether the target Jaeger actually serves it and lets the caller fall back.
+// ---------------------------------------------------------------------------
+
+interface ApiV3ServiceSummary {
+  name?: string;
+  spanCount?: number;
+  errorSpanCount?: number;
+}
+
+interface ApiV3TraceSummary {
+  traceId?: string;
+  rootServiceName?: string;
+  rootOperationName?: string;
+  /** fixed64 — decimal string in proto3 JSON. */
+  minStartTimeUnixNano?: string | number;
+  maxEndTimeUnixNano?: string | number;
+  spanCount?: number;
+  errorSpanCount?: number;
+  orphanSpanCount?: number;
+  services?: ApiV3ServiceSummary[];
+}
+
+/** Server-streaming RPCs are wrapped in `{"result": ...}` by grpc-gateway; unwrapped shape accepted too. */
+interface ApiV3TraceSummariesEnvelope {
+  result?: { summaries?: ApiV3TraceSummary[] };
+  summaries?: ApiV3TraceSummary[];
+}
+
+function apiV3SummaryToPharos(summary: ApiV3TraceSummary): PharosTraceSummary | null {
+  const traceId = (summary.traceId || '').toLowerCase();
+  if (!traceId) return null;
+  const startTimeUs = nanoToMicro(summary.minStartTimeUnixNano);
+  const endTimeUs = nanoToMicro(summary.maxEndTimeUnixNano);
+  const services = (summary.services || [])
+    .filter((service) => Boolean(service.name))
+    .map((service) => ({
+      name: service.name!,
+      spanCount: service.spanCount || 0,
+      errorSpanCount: service.errorSpanCount || 0,
+    }))
+    .sort((a, b) => b.spanCount - a.spanCount);
+  return {
+    traceId,
+    rootService: summary.rootServiceName || '',
+    rootOperation: summary.rootOperationName || '',
+    startTimeUs,
+    durationUs: Math.max(endTimeUs - startTimeUs, 0),
+    spanCount: summary.spanCount || 0,
+    errorSpanCount: summary.errorSpanCount || 0,
+    orphanSpanCount: summary.orphanSpanCount || 0,
+    services,
+  };
+}
+
+/**
+ * An empty result is reported as `404 {"error":{"message":"No traces found"}}`, which is
+ * indistinguishable by status code from "this build has no such route" — so the body decides.
+ */
+function isNoTracesFound(error: any): boolean {
+  const message = typeof error?.message === 'string' ? error.message : '';
+  return /no traces found/i.test(message);
+}
+
+/**
+ * Returns `null` when the target Jaeger does not serve `/api/v3/trace-summaries`, so the caller can
+ * fall back to a full-span search. An empty array means "endpoint works, nothing matched".
+ */
+export async function findJaegerTraceSummaries(params: TraceSearchParams): Promise<PharosTraceSummary[] | null> {
+  const url = `/api/${N9E_PATHNAME}/proxy/${params.data_source_id}/api/v3/trace-summaries`;
+  try {
+    const res: ApiV3TraceSummariesEnvelope = await request(url, {
+      method: RequestMethod.Get,
+      params: buildFindTracesParams(params, 'search_depth'),
+      silence: true,
+    });
+    const list = res?.result?.summaries || res?.summaries;
+    // A 200 without a recognizable body most likely means the request never reached Jaeger's api_v3.
+    if (!list) return null;
+    return list.reduce<PharosTraceSummary[]>((acc, item) => {
+      const summary = apiV3SummaryToPharos(item);
+      if (summary) acc.push(summary);
+      return acc;
+    }, []);
+  } catch (e: any) {
+    if (isNoTracesFound(e)) return [];
+    // 404 = no such route, 501 = unimplemented, 400 = the gateway rejected `search_depth` because
+    // this build still calls it `num_traces`. All three mean "unsupported here", not "query failed".
+    if (e?.status === 404 || e?.status === 501 || e?.status === 400) return null;
+    throw e;
+  }
 }
 
 export async function getJaegerTraceById(params: TraceByIdParams): Promise<TraceResponse[]> {

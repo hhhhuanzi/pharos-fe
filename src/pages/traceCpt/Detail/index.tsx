@@ -11,10 +11,11 @@ import { scrollBy, scrollTo } from './Timeline/scroll-page';
 interface IProps {
   trace?: Trace;
   onBack?: () => void;
+  extra?: React.ReactNode;
 }
 
 export default function TraceDetail(props: IProps) {
-  const { trace, onBack } = props;
+  const { trace, onBack, extra } = props;
   const [collapseHeader, setCollapseHeader] = useState(false);
   const [viewRange, setViewRange] = useState<IViewRange>({
     time: {
@@ -51,6 +52,7 @@ export default function TraceDetail(props: IProps) {
             {collapseHeader ? <RightOutlined /> : <DownOutlined />}
           </Space>
         </div>
+        {extra}
       </div>
 
       <div className='tracing-detail'>

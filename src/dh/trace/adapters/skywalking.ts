@@ -316,9 +316,7 @@ export async function searchSkyWalkingTraces(params: TraceSearchParams): Promise
     briefs = briefs.filter((b) => (b.endpointNames || []).includes(params.operation as string));
   }
 
-  const uniqueTraceIds = _.uniq(
-    briefs.flatMap((b) => b.traceIds || []).filter(Boolean),
-  ).slice(0, pageSize);
+  const uniqueTraceIds = _.uniq(briefs.flatMap((b) => b.traceIds || []).filter(Boolean)).slice(0, pageSize);
 
   const results = await Promise.all(
     uniqueTraceIds.map(async (traceId) => {

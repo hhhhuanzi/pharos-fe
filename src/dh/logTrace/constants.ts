@@ -14,6 +14,16 @@ export const CONFIG_STORAGE_KEY = 'n9e-dh-log-trace-config';
 
 export const TRACE_EXPLORER_PATH = '/trace/explorer';
 
+export const LOG_EXPLORER_PATH = '/log/explorer';
+
+export const LOG_DATASOURCE_CATE = 'elasticsearch';
+
+/** 日志查询用的 trace id 字段名，与采集侧独立字段约定一致 */
+export const LOG_TRACE_ID_FIELD = 'trace_id';
+
+/** 链路起止时间两侧各扩这么多，避免日志时钟偏差或跨秒写入漏掉 */
+export const LOG_TIME_BUFFER_MS = 3 * 60 * 1000;
+
 /**
  * 默认识别为链路 ID 的字段名候选。
  * 比较时会忽略大小写与 `_` `-` `.`，所以 trace_id / traceId / traceID / trace.id 只需列一个。
