@@ -53,6 +53,32 @@ export interface PharosTraceListResult {
   truncated: boolean;
 }
 
+/**
+ * One directed call edge on the service graph (R-30).
+ *
+ * Sourced from OTel `service_graph` connector metrics (`traces_service_graph_*`), not from
+ * Jaeger `/api/dependencies` (call-count only, and empty unless a spark job is running — skipped
+ * by decision 9). Stage 2 can swap the PromQL adapter without touching the UI.
+ */
+export interface PharosServiceEdge {
+  client: string;
+  server: string;
+  /** OTel `connection_type` (empty / `messaging_system` / `database` / `virtual_node`). */
+  connectionType: string;
+  /** `increase(traces_service_graph_request_total[range])` — requests in the selected window. */
+  requestCount: number;
+  failedCount: number;
+  /** 0–1; 0 when `requestCount` is 0. */
+  errorRate: number;
+  /** Server-side P95 in seconds; omitted when the histogram series is missing. */
+  p95Seconds?: number;
+}
+
+export interface PharosServiceGraph {
+  edges: PharosServiceEdge[];
+  source: 'service-graph';
+}
+
 /** Jaeger/OpenTracing convention: a truthy `error` tag marks the span as failed. */
 function isErrorSpanData(span: TraceSpanData): boolean {
   return (span.tags || []).some((tag) => tag.key === 'error' && tag.value !== false && tag.value !== 'false' && tag.value !== '');

@@ -29,6 +29,7 @@ const en_US = {
     recording_rules: 'Recording rules',
     logs_explorer: 'Logs',
     traces: 'Traces',
+    trace_dependencies: 'Topology',
     monitors: 'Monitors',
     alerts_notifications: 'Alerts & Notifications',
     rules: 'Alert rules',

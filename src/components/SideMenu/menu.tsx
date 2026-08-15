@@ -49,6 +49,10 @@ export const getMenuList = (embeddedProductMenu: MenuItem[] = [], hideDeprecated
           label: 'menu.traces',
         },
         {
+          key: '/trace/dependencies',
+          label: 'menu.trace_dependencies',
+        },
+        {
           key: 'dashboards',
           label: 'menu.dashboards',
           type: 'tabs',

@@ -25,5 +25,24 @@ const zh_CN = {
     error_spans: '错误 Span：{{num}}',
     partial: '该链路不完整，有 {{num}} 个 Span 的父节点缺失',
   },
+  graph: {
+    hint: '边的量 / 错 / 慢来自 Prometheus 的 traces_service_graph_*（OTel service_graph，须在 tail_sampling 之前）。颜色：绿 <1% 错，黄 <5%，红 ≥5%。',
+    prom_placeholder: '选择 Prometheus',
+    filter_service: '按服务名筛选',
+    refresh: '刷新',
+    no_prometheus: '没有可用的 Prometheus 数据源',
+    load_failed: '查询失败，请检查数据源与 PromQL 权限',
+    empty: '当前时间范围没有 service_graph 指标。确认 Collector 已开 service_graph，且该 Prometheus 在刮取 traces_service_graph_*。',
+    table_title: '调用边 {{num}} 条',
+    columns: {
+      client: '调用方',
+      server: '被调方',
+      connection: '连接类型',
+      requests: '请求数',
+      qps: 'QPS',
+      error_rate: '错误率',
+      p95: 'P95',
+    },
+  },
 };
 export default zh_CN;

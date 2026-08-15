@@ -25,5 +25,24 @@ const ru_RU = {
     error_spans: 'Спаны с ошибкой: {{num}}',
     partial: 'Неполная трасса: у {{num}} спанов отсутствует родитель',
   },
+  graph: {
+    hint: 'RED рёбер берётся из Prometheus traces_service_graph_* (OTel service_graph, до tail_sampling). Цвет: зелёный <1%, жёлтый <5%, красный ≥5%.',
+    prom_placeholder: 'Выберите Prometheus',
+    filter_service: 'Фильтр по сервису',
+    refresh: 'Обновить',
+    no_prometheus: 'Нет доступного источника Prometheus',
+    load_failed: 'Запрос не выполнен. Проверьте источник и доступ к PromQL.',
+    empty: 'В этом интервале нет метрик service_graph. Включите service_graph в Collector и убедитесь, что Prometheus снимает traces_service_graph_*.',
+    table_title: 'Рёбер: {{num}}',
+    columns: {
+      client: 'Клиент',
+      server: 'Сервер',
+      connection: 'Тип соединения',
+      requests: 'Запросы',
+      qps: 'QPS',
+      error_rate: 'Ошибки',
+      p95: 'P95',
+    },
+  },
 };
 export default ru_RU;

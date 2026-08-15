@@ -29,6 +29,7 @@ const zh_CN = {
     recording_rules: '记录规则',
     logs_explorer: '日志',
     traces: '链路',
+    trace_dependencies: '拓扑',
     monitors: '告警',
     alerts_notifications: '告警通知',
     rules: '规则管理',

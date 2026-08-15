@@ -29,6 +29,7 @@ const ru_RU = {
     recording_rules: 'Правила записи',
     logs_explorer: 'Логи',
     traces: 'Трейсы',
+    trace_dependencies: 'Топология',
     monitors: 'Оповещения',
     alerts_notifications: 'Оповещения и уведомления',
     rules: 'Управление правилами',

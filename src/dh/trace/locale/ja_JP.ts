@@ -25,5 +25,24 @@ const ja_JP = {
     error_spans: 'エラー Span：{{num}}',
     partial: '不完全なトレースです。親が欠落している Span が {{num}} 件あります',
   },
+  graph: {
+    hint: 'エッジの RED は Prometheus の traces_service_graph_*（OTel service_graph、tail_sampling より前）です。色：緑 <1%、黄 <5%、赤 ≥5%。',
+    prom_placeholder: 'Prometheus を選択',
+    filter_service: 'サービス名で絞り込み',
+    refresh: '更新',
+    no_prometheus: '利用可能な Prometheus データソースがありません',
+    load_failed: 'クエリに失敗しました。データソースと PromQL 権限を確認してください',
+    empty: 'この期間に service_graph 指標がありません。Collector で service_graph を有効にし、この Prometheus が traces_service_graph_* をスクレイプしているか確認してください。',
+    table_title: 'エッジ {{num}} 件',
+    columns: {
+      client: 'クライアント',
+      server: 'サーバー',
+      connection: '接続種別',
+      requests: 'リクエスト数',
+      qps: 'QPS',
+      error_rate: 'エラー率',
+      p95: 'P95',
+    },
+  },
 };
 export default ja_JP;

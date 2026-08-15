@@ -25,5 +25,24 @@ const en_US = {
     error_spans: 'Error spans: {{num}}',
     partial: 'Partial trace: {{num}} spans have a missing parent',
   },
+  graph: {
+    hint: 'Edge RED comes from Prometheus traces_service_graph_* (OTel service_graph, before tail_sampling). Color: green <1% errors, yellow <5%, red ≥5%.',
+    prom_placeholder: 'Select Prometheus',
+    filter_service: 'Filter by service',
+    refresh: 'Refresh',
+    no_prometheus: 'No Prometheus datasource available',
+    load_failed: 'Query failed. Check the datasource and PromQL access.',
+    empty: 'No service_graph metrics in this range. Confirm the Collector runs service_graph and this Prometheus scrapes traces_service_graph_*.',
+    table_title: '{{num}} edges',
+    columns: {
+      client: 'Client',
+      server: 'Server',
+      connection: 'Connection',
+      requests: 'Requests',
+      qps: 'QPS',
+      error_rate: 'Error rate',
+      p95: 'P95',
+    },
+  },
 };
 export default en_US;

@@ -25,5 +25,24 @@ const zh_HK = {
     error_spans: '錯誤 Span：{{num}}',
     partial: '該鏈路不完整，有 {{num}} 個 Span 的父節點缺失',
   },
+  graph: {
+    hint: '邊的量 / 錯 / 慢來自 Prometheus 的 traces_service_graph_*（OTel service_graph，須在 tail_sampling 之前）。顏色：綠 <1% 錯，黃 <5%，紅 ≥5%。',
+    prom_placeholder: '選擇 Prometheus',
+    filter_service: '按服務名篩選',
+    refresh: '重新整理',
+    no_prometheus: '沒有可用的 Prometheus 資料來源',
+    load_failed: '查詢失敗，請檢查資料來源與 PromQL 權限',
+    empty: '目前時間範圍沒有 service_graph 指標。確認 Collector 已開 service_graph，且該 Prometheus 在刮取 traces_service_graph_*。',
+    table_title: '呼叫邊 {{num}} 條',
+    columns: {
+      client: '呼叫方',
+      server: '被調方',
+      connection: '連線類型',
+      requests: '請求數',
+      qps: 'QPS',
+      error_rate: '錯誤率',
+      p95: 'P95',
+    },
+  },
 };
 export default zh_HK;
