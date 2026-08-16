@@ -45,5 +45,17 @@ const ja_JP = {
       p95: 'P95',
     },
   },
+  span_flame: {
+    title: 'Span フレームグラフ',
+    waterfall: 'ウォーターフォール',
+    hint: 'クリックで Span を選択、ダブルクリックでそのサブツリーだけを表示。トレースの Span ツリーであり、性能フレームグラフではありません。',
+    whole_trace: 'トレース全体',
+    span_detail: 'Span 詳細',
+    service: 'サービス',
+    operation: 'オペレーション',
+    focus_subtree: 'このサブツリーだけ',
+    reset: '全体に戻る',
+    empty: '表示できる Span がありません',
+  },
 };
 export default ja_JP;

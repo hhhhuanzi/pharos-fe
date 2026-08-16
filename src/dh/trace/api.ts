@@ -120,6 +120,7 @@ export async function searchTraceSummaries(params: TraceSearchParams): Promise<P
   return { summaries: toSummaries(traces), source: 'full-traces', truncated: traces.length >= limit };
 }
 
+/** Pharos API this round: get-by-id only (`/api/v3/traces/{id}` / SW `queryTrace`). No extra endpoints. */
 export async function getTraceByID(params: TraceByIdParams) {
   if (params.plugin_type === 'skywalking') {
     return skywalking.getSkyWalkingTraceById(params);

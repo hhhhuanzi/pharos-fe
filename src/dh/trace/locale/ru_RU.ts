@@ -45,5 +45,17 @@ const ru_RU = {
       p95: 'P95',
     },
   },
+  span_flame: {
+    title: 'Span flamegraph',
+    waterfall: 'Водопад',
+    hint: 'Клик — выбрать спан, двойной клик — только его поддерево. Это дерево спанов трассы, не профилировочный flamegraph.',
+    whole_trace: 'Вся трасса',
+    span_detail: 'Спан',
+    service: 'Сервис',
+    operation: 'Операция',
+    focus_subtree: 'Только это поддерево',
+    reset: 'Ко всей трассе',
+    empty: 'В этой трассе нет спанов',
+  },
 };
 export default ru_RU;

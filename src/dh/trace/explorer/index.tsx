@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { message } from 'antd';
+import { message, Radio, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
 import Search from '@/pages/traceCpt/Search';
 import Detail from '@/pages/traceCpt/Detail';
@@ -8,8 +8,11 @@ import { transformTraceData } from '@/pages/traceCpt/utils';
 import type { SearchTraceIDType, SearchTraceType, Trace } from '@/pages/traceCpt/type';
 import { ViewLogsLink } from '@/dh/logTrace';
 import type { TracePluginType } from '../types';
+import { SpanFlamegraph } from '../spanFlamegraph';
 import TraceList from './TraceList';
 import '@/pages/traceCpt/index.less';
+
+type DetailView = 'waterfall' | 'span-flame';
 
 interface IProps {
   init?: string;
@@ -21,7 +24,8 @@ interface IProps {
 
 /**
  * Pharos trace explorer (R-28): the search result list is a table rather than a card feed, so a
- * single screen carries far more traces. The detail view still reuses the upstream waterfall.
+ * single screen carries far more traces. The detail view reuses the upstream waterfall and hangs
+ * the dh span flame graph beside it.
  */
 export default function TraceExplorer(props: IProps) {
   const { init, initPluginId, initPluginType, initService, initTags } = props;
@@ -31,6 +35,7 @@ export default function TraceExplorer(props: IProps) {
   const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [activePluginType, setActivePluginType] = useState<TracePluginType | undefined>(initPluginType);
+  const [detailView, setDetailView] = useState<DetailView>('waterfall');
 
   const openTrace = async (params: SearchTraceIDType) => {
     if (!params.traceID) return;
@@ -41,6 +46,7 @@ export default function TraceExplorer(props: IProps) {
       const first = Array.isArray(res) ? res[0] : res;
       const trace = first ? transformTraceData(first) : null;
       if (trace) {
+        setDetailView('waterfall');
         setCurTrace(trace);
       } else {
         message.warning(t('list.trace_not_found'));
@@ -80,16 +86,30 @@ export default function TraceExplorer(props: IProps) {
         {curTrace ? (
           <Detail
             trace={curTrace}
-            onBack={() => setCurTrace(undefined)}
+            onBack={() => {
+              setDetailView('waterfall');
+              setCurTrace(undefined);
+            }}
             extra={
-              <ViewLogsLink
-                entry='detail'
-                pluginType={activePluginType}
-                traceId={curTrace.traceID}
-                startUs={curTrace.startTime}
-                durationUs={curTrace.duration}
-              />
+              <Space className='ml-2' size={8}>
+                <Radio.Group
+                  value={detailView}
+                  buttonStyle='solid'
+                  onChange={(e) => setDetailView(e.target.value)}
+                >
+                  <Radio.Button value='waterfall'>{t('span_flame.waterfall')}</Radio.Button>
+                  <Radio.Button value='span-flame'>{t('span_flame.title')}</Radio.Button>
+                </Radio.Group>
+                <ViewLogsLink
+                  entry='detail'
+                  pluginType={activePluginType}
+                  traceId={curTrace.traceID}
+                  startUs={curTrace.startTime}
+                  durationUs={curTrace.duration}
+                />
+              </Space>
             }
+            body={detailView === 'span-flame' ? <SpanFlamegraph key={curTrace.traceID} trace={curTrace} /> : undefined}
           />
         ) : (
           <TraceList

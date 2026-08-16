@@ -1,5 +1,5 @@
-import type { TraceResponse, TraceSpanData } from '@/pages/traceCpt/type';
-import { traceResponseToSummary } from './contract';
+import type { Trace, TraceResponse, TraceSpan, TraceSpanData } from '@/pages/traceCpt/type';
+import { traceResponseToSummary, traceToPharosDetail } from './contract';
 
 function span(overrides: Partial<TraceSpanData> & Pick<TraceSpanData, 'spanID' | 'startTime' | 'duration'>): TraceSpanData {
   return {
@@ -124,5 +124,95 @@ describe('traceResponseToSummary', () => {
       ],
     });
     expect(db).toMatchObject({ rootInterface: 'SELECT 1', rootType: 'mysql', rootOperation: 'Mysql/query' });
+  });
+});
+
+function detailSpan(
+  overrides: Partial<TraceSpan> & Pick<TraceSpan, 'spanID' | 'startTime' | 'duration' | 'depth'> & { processID: 'p0' | 'p1' },
+): TraceSpan {
+  const processID = overrides.processID;
+  return {
+    traceID: 'abc',
+    operationName: 'op',
+    logs: [],
+    flags: 0,
+    hasChildren: false,
+    childSpanCount: 0,
+    process: processes[processID],
+    relativeStartTime: 0,
+    tags: [],
+    references: [],
+    warnings: [],
+    subsidiarilyReferencedBy: [],
+    ...overrides,
+  };
+}
+
+describe('traceToPharosDetail', () => {
+  it('flattens parentSpanId and service from the waterfall Trace', () => {
+    const trace: Trace = {
+      traceID: 'abc',
+      processes,
+      startTime: 1_000,
+      endTime: 1_900,
+      duration: 900,
+      traceName: 'gateway: GET /orders',
+      services: [
+        { name: 'gateway', numberOfSpans: 1 },
+        { name: 'order', numberOfSpans: 1 },
+      ],
+      spans: [
+        detailSpan({
+          spanID: 'root',
+          startTime: 1_000,
+          duration: 900,
+          depth: 0,
+          processID: 'p0',
+          operationName: 'GET /orders',
+          childSpanCount: 1,
+          hasChildren: true,
+        }),
+        detailSpan({
+          spanID: 'child',
+          startTime: 1_100,
+          duration: 200,
+          depth: 1,
+          processID: 'p1',
+          operationName: 'list',
+          tags: [{ key: 'error', value: true }],
+          references: [{ refType: 'CHILD_OF', spanID: 'root', traceID: 'abc' }],
+        }),
+      ],
+    };
+
+    expect(traceToPharosDetail(trace)).toEqual({
+      traceId: 'abc',
+      startTimeUs: 1_000,
+      durationUs: 900,
+      spans: [
+        {
+          spanId: 'root',
+          parentSpanId: null,
+          service: 'gateway',
+          operation: 'GET /orders',
+          startTimeUs: 1_000,
+          durationUs: 900,
+          error: false,
+          depth: 0,
+          childCount: 1,
+        },
+        {
+          spanId: 'child',
+          parentSpanId: 'root',
+          service: 'order',
+          operation: 'list',
+          startTimeUs: 1_100,
+          durationUs: 200,
+          error: true,
+          depth: 1,
+          childCount: 0,
+        },
+      ],
+    });
   });
 });

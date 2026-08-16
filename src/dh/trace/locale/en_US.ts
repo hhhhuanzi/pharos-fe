@@ -45,5 +45,17 @@ const en_US = {
       p95: 'P95',
     },
   },
+  span_flame: {
+    title: 'Span flamegraph',
+    waterfall: 'Waterfall',
+    hint: 'Click to select a span; double-click to zoom into its subtree. This is a trace span tree, not a profiling flamegraph.',
+    whole_trace: 'Whole trace',
+    span_detail: 'Span detail',
+    service: 'Service',
+    operation: 'Operation',
+    focus_subtree: 'This subtree only',
+    reset: 'Back to whole trace',
+    empty: 'This trace has no spans to show',
+  },
 };
 export default en_US;

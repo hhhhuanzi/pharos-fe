@@ -12,10 +12,12 @@ interface IProps {
   trace?: Trace;
   onBack?: () => void;
   extra?: React.ReactNode;
+  /** Thin slot: replace the default waterfall body. Used by dh span flamegraph. */
+  body?: React.ReactNode;
 }
 
 export default function TraceDetail(props: IProps) {
-  const { trace, onBack, extra } = props;
+  const { trace, onBack, extra, body } = props;
   const [collapseHeader, setCollapseHeader] = useState(false);
   const [viewRange, setViewRange] = useState<IViewRange>({
     time: {
@@ -59,16 +61,17 @@ export default function TraceDetail(props: IProps) {
         {trace && !collapseHeader && (
           <TraceDetailHeader trace={trace} viewRange={viewRange} updateViewRangeTime={updateViewRangeTime} updateNextViewRangeTime={updateNextViewRangeTime} />
         )}
-        {trace && (
-          <Timeline
-            trace={trace}
-            viewRange={viewRange}
-            updateViewRangeTime={updateViewRangeTime}
-            updateNextViewRangeTime={updateNextViewRangeTime}
-            registerAccessors={_scrollManager.setAccessors}
-            scrollToFirstVisibleSpan={_scrollManager.scrollToFirstVisibleSpan}
-          />
-        )}
+        {trace &&
+          (body ?? (
+            <Timeline
+              trace={trace}
+              viewRange={viewRange}
+              updateViewRangeTime={updateViewRangeTime}
+              updateNextViewRangeTime={updateNextViewRangeTime}
+              registerAccessors={_scrollManager.setAccessors}
+              scrollToFirstVisibleSpan={_scrollManager.scrollToFirstVisibleSpan}
+            />
+          ))}
       </div>
     </>
   );

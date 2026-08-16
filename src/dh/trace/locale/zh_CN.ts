@@ -45,5 +45,17 @@ const zh_CN = {
       p95: 'P95',
     },
   },
+  span_flame: {
+    title: 'Span 火焰图',
+    waterfall: '瀑布图',
+    hint: '点击选中 Span；双击只看该 Span 的子树。这是一条 trace 的 span 树，不是性能火焰图。',
+    whole_trace: '整条链路',
+    span_detail: 'Span 详情',
+    service: '服务',
+    operation: '操作',
+    focus_subtree: '只看此子树',
+    reset: '回到整条',
+    empty: '这条链路没有可展示的 Span',
+  },
 };
 export default zh_CN;

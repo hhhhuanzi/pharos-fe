@@ -3,15 +3,15 @@
  *
  * The trace UI consumes *these* shapes only. Adapters (jaeger / skywalking / otel) are responsible
  * for translating whatever their backend speaks into them, so that swapping the implementation
- * (FE-direct-to-Jaeger today, a Pharos BE endpoint in stage 2) does not touch the UI.
+ * (FE-direct-to-Jaeger today, a Pharos BE endpoint later) does not touch the UI.
  *
- * Stage 1 only ships the search-result list, so only the list-level shapes are defined here.
- * The span-level contract (flat `parentSpanId` / `service`, replacing Jaeger's `processes` +
- * `references`) lands together with the rewritten detail page; until then the detail view keeps
- * consuming `@/pages/traceCpt/type`'s `Trace`.
+ * Packaged this round (span flame graph, 1.2.0): span-level `PharosTraceDetail` derived from the
+ * same get-by-id payload the waterfall already loads (`/api/v3/traces/{id}` for Jaeger; SkyWalking
+ * GraphQL `queryTrace` mapped to the same shape). Do not pre-package unused endpoints
+ * (`/api/v3/dependencies`, stats, …). List-level `PharosTraceSummary` shipped earlier.
  */
 
-import type { TraceResponse, TraceSpanData } from '@/pages/traceCpt/type';
+import type { Trace, TraceResponse, TraceSpanData } from '@/pages/traceCpt/type';
 import { resolveRootInterface, resolveRootType } from './summaryFields';
 
 export interface PharosServiceSummary {
@@ -84,6 +84,30 @@ export interface PharosServiceGraph {
   source: 'service-graph';
 }
 
+/**
+ * One span on the Pharos detail / span-flame surface. Flat `parentSpanId` + `service` so a later
+ * storage swap does not leak Jaeger `processes` / `references` into the UI.
+ */
+export interface PharosSpan {
+  spanId: string;
+  parentSpanId: string | null;
+  service: string;
+  operation: string;
+  startTimeUs: number;
+  durationUs: number;
+  error: boolean;
+  depth: number;
+  childCount: number;
+}
+
+/** Full trace for the waterfall-adjacent span flame graph. Same get-by-id fetch as the waterfall. */
+export interface PharosTraceDetail {
+  traceId: string;
+  startTimeUs: number;
+  durationUs: number;
+  spans: PharosSpan[];
+}
+
 /** Jaeger/OpenTracing convention: a truthy `error` tag marks the span as failed. */
 function isErrorSpanData(span: TraceSpanData): boolean {
   return (span.tags || []).some((tag) => tag.key === 'error' && tag.value !== false && tag.value !== 'false' && tag.value !== '');
@@ -151,5 +175,39 @@ export function traceResponseToSummary(res: TraceResponse): PharosTraceSummary |
     errorSpanCount,
     orphanSpanCount,
     services: Array.from(byService.values()).sort((a, b) => b.spanCount - a.spanCount),
+  };
+}
+
+function parentSpanIdOf(span: { spanID: string; references?: TraceSpanData['references'] }, ids: Set<string>): string | null {
+  const refs = span.references || [];
+  const childOf = refs.find((ref) => ref.refType === 'CHILD_OF' && ids.has(ref.spanID));
+  if (childOf) return childOf.spanID;
+  const first = refs[0];
+  if (first && ids.has(first.spanID)) return first.spanID;
+  return null;
+}
+
+/**
+ * Packs the already-transformed waterfall `Trace` into the Pharos span contract.
+ * Jaeger and SkyWalking both reach this shape via `transformTraceData`, so the flame graph
+ * does not need a second fetch or a backend-specific tree walk.
+ */
+export function traceToPharosDetail(trace: Trace): PharosTraceDetail {
+  const ids = new Set(trace.spans.map((span) => span.spanID));
+  return {
+    traceId: trace.traceID,
+    startTimeUs: trace.startTime,
+    durationUs: trace.duration,
+    spans: trace.spans.map((span) => ({
+      spanId: span.spanID,
+      parentSpanId: parentSpanIdOf(span, ids),
+      service: span.process?.serviceName || 'unknown',
+      operation: span.operationName,
+      startTimeUs: span.startTime,
+      durationUs: span.duration,
+      error: isErrorSpanData(span),
+      depth: span.depth,
+      childCount: span.childSpanCount,
+    })),
   };
 }
