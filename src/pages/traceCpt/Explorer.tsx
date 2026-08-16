@@ -16,7 +16,13 @@ export default function index() {
   return (
     <PageLayout title={t('title')}>
       <div>
-        <TraceExplorer init={deepLink.traceId} initPluginId={deepLink.datasourceId} initPluginType={deepLink.pluginType} />
+        <TraceExplorer
+          init={deepLink.traceId}
+          initPluginId={deepLink.datasourceId}
+          initPluginType={deepLink.pluginType}
+          initService={deepLink.service}
+          initTags={deepLink.tags}
+        />
       </div>
     </PageLayout>
   );

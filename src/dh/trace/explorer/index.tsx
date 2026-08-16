@@ -15,6 +15,8 @@ interface IProps {
   init?: string;
   initPluginId?: number;
   initPluginType?: TracePluginType;
+  initService?: string;
+  initTags?: string;
 }
 
 /**
@@ -22,7 +24,7 @@ interface IProps {
  * single screen carries far more traces. The detail view still reuses the upstream waterfall.
  */
 export default function TraceExplorer(props: IProps) {
-  const { init, initPluginId, initPluginType } = props;
+  const { init, initPluginId, initPluginType, initService, initTags } = props;
   const { t } = useTranslation('trace');
   const [search, setSearch] = useState<SearchTraceType>();
   const [curTrace, setCurTrace] = useState<Trace>();
@@ -64,7 +66,15 @@ export default function TraceExplorer(props: IProps) {
   return (
     <div className='tracing'>
       <div className='fc-border rounded-lg bg-fc-100 p-4'>
-        <Search init={init} initPluginId={initPluginId} initPluginType={initPluginType} onSearch={handleSearch} resultLoading={listLoading || detailLoading} />
+        <Search
+          init={init}
+          initPluginId={initPluginId}
+          initPluginType={initPluginType}
+          initService={initService}
+          initTags={initTags}
+          onSearch={handleSearch}
+          resultLoading={listLoading || detailLoading}
+        />
       </div>
       <div className='mt-4'>
         {curTrace ? (

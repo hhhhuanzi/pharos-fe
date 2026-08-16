@@ -38,7 +38,13 @@ function formatErrorRate(rate: number): string {
  * Track B (R-30): service-graph edges with RED, read from Prometheus `traces_service_graph_*`.
  * Official `/trace/dependencies` is a thin mount; this file owns the page body.
  */
-export default function ServiceGraphPage() {
+interface Props {
+  /** When set, dim / hide edges that do not touch this service. */
+  focusService?: string;
+}
+
+export default function ServiceGraphPage(props: Props) {
+  const { focusService: focusFromParent } = props;
   const { t } = useTranslation('trace');
   const { groupedDatasourceList } = useContext(CommonStateContext);
   const prometheusList = groupedDatasourceList.prometheus || [];
@@ -56,7 +62,11 @@ export default function ServiceGraphPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [serviceFilter, setServiceFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string>();
-  const [focusService, setFocusService] = useState<string>();
+  const [focusService, setFocusService] = useState<string | undefined>(focusFromParent);
+
+  useEffect(() => {
+    setFocusService(focusFromParent);
+  }, [focusFromParent]);
   const requestSeq = useRef(0);
 
   useEffect(() => {

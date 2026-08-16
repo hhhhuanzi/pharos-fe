@@ -29,7 +29,7 @@ const ja_JP = {
     recording_rules: 'レコーディングルール',
     logs_explorer: 'ログ',
     traces: 'トレース',
-    trace_dependencies: 'トポロジー',
+    service: 'サービス',
     monitors: 'アラート',
     alerts_notifications: 'アラート通知',
     rules: 'ルール管理',

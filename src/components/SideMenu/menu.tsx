@@ -30,6 +30,10 @@ export const getMenuList = (embeddedProductMenu: MenuItem[] = [], hideDeprecated
       icon: <IconFont type='icon-nav_metrics_light' />,
       children: [
         {
+          key: '/service',
+          label: 'menu.service',
+        },
+        {
           key: 'metrics',
           label: 'menu.metrics',
           type: 'tabs',
@@ -47,10 +51,6 @@ export const getMenuList = (embeddedProductMenu: MenuItem[] = [], hideDeprecated
         {
           key: '/trace/explorer',
           label: 'menu.traces',
-        },
-        {
-          key: '/trace/dependencies',
-          label: 'menu.trace_dependencies',
         },
         {
           key: 'dashboards',

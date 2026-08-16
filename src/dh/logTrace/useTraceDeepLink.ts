@@ -11,10 +11,10 @@ export default function useTraceDeepLink(search: string): TraceDeepLink {
   const deepLink = useMemo(() => parseTraceDeepLink(search), [search]);
 
   useEffect(() => {
-    if (deepLink.traceId && deepLink.datasourceId !== undefined) {
+    if ((deepLink.traceId || deepLink.service) && deepLink.datasourceId !== undefined) {
       rememberTraceDatasourceId(deepLink.datasourceId);
     }
-  }, [deepLink.traceId, deepLink.datasourceId]);
+  }, [deepLink.traceId, deepLink.service, deepLink.datasourceId]);
 
   return deepLink;
 }

@@ -5,6 +5,9 @@ import { LOG_DATASOURCE_CATE, LOG_EXPLORER_PATH, LOG_TIME_BUFFER_MS, LOG_TRACE_I
 
 export interface TraceDeepLink {
   traceId?: string;
+  service?: string;
+  /** logfmt tags forwarded into the explorer attributes field (cluster / namespace). */
+  tags?: string;
   datasourceId?: number;
   pluginType?: TracePluginType;
 }
@@ -84,14 +87,18 @@ export function resolveLogDeepLink(params: { traceId: string; startUs: number; d
 /** 解析链路探索页的直达参数，非法值一律忽略并退回页面默认行为 */
 export function parseTraceDeepLink(search: string): TraceDeepLink {
   const params = new URLSearchParams(search);
-  const traceId = params.get('traceId')?.trim();
-  if (!traceId) return {};
+  const traceId = params.get('traceId')?.trim() || undefined;
+  const service = params.get('service')?.trim() || undefined;
+  const tags = params.get('tags')?.trim() || undefined;
+  if (!traceId && !service) return {};
 
   const datasourceValue = Number(params.get('datasourceValue'));
   const pluginType = params.get('pluginType') as TracePluginType | null;
 
   return {
     traceId,
+    service,
+    tags,
     datasourceId: Number.isInteger(datasourceValue) && datasourceValue > 0 ? datasourceValue : undefined,
     pluginType: pluginType && LOG_TRACE_TARGET_CATES.includes(pluginType) ? pluginType : undefined,
   };

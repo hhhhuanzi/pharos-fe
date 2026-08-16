@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Row, Col, Select, Space, Button, Input, Tooltip, InputNumber, Spin, Form, Radio } from 'antd';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import _ from 'lodash';
@@ -19,6 +19,10 @@ interface IProps {
   init?: string;
   initPluginId?: number;
   initPluginType?: TracePluginType;
+  /** Prefill Service when opening from the service page (no trace id). */
+  initService?: string;
+  /** logfmt tags (cluster / namespace) written into the attributes field. */
+  initTags?: string;
   onSearch: (item: SearchTraceType | SearchTraceIDType) => void;
   resultLoading: boolean;
 }
@@ -55,7 +59,7 @@ function getGroupOptions(services: { label: string; value: string; group?: strin
 export default function Index(props: IProps) {
   const { t } = useTranslation('trace');
   const { groupedDatasourceList } = useContext(CommonStateContext);
-  const { onSearch, resultLoading, init, initPluginId, initPluginType } = props;
+  const { onSearch, resultLoading, init, initPluginId, initPluginType, initService, initTags } = props;
   const [cate, setCate] = useState<TracePluginType>(initPluginType || 'jaeger');
   const datasourceList = groupedDatasourceList[cate] || [];
   const [curPlugin, setCurPlugin] = useState<number>();
@@ -85,6 +89,8 @@ export default function Index(props: IProps) {
   });
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
+  const didApplyInitService = useRef(false);
+  const didAutoSearchService = useRef(false);
 
   useEffect(() => {
     // A deep link already fixes the cate, don't override it
@@ -207,6 +213,14 @@ export default function Index(props: IProps) {
     }
   };
 
+  useEffect(() => {
+    if (didApplyInitService.current || init || !initService || services.length === 0) return;
+    if (!services.some((item) => item.value === initService)) return;
+    didApplyInitService.current = true;
+    handleServiceChange(initService);
+    if (initTags) form.setFieldsValue({ attributes: initTags });
+  }, [services, initService, initTags, init]);
+
   // Group only narrows the Service option list; it never re-selects a Service on its own,
   // so switching group always clears the (now possibly invalid) Service/Operation/Instance selection.
   const handleGroupChange = (nextGroup?: string) => {
@@ -248,6 +262,13 @@ export default function Index(props: IProps) {
       onSearch(searchItems);
     }
   };
+
+  useEffect(() => {
+    if (didAutoSearchService.current || init || !initService || !curPlugin) return;
+    if (search.service !== initService) return;
+    didAutoSearchService.current = true;
+    handleSearch(false);
+  }, [search.service, initService, curPlugin, init]);
 
   return (
     <Spin spinning={loading}>

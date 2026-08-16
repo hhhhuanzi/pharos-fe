@@ -1,7 +1,7 @@
 import '../fieldsSidebar/test/localStorageMock';
 import { CONFIG_STORAGE_KEY } from './constants';
 import { getLogExplorerTarget, getLogTraceConfig } from './config';
-import { buildLogDeepLink, buildLogTimeWindow, buildTraceDeepLink, isLogJumpEnabled, resolveLogDeepLink } from './deepLink';
+import { buildLogDeepLink, buildLogTimeWindow, buildTraceDeepLink, isLogJumpEnabled, parseTraceDeepLink, resolveLogDeepLink } from './deepLink';
 
 describe('isLogJumpEnabled', () => {
   it('enables only jaeger', () => {
@@ -66,6 +66,32 @@ describe('buildLogDeepLink', () => {
 describe('buildTraceDeepLink', () => {
   it('keeps the existing log → trace protocol', () => {
     expect(buildTraceDeepLink({ traceId: 'abc', datasourceId: 9, pluginType: 'jaeger' })).toBe('/trace/explorer?traceId=abc&datasourceValue=9&pluginType=jaeger');
+  });
+});
+
+describe('parseTraceDeepLink', () => {
+  it('still opens a trace by id', () => {
+    expect(parseTraceDeepLink('?traceId=abc&datasourceValue=5&pluginType=jaeger')).toEqual({
+      traceId: 'abc',
+      service: undefined,
+      tags: undefined,
+      datasourceId: 5,
+      pluginType: 'jaeger',
+    });
+  });
+
+  it('accepts a service filter without a trace id', () => {
+    expect(parseTraceDeepLink('?service=order&datasourceValue=5&pluginType=jaeger&tags=k8s.cluster.name%3Dprod')).toEqual({
+      traceId: undefined,
+      service: 'order',
+      tags: 'k8s.cluster.name=prod',
+      datasourceId: 5,
+      pluginType: 'jaeger',
+    });
+  });
+
+  it('ignores a query with neither traceId nor service', () => {
+    expect(parseTraceDeepLink('?datasourceValue=5&pluginType=jaeger')).toEqual({});
   });
 });
 
