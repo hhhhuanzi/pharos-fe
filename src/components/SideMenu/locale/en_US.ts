@@ -30,6 +30,7 @@ const en_US = {
     logs_explorer: 'Logs',
     traces: 'Traces',
     service: 'Services',
+    event_center: 'Event center',
     monitors: 'Monitors',
     alerts_notifications: 'Alerts & Notifications',
     rules: 'Alert rules',

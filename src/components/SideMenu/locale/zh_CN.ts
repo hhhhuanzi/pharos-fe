@@ -30,6 +30,7 @@ const zh_CN = {
     logs_explorer: '日志',
     traces: '链路',
     service: '服务',
+    event_center: '事件中心',
     monitors: '告警',
     alerts_notifications: '告警通知',
     rules: '规则管理',

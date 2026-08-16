@@ -48,6 +48,21 @@ const zh_HK = {
     logs_missing_config_hint: '在 localStorage 鍵 n9e-dh-log-trace-config 寫入 logDatasourceId 和 logIndexPattern（或 logIndex），重新整理後再點。',
     refresh: '重新整理',
   },
+  events: {
+    hint: 'K8s 事件來自 Prometheus kube-eventer 計數（eventer_events_*，與官方 K8s 大盤相同）。沒有採集時為空，屬預期。計數沒有事件正文。',
+    type_all: '全部',
+    type_warning: 'Warning',
+    type_normal: 'Normal',
+    time: '時間',
+    type: '類型',
+    reason: '原因',
+    object: '物件',
+    count: '次數',
+    load_failed: '讀取 K8s 事件失敗',
+    timeline: '時間軸',
+    timeline_more: '時間軸僅展示最近 {{count}} 條，完整列表見下方。',
+    open_center: '在事件中心查看',
+  },
 };
 
 export default zh_HK;

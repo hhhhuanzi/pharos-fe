@@ -48,6 +48,21 @@ const ru_RU = {
     logs_missing_config_hint: 'Запишите logDatasourceId и logIndexPattern (или logIndex) в ключ localStorage n9e-dh-log-trace-config и обновите страницу.',
     refresh: 'Обновить',
   },
+  events: {
+    hint: 'События Kubernetes — счётчики kube-eventer в Prometheus (eventer_events_*, как в штатных K8s-дашбордах). Пустой список ожидаем без сбора. В счётчиках нет текста события.',
+    type_all: 'Все',
+    type_warning: 'Warning',
+    type_normal: 'Normal',
+    time: 'Время',
+    type: 'Тип',
+    reason: 'Причина',
+    object: 'Объект',
+    count: 'Число',
+    load_failed: 'Не удалось загрузить события Kubernetes',
+    timeline: 'Шкала времени',
+    timeline_more: 'На шкале последние {{count}} событий; полный список ниже.',
+    open_center: 'Открыть в центре событий',
+  },
 };
 
 export default ru_RU;

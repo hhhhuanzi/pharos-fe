@@ -48,6 +48,21 @@ const ja_JP = {
     logs_missing_config_hint: 'localStorage の n9e-dh-log-trace-config に logDatasourceId と logIndexPattern（または logIndex）を書き込み、再読み込みしてください。',
     refresh: '更新',
   },
+  events: {
+    hint: 'K8s イベントは Prometheus の kube-eventer カウンタ（eventer_events_*。公式 K8s ダッシュボードと同じ）です。未収集なら空になるのは想定どおりです。カウンタにイベント本文はありません。',
+    type_all: 'すべて',
+    type_warning: 'Warning',
+    type_normal: 'Normal',
+    time: '時刻',
+    type: 'タイプ',
+    reason: '理由',
+    object: 'オブジェクト',
+    count: '回数',
+    load_failed: 'K8s イベントの読み込みに失敗しました',
+    timeline: 'タイムライン',
+    timeline_more: 'タイムラインは直近 {{count}} 件のみ。全件は下の一覧です。',
+    open_center: 'イベントセンターで見る',
+  },
 };
 
 export default ja_JP;

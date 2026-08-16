@@ -34,6 +34,10 @@ export const getMenuList = (embeddedProductMenu: MenuItem[] = [], hideDeprecated
           label: 'menu.service',
         },
         {
+          key: '/event-center',
+          label: 'menu.event_center',
+        },
+        {
           key: 'metrics',
           label: 'menu.metrics',
           type: 'tabs',

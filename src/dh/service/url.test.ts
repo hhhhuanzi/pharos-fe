@@ -1,4 +1,13 @@
-import { buildServiceDetailPath, buildServiceListPath, decodeServiceParam, identityToQuery, mergeIdentity, parseServiceIdentity } from './url';
+import {
+  buildEventCenterK8sPath,
+  buildEventCenterPath,
+  buildServiceDetailPath,
+  buildServiceListPath,
+  decodeServiceParam,
+  identityToQuery,
+  mergeIdentity,
+  parseServiceIdentity,
+} from './url';
 
 describe('parseServiceIdentity', () => {
   it('reads service / cluster / namespace / ds and ignores blanks', () => {
@@ -42,6 +51,14 @@ describe('buildServiceDetailPath / buildServiceListPath', () => {
     expect(decodeServiceParam('order%2Fapi')).toBe('order/api');
     expect(buildServiceListPath({ tab: 'topology' })).toBe('/service?tab=topology');
     expect(buildServiceListPath()).toBe('/service');
+  });
+});
+
+describe('buildEventCenterPath / buildEventCenterK8sPath', () => {
+  it('keeps the list path clean and forwards an optional service filter', () => {
+    expect(buildEventCenterPath()).toBe('/event-center');
+    expect(buildEventCenterPath({ service: 'order', cluster: 'prod' })).toBe('/event-center?service=order&cluster=prod');
+    expect(buildEventCenterK8sPath({ service: 'order' })).toBe('/event-center/k8s?service=order');
   });
 });
 

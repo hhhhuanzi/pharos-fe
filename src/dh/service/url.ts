@@ -97,3 +97,21 @@ export function buildServiceDetailPath(
   const qs = params.toString();
   return qs ? `${path}?${qs}` : path;
 }
+
+export function buildEventCenterPath(query: { service?: string; cluster?: string; namespace?: string } = {}): string {
+  const params = new URLSearchParams();
+  if (query.service) params.set('service', query.service);
+  if (query.cluster) params.set('cluster', query.cluster);
+  if (query.namespace) params.set('namespace', query.namespace);
+  const qs = params.toString();
+  return qs ? `/event-center?${qs}` : '/event-center';
+}
+
+export function buildEventCenterK8sPath(query: { service?: string; cluster?: string; namespace?: string } = {}): string {
+  const params = new URLSearchParams();
+  if (query.service) params.set('service', query.service);
+  if (query.cluster) params.set('cluster', query.cluster);
+  if (query.namespace) params.set('namespace', query.namespace);
+  const qs = params.toString();
+  return qs ? `/event-center/k8s?${qs}` : '/event-center/k8s';
+}

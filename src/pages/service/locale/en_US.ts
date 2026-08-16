@@ -48,6 +48,21 @@ const en_US = {
     logs_missing_config_hint: 'Set logDatasourceId and logIndexPattern (or logIndex) in the n9e-dh-log-trace-config localStorage key, then refresh.',
     refresh: 'Refresh',
   },
+  events: {
+    hint: 'Kubernetes events come from Prometheus kube-eventer counters (eventer_events_*, same as the stock K8s dashboards). An empty list is expected without collectors. Counters do not include the event message.',
+    type_all: 'All',
+    type_warning: 'Warning',
+    type_normal: 'Normal',
+    time: 'Time',
+    type: 'Type',
+    reason: 'Reason',
+    object: 'Object',
+    count: 'Count',
+    load_failed: 'Failed to load Kubernetes events',
+    timeline: 'Timeline',
+    timeline_more: 'The timeline shows the latest {{count}} events; the full list is below.',
+    open_center: 'Open in event center',
+  },
 };
 
 export default en_US;

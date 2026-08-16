@@ -30,6 +30,7 @@ const zh_HK = {
     logs_explorer: '日誌',
     traces: '鏈路',
     service: '服務',
+    event_center: '事件中心',
     monitors: '告警',
     alerts_notifications: '告警通知',
     rules: '規則管理',

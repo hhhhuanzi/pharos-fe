@@ -10,6 +10,7 @@ import {
   mergeServiceCatalog,
   type ServiceRow,
 } from './list';
+import { buildGlobalEventerQueries, mergeServiceEvents, type GlobalEventQuery, type ServiceEventQuery, type ServiceEventsResult } from './events';
 import { buildCatalogRedQueries, buildServiceRedQueries, mergeServiceRed, toPromRange, type ServiceOverviewResult } from './red';
 import { buildTopSeriesQueries, matrixToSeries, promRangeStep, rateWindow, type NamedSeries, type PromMatrixSample } from './series';
 
@@ -136,4 +137,54 @@ export async function fetchServiceTopSeries(
     errorRate: matrixToSeries(errorRate),
     p95: matrixToSeries(p95),
   };
+}
+
+async function settledProm(datasourceId: number, query: string, time: number): Promise<PromVectorSample[]> {
+  try {
+    return await queryProm(datasourceId, query, time);
+  } catch {
+    return [];
+  }
+}
+
+async function settledPromRange(datasourceId: number, query: string, start: number, end: number, step: number): Promise<PromMatrixSample[]> {
+  try {
+    return await queryPromRange(datasourceId, query, start, end, step);
+  } catch {
+    return [];
+  }
+}
+
+/** K8s events from kube-eventer counters. Missing series → empty list, not an invented API. */
+export async function fetchGlobalEvents(
+  datasourceId: number,
+  input: GlobalEventQuery,
+  startUnix: number,
+  endUnix: number,
+): Promise<ServiceEventsResult> {
+  const rangeSeconds = Math.max(1, endUnix - startUnix);
+  const range = toPromRange(rangeSeconds);
+  const step = promRangeStep(startUnix, endUnix);
+  const queries = buildGlobalEventerQueries(input, range);
+  const rangeQueries = buildGlobalEventerQueries(input, rateWindow(step));
+
+  const [warning, normal, warningRange, normalRange] = await Promise.all([
+    queryProm(datasourceId, queries.warning, endUnix),
+    settledProm(datasourceId, queries.normal, endUnix),
+    settledPromRange(datasourceId, rangeQueries.warning, startUnix, endUnix, step),
+    settledPromRange(datasourceId, rangeQueries.normal, startUnix, endUnix, step),
+  ]);
+
+  return {
+    events: mergeServiceEvents({ warning, normal, warningRange, normalRange }),
+  };
+}
+
+export async function fetchServiceEvents(
+  datasourceId: number,
+  input: ServiceEventQuery,
+  startUnix: number,
+  endUnix: number,
+): Promise<ServiceEventsResult> {
+  return fetchGlobalEvents(datasourceId, input, startUnix, endUnix);
 }

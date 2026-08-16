@@ -140,7 +140,13 @@ export default function ServiceDetailPage() {
             <Topology focusService={service} />
           </Tabs.TabPane>
           <Tabs.TabPane tab={t('tab.events')} key='events'>
-            <Events service={service} />
+            <Events
+              service={service}
+              promId={promId}
+              range={range}
+              clusters={identity.cluster ? [identity.cluster] : association.clusters}
+              namespaces={identity.namespace ? [identity.namespace] : association.namespaces}
+            />
           </Tabs.TabPane>
           <Tabs.TabPane tab={t('tab.flamegraph')} key='flamegraph'>
             <Flamegraph service={service} />

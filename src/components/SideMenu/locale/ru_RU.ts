@@ -30,6 +30,7 @@ const ru_RU = {
     logs_explorer: 'Логи',
     traces: 'Трейсы',
     service: 'Сервисы',
+    event_center: 'Центр событий',
     monitors: 'Оповещения',
     alerts_notifications: 'Оповещения и уведомления',
     rules: 'Управление правилами',

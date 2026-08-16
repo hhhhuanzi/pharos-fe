@@ -30,6 +30,7 @@ const ja_JP = {
     logs_explorer: 'ログ',
     traces: 'トレース',
     service: 'サービス',
+    event_center: 'イベントセンター',
     monitors: 'アラート',
     alerts_notifications: 'アラート通知',
     rules: 'ルール管理',
