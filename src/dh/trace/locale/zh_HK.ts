@@ -3,8 +3,9 @@ const zh_HK = {
     columns: {
       start_time: '開始時間',
       trace_id: 'Trace ID',
-      operation: '入口介面',
-      service: '入口服務',
+      operation: '介面名稱',
+      service: '服務',
+      type: '類型',
       status: '狀態',
       duration: '耗時',
       spans: 'Span 數',

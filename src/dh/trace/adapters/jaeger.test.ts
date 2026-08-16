@@ -297,6 +297,8 @@ describe('jaeger adapter (api_v3)', () => {
           traceId: 'aaaa000000000000000000000000aa',
           rootService: 'gateway',
           rootOperation: 'GET /orders',
+          rootInterface: 'GET /orders',
+          rootType: '',
           startTimeUs: 1700000000000000,
           durationUs: 500000,
           spanCount: 3,

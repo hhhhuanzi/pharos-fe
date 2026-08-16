@@ -3,8 +3,9 @@ const en_US = {
     columns: {
       start_time: 'Start time',
       trace_id: 'Trace ID',
-      operation: 'Root operation',
-      service: 'Root service',
+      operation: 'Interface',
+      service: 'Service',
+      type: 'Type',
       status: 'Status',
       duration: 'Duration',
       spans: 'Spans',

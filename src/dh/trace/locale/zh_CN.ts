@@ -3,8 +3,9 @@ const zh_CN = {
     columns: {
       start_time: '开始时间',
       trace_id: 'Trace ID',
-      operation: '入口接口',
-      service: '入口服务',
+      operation: '接口名称',
+      service: '服务',
+      type: '类型',
       status: '状态',
       duration: '耗时',
       spans: 'Span 数',

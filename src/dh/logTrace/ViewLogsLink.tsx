@@ -1,5 +1,5 @@
 import React from 'react';
-import { message, Tooltip } from 'antd';
+import { Button, message, Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 
 import { NS } from './constants';
@@ -52,8 +52,16 @@ export default function ViewLogsLink(props: Props) {
     );
   }
 
+  if (entry === 'list') {
+    return (
+      <Button type='link' className='px-0' onClick={handleClick}>
+        {label}
+      </Button>
+    );
+  }
+
   return (
-    <a className={entry === 'detail' ? 'ml-3' : undefined} onClick={handleClick}>
+    <a className='ml-3' onClick={handleClick}>
       {label}
     </a>
   );

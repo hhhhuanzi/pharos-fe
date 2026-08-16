@@ -3,8 +3,9 @@ const ru_RU = {
     columns: {
       start_time: 'Время начала',
       trace_id: 'Trace ID',
-      operation: 'Корневая операция',
-      service: 'Корневой сервис',
+      operation: 'Интерфейс',
+      service: 'Сервис',
+      type: 'Тип',
       status: 'Статус',
       duration: 'Длительность',
       spans: 'Спаны',

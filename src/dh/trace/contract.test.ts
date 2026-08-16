@@ -35,6 +35,8 @@ describe('traceResponseToSummary', () => {
       traceId: 'abc',
       rootService: 'gateway',
       rootOperation: 'GET /orders',
+      rootInterface: 'GET /orders',
+      rootType: '',
       startTimeUs: 1_000,
       durationUs: 900,
       spanCount: 3,
@@ -84,5 +86,43 @@ describe('traceResponseToSummary', () => {
   it('returns null when the response carries no usable spans', () => {
     expect(traceResponseToSummary({ traceID: 'abc', processes, spans: [] })).toBeNull();
     expect(traceResponseToSummary({ traceID: 'abc', processes, spans: [span({ spanID: 'a', startTime: 0, duration: 10 })] })).toBeNull();
+  });
+
+  it('assembles rootInterface and rootType from root-span tags', () => {
+    const http = traceResponseToSummary({
+      traceID: 'abc',
+      processes,
+      spans: [
+        span({
+          spanID: 'root',
+          startTime: 1_000,
+          duration: 100,
+          operationName: 'HTTP GET',
+          tags: [
+            { key: 'http.method', value: 'GET' },
+            { key: 'http.route', value: '/orders' },
+          ],
+        }),
+      ],
+    });
+    expect(http).toMatchObject({ rootInterface: 'GET /orders', rootType: 'web', rootOperation: 'HTTP GET' });
+
+    const db = traceResponseToSummary({
+      traceID: 'abc',
+      processes,
+      spans: [
+        span({
+          spanID: 'root',
+          startTime: 1_000,
+          duration: 100,
+          operationName: 'Mysql/query',
+          tags: [
+            { key: 'db.system', value: 'mysql' },
+            { key: 'db.statement', value: 'SELECT 1' },
+          ],
+        }),
+      ],
+    });
+    expect(db).toMatchObject({ rootInterface: 'SELECT 1', rootType: 'mysql', rootOperation: 'Mysql/query' });
   });
 });

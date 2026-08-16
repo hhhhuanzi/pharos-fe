@@ -3,8 +3,9 @@ const ja_JP = {
     columns: {
       start_time: '開始時刻',
       trace_id: 'Trace ID',
-      operation: 'ルート操作',
-      service: 'ルートサービス',
+      operation: 'インターフェース',
+      service: 'サービス',
+      type: 'タイプ',
       status: 'ステータス',
       duration: '所要時間',
       spans: 'Span 数',

@@ -10,6 +10,7 @@ import type { SearchTraceType } from '@/pages/traceCpt/type';
 import { NS as LOG_TRACE_NS, ViewLogsLink } from '@/dh/logTrace';
 import { searchTraceSummaries } from '../api';
 import type { PharosTraceListResult, PharosTraceSummary } from '../contract';
+import { TRACE_LIST_COLUMN_KEYS } from './columnKeys';
 
 // 链路时间统一按东八区（Asia/Shanghai）24 小时制展示，避免 UTC 与 12 小时制歧义
 const TRACE_TIME_ZONE = 'Asia/Shanghai';
@@ -74,6 +75,7 @@ export default function TraceList(props: IProps) {
 
   const columns: ColumnsType<PharosTraceSummary> = [
     {
+      key: TRACE_LIST_COLUMN_KEYS[0],
       title: t('list.columns.start_time'),
       dataIndex: 'startTimeUs',
       width: 168,
@@ -89,6 +91,7 @@ export default function TraceList(props: IProps) {
       },
     },
     {
+      key: TRACE_LIST_COLUMN_KEYS[1],
       title: t('list.columns.trace_id'),
       dataIndex: 'traceId',
       width: 150,
@@ -99,27 +102,18 @@ export default function TraceList(props: IProps) {
       ),
     },
     {
+      key: TRACE_LIST_COLUMN_KEYS[2],
       title: t('list.columns.operation'),
-      dataIndex: 'rootOperation',
+      dataIndex: 'rootInterface',
       ellipsis: true,
       render: (value: string) => (
-        <span className='text-title' title={value}>
+        <span className='truncate text-title' title={value}>
           {value || '-'}
         </span>
       ),
     },
     {
-      title: t('list.columns.service'),
-      dataIndex: 'rootService',
-      width: 200,
-      ellipsis: true,
-      render: (value: string) => (
-        <span className='text-main' title={value}>
-          {value || '-'}
-        </span>
-      ),
-    },
-    {
+      key: TRACE_LIST_COLUMN_KEYS[3],
       title: t('list.columns.status'),
       dataIndex: 'errorSpanCount',
       width: 110,
@@ -148,6 +142,7 @@ export default function TraceList(props: IProps) {
       ),
     },
     {
+      key: TRACE_LIST_COLUMN_KEYS[4],
       title: t('list.columns.duration'),
       dataIndex: 'durationUs',
       width: 176,
@@ -162,6 +157,31 @@ export default function TraceList(props: IProps) {
       ),
     },
     {
+      key: TRACE_LIST_COLUMN_KEYS[5],
+      title: t('list.columns.service'),
+      dataIndex: 'rootService',
+      width: 160,
+      ellipsis: true,
+      render: (value: string) => (
+        <span className='truncate text-main' title={value}>
+          {value || '-'}
+        </span>
+      ),
+    },
+    {
+      key: TRACE_LIST_COLUMN_KEYS[6],
+      title: t('list.columns.type'),
+      dataIndex: 'rootType',
+      width: 96,
+      ellipsis: true,
+      render: (value: string) => (
+        <span className='truncate text-main' title={value || undefined}>
+          {value || '—'}
+        </span>
+      ),
+    },
+    {
+      key: TRACE_LIST_COLUMN_KEYS[7],
       title: t('list.columns.spans'),
       dataIndex: 'spanCount',
       width: 100,
@@ -189,8 +209,9 @@ export default function TraceList(props: IProps) {
     },
     {
       title: tLog('view_logs_col'),
-      key: 'logs',
+      key: TRACE_LIST_COLUMN_KEYS[8],
       width: 72,
+      fixed: 'right',
       render: (_value, record) => (
         <ViewLogsLink entry='list' pluginType={search?.plugin_type} traceId={record.traceId} startUs={record.startTimeUs} durationUs={record.durationUs} />
       ),
@@ -227,7 +248,7 @@ export default function TraceList(props: IProps) {
         columns={columns}
         dataSource={summaries}
         showSorterTooltip={false}
-        scroll={{ x: 1180 }}
+        scroll={{ x: 1400 }}
         locale={{ emptyText }}
         onRow={(record) => ({
           className: 'cursor-pointer',

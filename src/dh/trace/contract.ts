@@ -12,6 +12,7 @@
  */
 
 import type { TraceResponse, TraceSpanData } from '@/pages/traceCpt/type';
+import { resolveRootInterface, resolveRootType } from './summaryFields';
 
 export interface PharosServiceSummary {
   name: string;
@@ -26,6 +27,10 @@ export interface PharosTraceSummary {
   rootService: string;
   /** Operation / span name of the root span. */
   rootOperation: string;
+  /** Method + path and/or SQL from the root span; falls back to `rootOperation`. */
+  rootInterface: string;
+  /** Short protocol/component label (web / mysql / …). Empty when no reliable field exists. */
+  rootType: string;
   /** Unix microseconds — same unit the waterfall uses for span times. */
   startTimeUs: number;
   durationUs: number;
@@ -133,10 +138,13 @@ export function traceResponseToSummary(res: TraceResponse): PharosTraceSummary |
   });
 
   const root = findRootSpan(spans);
+  const rootOperation = root?.operationName || '';
   return {
     traceId: res.traceID.toLowerCase(),
     rootService: root ? serviceOf(root) : '',
-    rootOperation: root?.operationName || '',
+    rootOperation,
+    rootInterface: resolveRootInterface(root) || rootOperation,
+    rootType: resolveRootType(root?.tags),
     startTimeUs,
     durationUs: Math.max(endTimeUs - startTimeUs, 0),
     spanCount: spans.length,

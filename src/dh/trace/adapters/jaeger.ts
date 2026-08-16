@@ -404,10 +404,15 @@ function apiV3SummaryToPharos(summary: ApiV3TraceSummary): PharosTraceSummary | 
       errorSpanCount: service.errorSpanCount || 0,
     }))
     .sort((a, b) => b.spanCount - a.spanCount);
+  const rootOperation = summary.rootOperationName || '';
   return {
     traceId,
     rootService: summary.rootServiceName || '',
-    rootOperation: summary.rootOperationName || '',
+    rootOperation,
+    // Lightweight summaries have no span tags, so interface falls back to the operation name
+    // and type stays empty (the table renders —).
+    rootInterface: rootOperation,
+    rootType: '',
     startTimeUs,
     durationUs: Math.max(endTimeUs - startTimeUs, 0),
     spanCount: summary.spanCount || 0,
