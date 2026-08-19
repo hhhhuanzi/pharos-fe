@@ -7,7 +7,7 @@ import type { AlignedData, Options } from 'uplot';
 import UPlotChart, { axisBuilder, cursorBuider, paddingSide, scalesBuilder, seriesBuider, tooltipPlugin } from '@/components/UPlotChart';
 import { CommonStateContext } from '@/App';
 import { hexPalette } from '@/pages/dashboard/config';
-import { alignServiceSeries, filterSeriesByNames, type NamedSeries } from '@/dh/service';
+import { alignServiceSeries, assignServiceColors, colorsForSeries, filterSeriesByNames, type NamedSeries } from '@/dh/service';
 
 import { NS } from '../constants';
 import { formatErrorRate, formatLatency, formatQps } from '../format';
@@ -19,6 +19,7 @@ interface ChartCardProps {
   kind: ChartKind;
   series: NamedSeries[];
   names: string[];
+  colorByName: Record<string, string>;
   loading: boolean;
 }
 
@@ -29,7 +30,7 @@ function formatPoint(kind: ChartKind, val: number): string {
 }
 
 function ChartCard(props: ChartCardProps) {
-  const { title, kind, series, names, loading } = props;
+  const { title, kind, series, names, colorByName, loading } = props;
   const { t } = useTranslation(NS);
   const { darkMode } = useContext(CommonStateContext);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -37,6 +38,7 @@ function ChartCard(props: ChartCardProps) {
   const width = size?.width || 0;
   const visible = useMemo(() => filterSeriesByNames(series, names), [series, names]);
   const aligned = useMemo(() => alignServiceSeries(visible), [visible]);
+  const colors = useMemo(() => colorsForSeries(aligned.labels, colorByName, hexPalette), [aligned.labels, colorByName]);
   const id = `n9e-dh-service-top-${kind}`;
 
   const options: Options | undefined = useMemo(() => {
@@ -58,7 +60,7 @@ function ChartCard(props: ChartCardProps) {
       scales: scalesBuilder({}),
       series: seriesBuider({
         baseSeries: aligned.labels.map((label) => ({ label })),
-        colors: hexPalette,
+        colors,
         width: 2,
         pathsType: 'spline',
         points: { show: false },
@@ -77,7 +79,7 @@ function ChartCard(props: ChartCardProps) {
         }),
       ],
     };
-  }, [aligned.labels, darkMode, kind, width]);
+  }, [aligned.labels, colors, darkMode, kind, width]);
 
   return (
     <div className='fc-border flex h-[220px] flex-col rounded-lg bg-fc-100 p-4'>
@@ -111,16 +113,20 @@ interface Props {
 
 export default function TopCharts(props: Props) {
   const { t } = useTranslation(NS);
+  const colorByName = useMemo(
+    () => assignServiceColors([...props.qpsNames, ...props.errorNames, ...props.p95Names], hexPalette),
+    [props.qpsNames, props.errorNames, props.p95Names],
+  );
   return (
     <Row gutter={16}>
       <Col span={8}>
-        <ChartCard title={t('overview.chart_p95')} kind='p95' series={props.p95} names={props.p95Names} loading={props.loading} />
+        <ChartCard title={t('overview.chart_p95')} kind='p95' series={props.p95} names={props.p95Names} colorByName={colorByName} loading={props.loading} />
       </Col>
       <Col span={8}>
-        <ChartCard title={t('overview.chart_qps')} kind='qps' series={props.qps} names={props.qpsNames} loading={props.loading} />
+        <ChartCard title={t('overview.chart_qps')} kind='qps' series={props.qps} names={props.qpsNames} colorByName={colorByName} loading={props.loading} />
       </Col>
       <Col span={8}>
-        <ChartCard title={t('overview.chart_error')} kind='errorRate' series={props.errorRate} names={props.errorNames} loading={props.loading} />
+        <ChartCard title={t('overview.chart_error')} kind='errorRate' series={props.errorRate} names={props.errorNames} colorByName={colorByName} loading={props.loading} />
       </Col>
     </Row>
   );

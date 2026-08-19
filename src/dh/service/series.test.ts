@@ -1,6 +1,6 @@
 import { SERVICE_GRAPH_METRICS } from '@/dh/trace/dependencies/promql';
 
-import { alignServiceSeries, buildTopSeriesQueries, filterSeriesByNames, matrixToSeries, promRangeStep, rateWindow } from './series';
+import { alignServiceSeries, assignServiceColors, buildTopSeriesQueries, colorsForSeries, filterSeriesByNames, matrixToSeries, promRangeStep, rateWindow } from './series';
 
 describe('promRangeStep / rateWindow', () => {
   it('keeps at least 15s step and a 60s rate window', () => {
@@ -67,5 +67,31 @@ describe('matrixToSeries / filterSeriesByNames / alignServiceSeries', () => {
     expect(aligned.labels).toEqual(['a', 'b']);
     expect(aligned.frames[1]).toEqual([10, null, 30]);
     expect(aligned.frames[2]).toEqual([null, 20, null]);
+  });
+});
+
+describe('assignServiceColors / colorsForSeries', () => {
+  const palette = ['#aaa', '#bbb', '#ccc', '#ddd'] as const;
+
+  it('maps first-seen names to palette slots and ignores later duplicates', () => {
+    expect(assignServiceColors(['admin', 'auth', 'admin', 'quote'], [...palette])).toEqual({
+      admin: '#aaa',
+      auth: '#bbb',
+      quote: '#ccc',
+    });
+  });
+
+  it('keeps the same color for a service across charts even when one chart omits it', () => {
+    const colorByName = assignServiceColors(['admin', 'kline', 'auth', 'quote'], [...palette]);
+    const p95 = colorsForSeries(['admin', 'kline', 'auth', 'quote'], colorByName, [...palette]);
+    const qps = colorsForSeries(['kline', 'quote'], colorByName, [...palette]);
+    const errorRate = colorsForSeries(['admin', 'quote'], colorByName, [...palette]);
+
+    expect(p95).toEqual(['#aaa', '#bbb', '#ccc', '#ddd']);
+    expect(qps).toEqual(['#bbb', '#ddd']);
+    expect(errorRate).toEqual(['#aaa', '#ddd']);
+    expect(qps[0]).toBe(p95[1]);
+    expect(errorRate[0]).toBe(p95[0]);
+    expect(errorRate[1]).toBe(p95[3]);
   });
 });

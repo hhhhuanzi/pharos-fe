@@ -51,6 +51,25 @@ export function filterSeriesByNames(series: NamedSeries[], names: string[]): Nam
   }, []);
 }
 
+/** First-seen service names get a stable palette index so multiple charts share colors. */
+export function assignServiceColors(names: string[], palette: string[]): Record<string, string> {
+  const colors: Record<string, string> = {};
+  if (palette.length === 0) return colors;
+  let next = 0;
+  names.forEach((name) => {
+    if (!name || colors[name] != null) return;
+    colors[name] = palette[next % palette.length];
+    next += 1;
+  });
+  return colors;
+}
+
+/** Map a chart's series labels through the shared name→color table. Missing names keep a palette fallback. */
+export function colorsForSeries(labels: string[], colorByName: Record<string, string>, palette: string[]): string[] {
+  if (palette.length === 0) return labels.map((label) => colorByName[label] ?? '');
+  return labels.map((label, idx) => colorByName[label] ?? palette[idx % palette.length]);
+}
+
 export function alignServiceSeries(series: NamedSeries[]): {
   times: number[];
   frames: [number[], ...Array<Array<number | null>>];
