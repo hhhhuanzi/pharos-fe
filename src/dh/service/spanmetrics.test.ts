@@ -51,9 +51,16 @@ describe('spanmetrics queries', () => {
 
   it('aggregates catalog RED by service_name and status_code errors', () => {
     const q = buildSpanmetricsCatalogQueries(family, '1h');
-    expect(q.total).toBe('sum by (service_name) (increase(traces_span_metrics_calls_total[1h]))');
-    expect(q.failed).toContain('status_code=~"STATUS_CODE_ERROR|ERROR"');
-    expect(q.p95).toContain('histogram_quantile(0.95');
+    expect(q.total).toBe('sum by (service_name, telemetry_sdk_language) (increase(traces_span_metrics_calls_total[1h]))');
+    expect(q.failed).toBe(
+      'sum by (service_name, telemetry_sdk_language) (increase(traces_span_metrics_calls_total{status_code=~"STATUS_CODE_ERROR|ERROR"}[1h]))',
+    );
+    expect(q.p95).toBe(
+      'histogram_quantile(0.95, sum by (service_name, telemetry_sdk_language, le) (rate(traces_span_metrics_duration_milliseconds_bucket[1h])))',
+    );
+    expect(q.p99).toBe(
+      'histogram_quantile(0.99, sum by (service_name, telemetry_sdk_language, le) (rate(traces_span_metrics_duration_milliseconds_bucket[1h])))',
+    );
   });
 
   it('filters one service and quotes the label', () => {

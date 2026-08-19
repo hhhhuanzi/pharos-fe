@@ -38,7 +38,6 @@ const ru_RU = {
     p99: 'P99 RT',
   },
   overview: {
-    hint: 'RED списка берётся из Prometheus spanmetrics (сам сервис), иначе traces_service_graph_*. Топология по-прежнему требует service_graph в Jaeger collector ocb (до tail_sampling). Нет метрик — «—».',
     search_placeholder: 'Поиск по имени сервиса',
     top_n: 'Top N',
     chart_p95: 'P95 задержка',

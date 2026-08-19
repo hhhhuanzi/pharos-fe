@@ -52,7 +52,8 @@ export function spanmetricsErrorMatcher(): string {
 }
 
 export function buildSpanmetricsCatalogQueries(family: SpanmetricsFamily, range: string) {
-  const by = family.serviceLabel;
+  /** Keep language on catalog vectors so the list column can read it; rows still merge by service in JS. */
+  const by = `${family.serviceLabel}, telemetry_sdk_language`;
   const errorSel = `{${spanmetricsErrorMatcher()}}`;
   const queries: { total: string; failed: string; p95?: string; p99?: string } = {
     total: `sum by (${by}) (increase(${family.calls}[${range}]))`,

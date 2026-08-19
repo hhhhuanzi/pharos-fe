@@ -38,7 +38,6 @@ const zh_HK = {
     p99: 'P99 RT',
   },
   overview: {
-    hint: '列表 RED 優先讀 Prometheus spanmetrics（服務自身呼叫）。沒有 spanmetrics 時回退 traces_service_graph_*。拓撲仍要 Jaeger collector ocb 的 service_graph（須在 tail_sampling 前）。沒這些指標時為 —，屬預期。',
     search_placeholder: '搜尋服務名',
     top_n: 'Top N',
     chart_p95: 'P95 回應時間',

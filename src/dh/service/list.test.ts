@@ -58,6 +58,37 @@ describe('aggregateServiceRows', () => {
     expect(rows).toMatchObject([{ name: 'order-api', requestCount: 40, qps: 2, hasRed: true }]);
   });
 
+  it('merges language-split spanmetrics series into one service row', () => {
+    const rows = aggregateServiceRows({
+      total: [
+        sample({ service_name: 'rome-sec-index', telemetry_sdk_language: 'java' }, '100'),
+        sample({ service_name: 'rome-sec-index' }, '50'),
+      ],
+      failed: [
+        sample({ service_name: 'rome-sec-index', telemetry_sdk_language: 'java' }, '4'),
+        sample({ service_name: 'rome-sec-index' }, '1'),
+      ],
+      p95: [
+        sample({ service_name: 'rome-sec-index', telemetry_sdk_language: 'java' }, '0.2'),
+        sample({ service_name: 'rome-sec-index' }, '0.3'),
+      ],
+      p99: [sample({ service_name: 'rome-sec-index', telemetry_sdk_language: 'java' }, '0.4')],
+      rangeSeconds: 100,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      name: 'rome-sec-index',
+      language: 'java',
+      requestCount: 150,
+      failedCount: 5,
+      errorRate: 5 / 150,
+      qps: 1.5,
+      p95Seconds: 0.3,
+      p99Seconds: 0.4,
+      hasRed: true,
+    });
+  });
+
   it('skips series without a server label', () => {
     expect(
       aggregateServiceRows({

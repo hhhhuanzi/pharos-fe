@@ -38,7 +38,6 @@ const zh_CN = {
     p99: 'P99 RT',
   },
   overview: {
-    hint: '列表 RED 优先读 Prometheus spanmetrics（服务自身调用）。没有 spanmetrics 时回退 traces_service_graph_*。拓扑仍要 Jaeger collector ocb 的 service_graph（须在 tail_sampling 前）。没这些指标时为 —，属预期。',
     search_placeholder: '搜索服务名',
     top_n: 'Top N',
     chart_p95: 'P95 响应时间',

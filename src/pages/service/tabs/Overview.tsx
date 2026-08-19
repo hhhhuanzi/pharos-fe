@@ -112,7 +112,6 @@ export default function Overview(props: Props) {
             <Button icon={<ReloadOutlined />} onClick={onRefresh} />
           </Tooltip>
         </Space>
-        <div className='text-sm text-hint'>{t('overview.hint')}</div>
       </div>
 
       {failed ? (

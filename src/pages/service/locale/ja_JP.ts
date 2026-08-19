@@ -38,7 +38,6 @@ const ja_JP = {
     p99: 'P99 RT',
   },
   overview: {
-    hint: 'リスト RED は Prometheus spanmetrics（サービス自身）を優先し、なければ traces_service_graph_* に戻します。トポロジーは Jaeger collector ocb の service_graph（tail_sampling より前）が必要です。指標がなければ — になります。',
     search_placeholder: 'サービス名で検索',
     top_n: 'Top N',
     chart_p95: 'P95 レイテンシ',

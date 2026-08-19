@@ -38,7 +38,6 @@ const en_US = {
     p99: 'P99 RT',
   },
   overview: {
-    hint: 'List RED prefers Prometheus spanmetrics (the service itself). Falls back to traces_service_graph_*. Topology still needs Jaeger collector ocb service_graph (before tail_sampling). Missing metrics render as —.',
     search_placeholder: 'Search service name',
     top_n: 'Top N',
     chart_p95: 'P95 latency',
