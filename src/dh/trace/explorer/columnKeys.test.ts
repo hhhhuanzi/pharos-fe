@@ -6,11 +6,11 @@ describe('TRACE_LIST_COLUMN_KEYS', () => {
       'startTimeUs',
       'traceId',
       'rootInterface',
+      'rootType',
       'errorSpanCount',
       'durationUs',
-      'rootService',
-      'rootType',
       'spanCount',
+      'rootService',
       'logs',
     ]);
   });

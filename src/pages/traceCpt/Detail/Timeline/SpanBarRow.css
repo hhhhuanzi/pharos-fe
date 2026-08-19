@@ -14,6 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+.span-row {
+  height: 100%;
+  overflow: hidden;
+}
+
 .span-row.is-matching-filter {
   background-color: #fffce4;
 }

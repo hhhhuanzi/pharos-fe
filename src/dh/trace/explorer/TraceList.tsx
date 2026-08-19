@@ -2,14 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Badge, Empty, Table, Tooltip } from 'antd';
 import { ColumnsType } from 'antd/lib/table';
 import { ExclamationCircleOutlined } from '@ant-design/icons';
-import _ from 'lodash';
 import moment from 'moment-timezone';
 import { useTranslation } from 'react-i18next';
 import { formatDuration } from '@/pages/traceCpt/utils/date';
 import type { SearchTraceType } from '@/pages/traceCpt/type';
+import EllipsisText from '@/components/EllipsisText';
 import { NS as LOG_TRACE_NS, ViewLogsLink } from '@/dh/logTrace';
 import { searchTraceSummaries } from '../api';
 import type { PharosTraceListResult, PharosTraceSummary } from '../contract';
+import { durationBarPercent, maxDurationInSet } from './durationBar';
 import { TRACE_LIST_COLUMN_KEYS } from './columnKeys';
 
 // 链路时间统一按东八区（Asia/Shanghai）24 小时制展示，避免 UTC 与 12 小时制歧义
@@ -71,7 +72,7 @@ export default function TraceList(props: IProps) {
   }, [search]);
 
   const summaries = result?.summaries || [];
-  const maxDuration = _.max(summaries.map((item) => item.durationUs)) || 1;
+  const maxDuration = maxDurationInSet(summaries.map((item) => item.durationUs));
 
   const columns: ColumnsType<PharosTraceSummary> = [
     {
@@ -94,7 +95,7 @@ export default function TraceList(props: IProps) {
       key: TRACE_LIST_COLUMN_KEYS[1],
       title: t('list.columns.trace_id'),
       dataIndex: 'traceId',
-      width: 150,
+      width: 176,
       render: (value: string) => (
         <a className='truncate' title={value}>
           {value.slice(0, 16)}
@@ -105,18 +106,25 @@ export default function TraceList(props: IProps) {
       key: TRACE_LIST_COLUMN_KEYS[2],
       title: t('list.columns.operation'),
       dataIndex: 'rootInterface',
-      ellipsis: true,
-      render: (value: string) => (
-        <span className='truncate text-title' title={value}>
-          {value || '-'}
-        </span>
-      ),
+      width: 200,
+      ellipsis: { showTitle: false },
+      render: (value: string) => <EllipsisText text={value || '-'} title={value || undefined} className='text-title' />,
     },
     {
       key: TRACE_LIST_COLUMN_KEYS[3],
+      title: t('list.columns.type'),
+      dataIndex: 'rootType',
+      width: 72,
+      render: (value: string) => {
+        const label = value ? t(`list.types.${value}`) : '';
+        return <span className='text-main'>{label || '—'}</span>;
+      },
+    },
+    {
+      key: TRACE_LIST_COLUMN_KEYS[4],
       title: t('list.columns.status'),
       dataIndex: 'errorSpanCount',
-      width: 110,
+      width: 100,
       sorter: (a, b) => a.errorSpanCount - b.errorSpanCount,
       render: (value: number, record) => (
         <span className='flex items-center gap-2'>
@@ -142,49 +150,28 @@ export default function TraceList(props: IProps) {
       ),
     },
     {
-      key: TRACE_LIST_COLUMN_KEYS[4],
+      key: TRACE_LIST_COLUMN_KEYS[5],
       title: t('list.columns.duration'),
       dataIndex: 'durationUs',
-      width: 176,
+      width: 240,
       sorter: (a, b) => a.durationUs - b.durationUs,
       render: (value: number, record) => (
-        <span className='flex items-center gap-2'>
-          <span className='h-1 w-16 shrink-0 overflow-hidden rounded-lg bg-fc-200'>
-            <span className={`block h-1 rounded-lg ${record.errorSpanCount > 0 ? 'bg-error' : 'bg-primary'}`} style={{ width: `${Math.max((value / maxDuration) * 100, 2)}%` }} />
+        <span className='flex min-w-0 items-center gap-2'>
+          <span className='h-2 min-w-0 flex-1 overflow-hidden rounded-lg bg-fc-200'>
+            <span
+              className={`block h-2 rounded-lg ${record.errorSpanCount > 0 ? 'bg-error' : 'bg-primary'}`}
+              style={{ width: `${durationBarPercent(value, maxDuration)}%` }}
+            />
           </span>
-          <span className='text-title'>{formatDuration(value)}</span>
-        </span>
-      ),
-    },
-    {
-      key: TRACE_LIST_COLUMN_KEYS[5],
-      title: t('list.columns.service'),
-      dataIndex: 'rootService',
-      width: 160,
-      ellipsis: true,
-      render: (value: string) => (
-        <span className='truncate text-main' title={value}>
-          {value || '-'}
+          <span className='w-20 shrink-0 text-right text-title'>{formatDuration(value)}</span>
         </span>
       ),
     },
     {
       key: TRACE_LIST_COLUMN_KEYS[6],
-      title: t('list.columns.type'),
-      dataIndex: 'rootType',
-      width: 96,
-      ellipsis: true,
-      render: (value: string) => (
-        <span className='truncate text-main' title={value || undefined}>
-          {value || '—'}
-        </span>
-      ),
-    },
-    {
-      key: TRACE_LIST_COLUMN_KEYS[7],
       title: t('list.columns.spans'),
       dataIndex: 'spanCount',
-      width: 100,
+      width: 88,
       align: 'right',
       sorter: (a, b) => a.spanCount - b.spanCount,
       render: (value: number, record) =>
@@ -206,6 +193,14 @@ export default function TraceList(props: IProps) {
         ) : (
           <span className='text-main'>{value}</span>
         ),
+    },
+    {
+      key: TRACE_LIST_COLUMN_KEYS[7],
+      title: t('list.columns.service'),
+      dataIndex: 'rootService',
+      width: 176,
+      ellipsis: { showTitle: false },
+      render: (value: string) => <EllipsisText text={value || '-'} title={value || undefined} className='text-main' />,
     },
     {
       title: tLog('view_logs_col'),
@@ -248,7 +243,7 @@ export default function TraceList(props: IProps) {
         columns={columns}
         dataSource={summaries}
         showSorterTooltip={false}
-        scroll={{ x: 1400 }}
+        scroll={{ x: 1300 }}
         locale={{ emptyText }}
         onRow={(record) => ({
           className: 'cursor-pointer',

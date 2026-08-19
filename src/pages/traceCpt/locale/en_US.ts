@@ -18,7 +18,7 @@ const en_US = {
     duration_axis: 'Duration',
     time_axis: 'Time',
   },
-  title: 'Explorer',
+  title: 'Tracing',
   dependencies: 'Dependencies',
   mode: {
     id: 'Trace ID',
@@ -42,7 +42,7 @@ const en_US = {
     `,
   time: 'Time',
   duration_max: 'Max duration',
-  duration_min: 'Min duration',
+  duration_min: 'Duration ≥',
   num_traces: 'Number of traces',
   load_more: 'Load More',
   query: 'Execute',

@@ -251,15 +251,18 @@ export default function VirtualizedTraceView(props: VirtualizedTraceViewProps) {
 
   return (
     <div className='VirtualizedTraceView--spans'>
+      {/* PageLayout, not window, is the overflow scroller; ListView binds to that parent. */}
       <ListView
         dataLength={getRowStates().length}
         itemHeightGetter={getRowHeight}
         itemRenderer={renderRow}
-        viewBuffer={300}
-        viewBufferMin={100}
+        viewBuffer={20}
+        viewBufferMin={10}
+        initialDraw={40}
         itemsWrapperClassName='VirtualizedTraceView--rowsWrapper'
         getKeyFromIndex={getKeyFromIndex}
         getIndexFromKey={getIndexFromKey}
+        // PageLayout (not window) is the overflow scroller; ListView binds to that parent.
         windowScroller
       />
     </div>

@@ -12,7 +12,8 @@
  */
 
 import type { Trace, TraceResponse, TraceSpanData } from '@/pages/traceCpt/type';
-import { resolveRootInterface, resolveRootType } from './summaryFields';
+import { resolveTraceKind } from './listType';
+import { resolveRootInterface } from './summaryFields';
 
 export interface PharosServiceSummary {
   name: string;
@@ -29,7 +30,11 @@ export interface PharosTraceSummary {
   rootOperation: string;
   /** Method + path and/or SQL from the root span; falls back to `rootOperation`. */
   rootInterface: string;
-  /** Short protocol/component label (web / mysql / …). Empty when no reliable field exists. */
+  /**
+   * List 「类型」column. Filled when mapping into this contract (`traceResponseToSummary`):
+   * span tags first (`messaging.system` → mq, HTTP → web, SQL → sql), then operation verbs.
+   * Empty when both miss. UI must not read Jaeger search JSON for this.
+   */
   rootType: string;
   /** Unix microseconds — same unit the waterfall uses for span times. */
   startTimeUs: number;
@@ -168,7 +173,7 @@ export function traceResponseToSummary(res: TraceResponse): PharosTraceSummary |
     rootService: root ? serviceOf(root) : '',
     rootOperation,
     rootInterface: resolveRootInterface(root) || rootOperation,
-    rootType: resolveRootType(root?.tags),
+    rootType: resolveTraceKind(spans), // tags on any span; bare `process` without tags stays ''
     startTimeUs,
     durationUs: Math.max(endTimeUs - startTimeUs, 0),
     spanCount: spans.length,

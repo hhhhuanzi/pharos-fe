@@ -148,7 +148,11 @@ export default class Positions {
       return imax;
     }
     let i;
+    let guard = 0;
     while (imin < imax) {
+      if (guard++ > this.lastI + 2) {
+        return imin;
+      }
       // eslint-disable-next-line no-bitwise
       i = (imin + 0.5 * (imax - imin)) | 0;
       if (yValue > this.ys[i]) {

@@ -74,16 +74,10 @@ export async function searchTracesPaged(params: TraceSearchParams): Promise<Trac
   return { traces: [], hasMore: false };
 }
 
-/** Rows requested when the backend has a dedicated lightweight list query. */
+/** Default list depth when the form does not pass `num_traces`. */
 export const TRACE_LIST_SUMMARY_LIMIT = 100;
-/** Deliberately lower: on this path every row drags all of its spans over the wire (P-46). */
+/** SkyWalking pages full traces per row; keep the default page smaller (P-46). */
 export const TRACE_LIST_FULL_LIMIT = 20;
-
-/**
- * Per-datasource memo of whether `/api/v3/trace-summaries` exists, so a Jaeger build without it is
- * probed once instead of on every search.
- */
-const traceSummariesSupport = new Map<number, boolean>();
 
 function toSummaries(responses: TraceResponse[]): PharosTraceSummary[] {
   return responses.reduce<PharosTraceSummary[]>((acc, res) => {
@@ -94,28 +88,21 @@ function toSummaries(responses: TraceResponse[]): PharosTraceSummary[] {
 }
 
 /**
- * Search result list in Pharos shape. Prefers the backend's lightweight summary query and falls
- * back to deriving the rows from a full-span search when there isn't one (SkyWalking, and Jaeger
- * builds predating `FindTraceSummaries`).
+ * Pharos list API. UI reads `PharosTraceSummary` only (`rootType` is the 类型 column).
+ *
+ * Jaeger rows are mapped through `traceResponseToSummary` so `rootType` is filled from span
+ * tags (`messaging.system` → mq, HTTP → web, SQL → sql). Do not use a tag-less summary
+ * mapper here — that left `process` as —. One search, not N get-by-id.
  */
 export async function searchTraceSummaries(params: TraceSearchParams): Promise<PharosTraceListResult> {
-  if (params.plugin_type === 'jaeger' && traceSummariesSupport.get(params.data_source_id) !== false) {
-    const limit = params.num_traces || TRACE_LIST_SUMMARY_LIMIT;
-    const summaries = await jaeger.findJaegerTraceSummaries({ ...params, num_traces: limit });
-    if (summaries) {
-      traceSummariesSupport.set(params.data_source_id, true);
-      return { summaries, source: 'summaries', truncated: summaries.length >= limit };
-    }
-    traceSummariesSupport.set(params.data_source_id, false);
-  }
-
-  const limit = params.num_traces || TRACE_LIST_FULL_LIMIT;
   if (params.plugin_type === 'skywalking') {
+    const limit = params.num_traces || TRACE_LIST_FULL_LIMIT;
     // SkyWalking pages its list query; the table shows one page and relies on the truncation hint
     // plus the form's "result count" field rather than an incremental "load more".
     const page = await skywalking.searchSkyWalkingTracesPaged({ ...params, page_num: 1, page_size: limit });
     return { summaries: toSummaries(page.traces), source: 'full-traces', truncated: page.hasMore };
   }
+  const limit = params.num_traces || TRACE_LIST_SUMMARY_LIMIT;
   const traces = await searchTraces({ ...params, num_traces: limit });
   return { summaries: toSummaries(traces), source: 'full-traces', truncated: traces.length >= limit };
 }

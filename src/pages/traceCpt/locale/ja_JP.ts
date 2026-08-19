@@ -18,7 +18,7 @@ const ja_JP = {
     duration_axis: '所要時間',
     time_axis: '時刻',
   },
-  title: "即時クエリ",
+  title: 'トレース追跡',
   dependencies: "拓扑分析",
   mode: {
     id: "Trace ID クエリ",
@@ -35,7 +35,7 @@ const ja_JP = {
     "\n    <0>\n      値サポート\n      <1>logfmt</1>\n      フォーマット\n    </0>\n    <2>スペースで分割</2>\n    <3>スペースを含む文字列は引用符で囲む必要があります</3>\n    ",
   time: "時間範囲",
   duration_max: "最大所要時間",
-  duration_min: "最小所要時間",
+  duration_min: "所要時間 ≥",
   num_traces: "結果数の表示",
   load_more: "もっと読み込む",
   query: "クエリ",

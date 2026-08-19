@@ -13,7 +13,7 @@
 // limitations under the License.
 
 import * as React from 'react';
-import { ExclamationCircleOutlined } from '@ant-design/icons';
+import SpanRowSemantics from '@/dh/trace/waterfall/SpanRowSemantics';
 import TimelineRow from './TimelineRow';
 import { ViewedBoundsFunctionType } from '../../utils';
 import { formatDuration } from '../../utils/date';
@@ -128,30 +128,20 @@ export default class SpanBarRow extends React.PureComponent<SpanBarRowProps> {
           <div className={`span-name-wrapper ${isMatchingFilter ? 'is-matching-filter' : ''}`}>
             <SpanTreeOffset childrenVisible={isChildrenExpanded} span={span} onClick={isParent ? this._childrenToggle : undefined} />
             <a
-              className={`span-name ${isDetailExpanded ? 'is-detail-expanded' : ''}`}
+              className={`span-name flex min-w-0 items-center ${isDetailExpanded ? 'is-detail-expanded' : ''}`}
               aria-checked={isDetailExpanded}
               onClick={this._detailToggle}
               role='switch'
               style={{ borderColor: color }}
               tabIndex={0}
             >
-              <span className={`span-svc-name ${isParent && !isChildrenExpanded ? 'is-children-collapsed' : ''}`}>
-                {showErrorIcon && <ExclamationCircleOutlined style={{ marginRight: 5, color: 'red' }} />}
-                {serviceName}{' '}
-                {rpc && (
-                  <span>
-                    <i className='SpanBarRow--rpcColorMarker' style={{ background: rpc.color }} />
-                    {rpc.serviceName}
-                  </span>
-                )}
-                {noInstrumentedServer && (
-                  <span>
-                    <i className='SpanBarRow--rpcColorMarker' style={{ background: noInstrumentedServer.color }} />
-                    {noInstrumentedServer.serviceName}
-                  </span>
-                )}
-              </span>
-              <small className='endpoint-name'>{rpc ? rpc.operationName : operationName}</small>
+              <SpanRowSemantics
+                span={span}
+                showError={showErrorIcon}
+                isChildrenCollapsed={isParent && !isChildrenExpanded}
+                rpc={rpc}
+                noInstrumentedServer={noInstrumentedServer}
+              />
             </a>
             {/* {span.references && span.references.length > 1 && (
               <ReferencesButton references={span.references} tooltipText='Contains multiple references' focusSpan={focusSpan}>

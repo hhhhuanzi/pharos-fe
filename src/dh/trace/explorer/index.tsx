@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { message, Radio, Space } from 'antd';
 import { useTranslation } from 'react-i18next';
-import Search from '@/pages/traceCpt/Search';
+import Search from './Search';
 import Detail from '@/pages/traceCpt/Detail';
 import { getTraceByID } from '@/pages/traceCpt/services';
 import { transformTraceData } from '@/pages/traceCpt/utils';
@@ -20,6 +20,8 @@ interface IProps {
   initPluginType?: TracePluginType;
   initService?: string;
   initTags?: string;
+  /** Service-detail embed: pin type + datasource + service (do not hide the selects). */
+  lockService?: boolean;
 }
 
 /**
@@ -28,7 +30,7 @@ interface IProps {
  * the dh span flame graph beside it.
  */
 export default function TraceExplorer(props: IProps) {
-  const { init, initPluginId, initPluginType, initService, initTags } = props;
+  const { init, initPluginId, initPluginType, initService, initTags, lockService } = props;
   const { t } = useTranslation('trace');
   const [search, setSearch] = useState<SearchTraceType>();
   const [curTrace, setCurTrace] = useState<Trace>();
@@ -71,13 +73,14 @@ export default function TraceExplorer(props: IProps) {
 
   return (
     <div className='tracing'>
-      <div className='fc-border rounded-lg bg-fc-100 p-4'>
+      <div className='fc-border rounded-lg bg-fc-100 p-3'>
         <Search
           init={init}
           initPluginId={initPluginId}
           initPluginType={initPluginType}
           initService={initService}
           initTags={initTags}
+          lockService={lockService}
           onSearch={handleSearch}
           resultLoading={listLoading || detailLoading}
         />

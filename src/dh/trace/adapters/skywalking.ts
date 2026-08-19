@@ -1,5 +1,6 @@
 import _ from 'lodash';
 import { UnifiedServiceOption, TraceSearchParams, TraceByIdParams, TracePageResult } from '../types';
+import { parseDurationToMs } from '../duration';
 import { buildDuration, graphqlRequest } from './skywalkingGraphql';
 import { TraceResponse, TraceSpanData } from '@/pages/traceCpt/type';
 
@@ -288,6 +289,10 @@ export async function searchSkyWalkingTraces(params: TraceSearchParams): Promise
     // endpoint filter uses name lookup via queryBasicTraces tags when id unknown;
     // prefer leaving endpointId empty and filter client-side by endpointNames if needed
   }
+  const minDurationMs = parseDurationToMs(params.duration_min);
+  if (minDurationMs != null) {
+    condition.minTraceDuration = Math.round(minDurationMs);
+  }
   if (params.attributes && !_.isEmpty(params.attributes)) {
     condition.tags = Object.entries(params.attributes).map(([key, value]) => ({ key, value }));
   }
@@ -349,6 +354,10 @@ function buildBasicTraceCondition(params: TraceSearchParams, pageNum: number, pa
   }
   if (params.instance) {
     condition.serviceInstanceId = params.instance;
+  }
+  const minDurationMs = parseDurationToMs(params.duration_min);
+  if (minDurationMs != null) {
+    condition.minTraceDuration = Math.round(minDurationMs);
   }
   if (params.attributes && !_.isEmpty(params.attributes)) {
     condition.tags = Object.entries(params.attributes).map(([key, value]) => ({ key, value }));

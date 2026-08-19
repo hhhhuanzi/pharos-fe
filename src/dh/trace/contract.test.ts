@@ -36,7 +36,7 @@ describe('traceResponseToSummary', () => {
       rootService: 'gateway',
       rootOperation: 'GET /orders',
       rootInterface: 'GET /orders',
-      rootType: '',
+      rootType: 'web',
       startTimeUs: 1_000,
       durationUs: 900,
       spanCount: 3,
@@ -123,7 +123,116 @@ describe('traceResponseToSummary', () => {
         }),
       ],
     });
-    expect(db).toMatchObject({ rootInterface: 'SELECT 1', rootType: 'mysql', rootOperation: 'Mysql/query' });
+    expect(db).toMatchObject({ rootInterface: 'SELECT 1', rootType: 'sql', rootOperation: 'Mysql/query' });
+
+    const clickhouse = traceResponseToSummary({
+      traceID: 'abc',
+      processes,
+      spans: [
+        span({
+          spanID: 'root',
+          startTime: 1_000,
+          duration: 100,
+          operationName: 'query',
+          tags: [{ key: 'db.system', value: 'clickhouse' }],
+        }),
+      ],
+    });
+    expect(clickhouse).toMatchObject({ rootType: 'sql' });
+
+    const nacos = traceResponseToSummary({
+      traceID: 'abc',
+      processes,
+      spans: [
+        span({
+          spanID: 'root',
+          startTime: 1_000,
+          duration: 100,
+          operationName: 'POST',
+          tags: [
+            { key: 'url.full', value: 'http://172.22.0.27:8848/nacos/v1/cs/configs/listener' },
+            { key: 'http.request.method', value: 'POST' },
+          ],
+        }),
+      ],
+    });
+    expect(nacos).toMatchObject({ rootType: 'nacos', rootOperation: 'POST' });
+
+    const opaque = traceResponseToSummary({
+      traceID: 'abc',
+      processes,
+      spans: [span({ spanID: 'root', startTime: 1_000, duration: 100, operationName: 'internal-op' })],
+    });
+    expect(opaque).toMatchObject({ rootType: '' });
+
+    const rabbit = traceResponseToSummary({
+      traceID: 'abc',
+      processes,
+      spans: [
+        span({
+          spanID: 'root',
+          startTime: 1_000,
+          duration: 100,
+          operationName: 'process',
+          tags: [
+            { key: 'messaging.system', value: 'rabbitmq' },
+            { key: 'messaging.operation', value: 'process' },
+            { key: 'span.kind', value: 'consumer' },
+          ],
+        }),
+      ],
+    });
+    expect(rabbit).toMatchObject({ rootType: 'mq', rootOperation: 'process' });
+
+    const bareProcess = traceResponseToSummary({
+      traceID: 'abc',
+      processes,
+      spans: [span({ spanID: 'root', startTime: 1_000, duration: 100, operationName: 'process' })],
+    });
+    expect(bareProcess).toMatchObject({ rootType: '' });
+  });
+
+  it('uses child-span tags when the root is only a generated frame', () => {
+    const http = traceResponseToSummary({
+      traceID: 'abc',
+      processes,
+      spans: [
+        span({ spanID: 'root', startTime: 1_000, duration: 100, operationName: 'Scheduler$$Lambda.run' }),
+        span({
+          spanID: 'child',
+          startTime: 1_010,
+          duration: 80,
+          operationName: 'POST',
+          tags: [
+            { key: 'http.request.method', value: 'POST' },
+            { key: 'url.full', value: 'http://svc.internal/instances' },
+            { key: 'http.response.status_code', value: 201 },
+          ],
+          references: [{ refType: 'CHILD_OF', spanID: 'root', traceID: 'abc' }],
+        }),
+      ],
+    });
+    expect(http).toMatchObject({ rootType: 'web', rootOperation: 'Scheduler$$Lambda.run' });
+
+    const nacos = traceResponseToSummary({
+      traceID: 'abc',
+      processes,
+      spans: [
+        span({ spanID: 'root', startTime: 1_000, duration: 100, operationName: 'Watch$$Lambda.run' }),
+        span({
+          spanID: 'child',
+          startTime: 1_010,
+          duration: 80,
+          operationName: 'GET',
+          tags: [
+            { key: 'url.full', value: 'http://172.22.0.27:8848/nacos/v1/ns/instance/list' },
+            { key: 'http.request.method', value: 'GET' },
+          ],
+          references: [{ refType: 'CHILD_OF', spanID: 'root', traceID: 'abc' }],
+        }),
+      ],
+    });
+    expect(nacos).toMatchObject({ rootType: 'nacos', rootOperation: 'Watch$$Lambda.run' });
   });
 });
 

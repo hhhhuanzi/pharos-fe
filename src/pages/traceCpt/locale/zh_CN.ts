@@ -18,7 +18,7 @@ const zh_CN = {
     duration_axis: '耗时',
     time_axis: '时间',
   },
-  title: '即时查询',
+  title: '链路追踪',
   dependencies: '拓扑分析',
   mode: {
     id: 'Trace ID 查询',
@@ -42,7 +42,7 @@ const zh_CN = {
     `,
   time: '时间区间',
   duration_max: '最大耗时',
-  duration_min: '最小耗时',
+  duration_min: '耗时大于',
   num_traces: '显示结果数',
   load_more: '加载更多',
   query: '查询',

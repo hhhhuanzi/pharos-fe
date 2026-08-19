@@ -37,6 +37,7 @@ import { RequestMethod } from '@/store/common';
 import { N9E_PATHNAME } from '@/utils/constant';
 import { TraceByIdParams, TraceSearchParams, UnifiedServiceOption } from '../types';
 import { PharosTraceSummary } from '../contract';
+import { resolveRootType } from '../listType';
 import { TraceResponse, TraceSpanData, TraceKeyValuePair } from '@/pages/traceCpt/type';
 
 // ---------------------------------------------------------------------------
@@ -409,10 +410,11 @@ function apiV3SummaryToPharos(summary: ApiV3TraceSummary): PharosTraceSummary | 
     traceId,
     rootService: summary.rootServiceName || '',
     rootOperation,
-    // Lightweight summaries have no span tags, so interface falls back to the operation name
-    // and type stays empty (the table renders —).
+    // This mapper has no span tags (operation name only). Pharos list does not
+    // use it — `searchTraceSummaries` maps via `traceResponseToSummary` so
+    // `rootType` can come from tags. Do not guess MQ from a bare `process`.
     rootInterface: rootOperation,
-    rootType: '',
+    rootType: resolveRootType(undefined, rootOperation),
     startTimeUs,
     durationUs: Math.max(endTimeUs - startTimeUs, 0),
     spanCount: summary.spanCount || 0,

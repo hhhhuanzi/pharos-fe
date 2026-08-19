@@ -14,6 +14,7 @@
 
 import * as React from 'react';
 
+import { acceptMeasuredHeight, getListViewWindow, getScrollParent, resolveDrawnRange } from '@/dh/trace/waterfall/listViewWindow';
 import Positions from './Positions';
 import { TNil } from '../../types';
 
@@ -151,6 +152,9 @@ export default class ListView extends React.Component<TListViewProps> {
   _htmlTopOffset: number;
   _windowScrollListenerAdded: boolean;
   _htmlElm: HTMLElement;
+  /** Overflow parent when `windowScroller` is true (PageLayout pane, not `window`). */
+  _scrollParent: HTMLElement | TNil;
+  _scrollListenerTarget: HTMLElement | Window | TNil;
   /**
    * HTMLElement holding the scroller.
    */
@@ -185,18 +189,15 @@ export default class ListView extends React.Component<TListViewProps> {
     this._windowScrollListenerAdded = false;
     // _htmlElm is only relevant if props.windowScroller is true
     this._htmlElm = document.documentElement as any;
+    this._scrollParent = undefined;
+    this._scrollListenerTarget = undefined;
     this._wrapperElm = undefined;
     this._itemHolderElm = undefined;
   }
 
   componentDidMount() {
     if (this.props.windowScroller) {
-      if (this._wrapperElm) {
-        const { top } = this._wrapperElm.getBoundingClientRect();
-        this._htmlTopOffset = top + this._htmlElm.scrollTop;
-      }
-      window.addEventListener('scroll', this._onScroll);
-      this._windowScrollListenerAdded = true;
+      this._bindWindowScroller();
     }
   }
 
@@ -207,10 +208,34 @@ export default class ListView extends React.Component<TListViewProps> {
   }
 
   componentWillUnmount() {
-    if (this._windowScrollListenerAdded) {
-      window.removeEventListener('scroll', this._onScroll);
-    }
+    this._unbindWindowScroller();
   }
+
+  _bindWindowScroller = () => {
+    if (this._windowScrollListenerAdded || !this._wrapperElm) {
+      return;
+    }
+    this._scrollParent = getScrollParent(this._wrapperElm);
+    const parent = this._scrollParent;
+    const target: HTMLElement | Window = parent === document.documentElement || parent === document.body ? window : parent;
+    target.addEventListener('scroll', this._onScroll, { passive: true });
+    window.addEventListener('resize', this._onScroll);
+    this._scrollListenerTarget = target;
+    this._windowScrollListenerAdded = true;
+  };
+
+  _unbindWindowScroller = () => {
+    if (!this._windowScrollListenerAdded) {
+      return;
+    }
+    if (this._scrollListenerTarget) {
+      this._scrollListenerTarget.removeEventListener('scroll', this._onScroll);
+    }
+    window.removeEventListener('scroll', this._onScroll);
+    window.removeEventListener('resize', this._onScroll);
+    this._windowScrollListenerAdded = false;
+    this._scrollListenerTarget = undefined;
+  };
 
   getViewHeight = () => this._viewHeight;
 
@@ -248,9 +273,13 @@ export default class ListView extends React.Component<TListViewProps> {
     if (!this._wrapperElm) {
       return false;
     }
-    const useRoot = this.props.windowScroller;
-    const clientHeight = useRoot ? this._htmlElm.clientHeight : this._wrapperElm.clientHeight;
-    const scrollTop = useRoot ? this._htmlElm.scrollTop : this._wrapperElm.scrollTop;
+    if (this.props.windowScroller) {
+      const scrollParent = this._scrollParent || getScrollParent(this._wrapperElm);
+      const { viewHeight, scrollTop } = getListViewWindow(this._wrapperElm, scrollParent);
+      return viewHeight !== this._viewHeight || scrollTop !== this._scrollTop;
+    }
+    const clientHeight = this._wrapperElm.clientHeight;
+    const scrollTop = this._wrapperElm.scrollTop;
     return clientHeight !== this._viewHeight || scrollTop !== this._scrollTop;
   }
 
@@ -258,24 +287,31 @@ export default class ListView extends React.Component<TListViewProps> {
    * Recalculate _startIndex and _endIndex, e.g. which items are in view.
    */
   _calcViewIndexes() {
-    const useRoot = this.props.windowScroller;
-    // funky if statement is to satisfy flow
-    if (!useRoot) {
-      /* istanbul ignore next */
+    if (this.props.windowScroller) {
       if (!this._wrapperElm) {
         this._viewHeight = -1;
         this._startIndex = 0;
         this._endIndex = 0;
         return;
       }
+      if (!this._scrollParent) {
+        this._scrollParent = getScrollParent(this._wrapperElm);
+      }
+      const { viewHeight, scrollTop } = getListViewWindow(this._wrapperElm, this._scrollParent);
+      this._viewHeight = viewHeight;
+      this._scrollTop = scrollTop;
+    } else if (!this._wrapperElm) {
+      /* istanbul ignore next */
+      this._viewHeight = -1;
+      this._startIndex = 0;
+      this._endIndex = 0;
+      return;
+    } else {
       this._viewHeight = this._wrapperElm.clientHeight;
       this._scrollTop = this._wrapperElm.scrollTop;
-    } else {
-      this._viewHeight = window.innerHeight - this._htmlTopOffset;
-      this._scrollTop = window.scrollY;
     }
-    const yStart = this._scrollTop;
-    const yEnd = this._scrollTop + this._viewHeight;
+    const yStart = Math.max(0, this._scrollTop);
+    const yEnd = Math.max(0, this._scrollTop + this._viewHeight);
     this._startIndex = this._yPositions.findFloorIndex(yStart, this._getHeight);
     this._endIndex = this._yPositions.findFloorIndex(yEnd, this._getHeight);
   }
@@ -302,6 +338,8 @@ export default class ListView extends React.Component<TListViewProps> {
     this._wrapperElm = elm;
     if (!this.props.windowScroller && elm) {
       this._viewHeight = elm.clientHeight;
+    } else if (this.props.windowScroller && elm && !this._windowScrollListenerAdded) {
+      this._bindWindowScroller();
     }
   };
 
@@ -342,7 +380,10 @@ export default class ListView extends React.Component<TListViewProps> {
       // (likely not transferable to other contexts, and instead is specific to
       // how we have the items rendered)
       const measureSrc: Element = node.firstElementChild || node;
-      const observed = measureSrc.clientHeight;
+      const observed = acceptMeasuredHeight(measureSrc.clientHeight) ?? acceptMeasuredHeight(node.clientHeight);
+      if (observed == null) {
+        continue;
+      }
       const known = this._knownHeights.get(itemKey);
       if (observed !== known) {
         this._knownHeights.set(itemKey, observed);
@@ -383,36 +424,28 @@ export default class ListView extends React.Component<TListViewProps> {
     const { dataLength, getKeyFromIndex, initialDraw = DEFAULT_INITIAL_DRAW, itemRenderer, viewBuffer, viewBufferMin } = this.props;
     const heightGetter = this._getHeight;
     const items: React.ReactNode[] = [];
-    let start;
-    let end;
 
     this._yPositions.profileData(dataLength);
 
-    if (!this._wrapperElm) {
-      start = 0;
-      end = (initialDraw < dataLength ? initialDraw : dataLength) - 1;
-    } else {
-      if (this._isViewChanged()) {
-        this._calcViewIndexes();
-      }
-      const maxStart = viewBufferMin > this._startIndex ? 0 : this._startIndex - viewBufferMin;
-      const minEnd = viewBufferMin < dataLength - this._endIndex ? this._endIndex + viewBufferMin : dataLength - 1;
-      if (maxStart < this._startIndexDrawn || minEnd > this._endIndexDrawn) {
-        start = viewBuffer > this._startIndex ? 0 : this._startIndex - viewBuffer;
-        end = this._endIndex + viewBuffer;
-        if (end >= dataLength) {
-          end = dataLength - 1;
-        }
-      } else {
-        start = this._startIndexDrawn;
-        end = this._endIndexDrawn > dataLength - 1 ? dataLength - 1 : this._endIndexDrawn;
-      }
+    if (this._wrapperElm && this._isViewChanged()) {
+      this._calcViewIndexes();
     }
+    const { start, end } = resolveDrawnRange({
+      hasWrapper: Boolean(this._wrapperElm),
+      viewHeight: this._viewHeight,
+      startIndex: this._startIndex,
+      endIndex: this._endIndex,
+      startIndexDrawn: this._startIndexDrawn,
+      endIndexDrawn: this._endIndexDrawn,
+      viewBuffer,
+      viewBufferMin,
+      dataLength,
+      initialDraw,
+    });
 
     this._yPositions.calcHeights(end, heightGetter, start || -1);
     this._startIndexDrawn = start;
     this._endIndexDrawn = end;
-    items.length = end - start + 1;
     for (let i = start; i <= end; i++) {
       const { y: top, height } = this._yPositions.getRowPosition(i, heightGetter);
       const style = {

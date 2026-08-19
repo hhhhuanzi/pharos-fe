@@ -1,15 +1,19 @@
 import type { TraceKeyValuePair, TraceSpanData } from '@/pages/traceCpt/type';
 
 /** HTTP method tags (OTel semconv + older Jaeger). */
-const HTTP_METHOD_KEYS = ['http.method', 'http.request.method'] as const;
+export const HTTP_METHOD_KEYS = ['http.method', 'http.request.method'] as const;
 /** Path / URL tags. Prefer route/path over a full URL. */
 const HTTP_PATH_KEYS = ['http.route', 'http.target', 'url.path', 'http.path', 'url', 'http.url', 'url.full'] as const;
-const HTTP_HINT_KEYS = ['http.scheme', 'http.status_code', 'http.response.status_code'] as const;
+export const HTTP_STATUS_KEYS = ['http.status_code', 'http.response.status_code'] as const;
 /** OTel `db.system` / older Jaeger+SkyWalking `db.type`. */
-const DB_SYSTEM_KEYS = ['db.system', 'db.type'] as const;
+export const DB_SYSTEM_KEYS = ['db.system', 'db.type'] as const;
+export const RPC_SYSTEM_KEYS = ['rpc.system'] as const;
+/** OTel `messaging.system` (rabbitmq / kafka / …). */
+export const MESSAGING_SYSTEM_KEYS = ['messaging.system'] as const;
 const SQL_KEYS = ['db.statement', 'db.query.text', 'sql'] as const;
 
-function tagValue(tags: TraceKeyValuePair[] | undefined, keys: readonly string[]): string {
+/** First non-empty tag among `keys`. Idempotent; does not mutate `tags`. */
+export function tagValue(tags: TraceKeyValuePair[] | undefined, keys: readonly string[]): string {
   if (!tags || tags.length === 0) return '';
   for (const key of keys) {
     const hit = tags.find((tag) => tag.key === key);
@@ -30,48 +34,6 @@ function extractPath(raw: string): string {
     }
   }
   return raw;
-}
-
-/**
- * SkyWalking `layer` is a protocol class (HTTP / Database / Cache / MQ / RPCFramework).
- * Map only the values that correspond to the short labels the table shows; unknown layers
- * stay as the raw lowercased field so we do not invent a type.
- */
-function mapSkyWalkingLayer(layer: string): string {
-  const normalized = layer.trim().toUpperCase();
-  if (normalized === 'HTTP') return 'web';
-  if (normalized === 'DATABASE') return 'database';
-  if (normalized === 'CACHE') return 'cache';
-  if (normalized === 'MQ') return 'mq';
-  if (normalized === 'RPCFRAMEWORK' || normalized === 'RPC') return 'rpc';
-  if (normalized === 'UNKNOWN' || normalized === 'UNRECOGNIZED' || normalized === '') return '';
-  return layer.trim().toLowerCase();
-}
-
-/**
- * Short type label for the list row, taken from the root span only.
- * Priority: `db.system`/`db.type` → HTTP evidence (incl. SkyWalking `layer=HTTP`) → `component` → other layers.
- * `span.kind` is not a protocol (server/client) and is never used. Empty when nothing reliable exists.
- */
-export function resolveRootType(tags: TraceKeyValuePair[] | undefined): string {
-  const dbSystem = tagValue(tags, DB_SYSTEM_KEYS);
-  if (dbSystem) return dbSystem.toLowerCase();
-
-  const method = tagValue(tags, HTTP_METHOD_KEYS);
-  const path = tagValue(tags, HTTP_PATH_KEYS);
-  const httpHint = tagValue(tags, HTTP_HINT_KEYS);
-  const layer = tagValue(tags, ['layer']);
-  if (method || path || httpHint || layer.trim().toUpperCase() === 'HTTP') return 'web';
-
-  const component = tagValue(tags, ['component']);
-  if (component) return component.toLowerCase();
-
-  if (layer) {
-    const mapped = mapSkyWalkingLayer(layer);
-    if (mapped) return mapped;
-  }
-
-  return '';
 }
 
 /**

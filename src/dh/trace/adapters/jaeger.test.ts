@@ -7,6 +7,7 @@ import {
   getJaegerDependencies,
 } from './jaeger';
 import { transformTraceData } from '@/pages/traceCpt/utils';
+import { traceResponseToSummary } from '../contract';
 import { TraceSearchParams, TraceByIdParams } from '../types';
 
 jest.mock('@/utils/constant', () => ({ N9E_PATHNAME: 'n9e' }));
@@ -130,6 +131,69 @@ describe('jaeger adapter (api_v3)', () => {
       const traceA = result.find((t) => t.traceID === 'aaaa000000000000000000000000aa')!;
       expect(traceA.spans[0].operationName).toBe('root-a');
       expect(Object.values(traceA.processes)[0].serviceName).toBe('svc-a');
+    });
+
+    it('maps a search root with messaging.system into Pharos summary.rootType=mq', async () => {
+      mockRequest.mockResolvedValue({
+        result: {
+          resourceSpans: [
+            {
+              resource: { attributes: [{ key: 'service.name', value: { stringValue: 'rome-sec-index' } }] },
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'aaaa000000000000000000000000aa',
+                      spanId: '1000000000000001',
+                      name: 'process',
+                      kind: 5,
+                      startTimeUnixNano: '1700000000000000000',
+                      endTimeUnixNano: '1700000000100000000',
+                      attributes: [{ key: 'messaging.system', value: { stringValue: 'rabbitmq' } }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
+      const [trace] = await searchJaegerTraces(baseParams);
+      expect(traceResponseToSummary(trace)).toMatchObject({
+        rootType: 'mq',
+        rootOperation: 'process',
+        rootService: 'rome-sec-index',
+      });
+    });
+
+    it('leaves Pharos summary.rootType empty for operation=process without tags', async () => {
+      mockRequest.mockResolvedValue({
+        result: {
+          resourceSpans: [
+            {
+              resource: { attributes: [{ key: 'service.name', value: { stringValue: 'rome-sec-index' } }] },
+              scopeSpans: [
+                {
+                  spans: [
+                    {
+                      traceId: 'bbbb000000000000000000000000bb',
+                      spanId: '2000000000000002',
+                      name: 'process',
+                      startTimeUnixNano: '1700000000000000000',
+                      endTimeUnixNano: '1700000000100000000',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      });
+      const [trace] = await searchJaegerTraces(baseParams);
+      expect(traceResponseToSummary(trace)).toMatchObject({
+        rootType: '',
+        rootOperation: 'process',
+      });
     });
 
     it('returns [] (not an error) when the gateway 404s with "No traces found"', async () => {
@@ -298,7 +362,7 @@ describe('jaeger adapter (api_v3)', () => {
           rootService: 'gateway',
           rootOperation: 'GET /orders',
           rootInterface: 'GET /orders',
-          rootType: '',
+          rootType: 'web',
           startTimeUs: 1700000000000000,
           durationUs: 500000,
           spanCount: 3,
@@ -310,6 +374,62 @@ describe('jaeger adapter (api_v3)', () => {
           ],
         },
       ]);
+    });
+
+    it('infers SQL from SELECT, WEB from bare GET/POST, Internal from generated roots, and leaves opaque names empty', async () => {
+      mockRequest.mockResolvedValue({
+        result: {
+          summaries: [
+            {
+              traceId: 'bb',
+              rootServiceName: 'db',
+              rootOperationName: 'SELECT 1',
+              minStartTimeUnixNano: '1700000000000000000',
+              maxEndTimeUnixNano: '1700000000001000000',
+              spanCount: 1,
+            },
+            {
+              traceId: 'cc',
+              rootServiceName: 'worker',
+              rootOperationName: 'internal-op',
+              minStartTimeUnixNano: '1700000000000000000',
+              maxEndTimeUnixNano: '1700000000002000000',
+              spanCount: 1,
+            },
+            {
+              traceId: 'dd',
+              rootServiceName: 'rome-sec-admin',
+              rootOperationName: 'POST',
+              minStartTimeUnixNano: '1700000000000000000',
+              maxEndTimeUnixNano: '1700000000029540000',
+              spanCount: 1,
+            },
+            {
+              traceId: 'ee',
+              rootServiceName: 'gateway',
+              rootOperationName: 'GET',
+              minStartTimeUnixNano: '1700000000000000000',
+              maxEndTimeUnixNano: '1700000000003000000',
+              spanCount: 1,
+            },
+            {
+              traceId: 'ff',
+              rootServiceName: 'worker',
+              rootOperationName: 'Worker$$Lambda.run',
+              minStartTimeUnixNano: '1700000000000000000',
+              maxEndTimeUnixNano: '1700000000004000000',
+              spanCount: 2,
+            },
+          ],
+        },
+      });
+      const result = await findJaegerTraceSummaries(baseParams);
+      expect(result?.[0]).toMatchObject({ rootType: 'sql', rootInterface: 'SELECT 1' });
+      expect(result?.[1]).toMatchObject({ rootType: '', rootInterface: 'internal-op' });
+      // Summaries have no tags, so Nacos cannot be distinguished; bare POST/GET is WEB.
+      expect(result?.[2]).toMatchObject({ rootType: 'web', rootInterface: 'POST' });
+      expect(result?.[3]).toMatchObject({ rootType: 'web', rootInterface: 'GET' });
+      expect(result?.[4]).toMatchObject({ rootType: 'internal', rootInterface: 'Worker$$Lambda.run' });
     });
 
     it('returns [] when the endpoint exists but no traces match', async () => {

@@ -18,7 +18,7 @@ const zh_HK = {
     duration_axis: '耗時',
     time_axis: '時間',
   },
-  title: '即時查詢',
+  title: '鏈路追蹤',
   dependencies: '拓撲分析',
   mode: {
     id: 'Trace ID 查詢',
@@ -42,7 +42,7 @@ const zh_HK = {
     `,
   time: '時間區間',
   duration_max: '最大耗時',
-  duration_min: '最小耗時',
+  duration_min: '耗時大於',
   num_traces: '顯示結果數',
   load_more: '載入更多',
   query: '查詢',
