@@ -6,11 +6,12 @@ import moment from 'moment';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
-import { IRawTimeRange, timeRangeUnix } from '@/components/TimeRangePicker';
+import TimeRangePicker, { getDefaultValue, timeRangeUnix } from '@/components/TimeRangePicker';
 import {
   buildEventCenterPath,
   countEventsByType,
   fetchServiceEvents,
+  filterEventsByKeyword,
   filterEventsByType,
   formatEventObject,
   type K8sEvent,
@@ -18,13 +19,15 @@ import {
 } from '@/dh/service';
 import EventTimeline, { TIMELINE_LIMIT } from '@/pages/events/components/EventTimeline';
 
+import EventKeywordSearch from '@/pages/events/components/EventKeywordSearch';
+
 import { NS } from '../constants';
 import { formatCount } from '../format';
+import { EVENTS_RANGE_LS } from '../storage';
 
 interface Props {
   service: string;
   promId?: number;
-  range: IRawTimeRange;
   clusters: string[];
   namespaces: string[];
 }
@@ -39,13 +42,15 @@ function typeClass(type: K8sEvent['type']): string {
 }
 
 export default function Events(props: Props) {
-  const { service, promId, range, clusters, namespaces } = props;
+  const { service, promId, clusters, namespaces } = props;
   const { t } = useTranslation(NS);
   const [events, setEvents] = useState<K8sEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [typeFilter, setTypeFilter] = useState<K8sEventTypeFilter>('all');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [keyword, setKeyword] = useState('');
+  const [range, setRange] = useState(() => getDefaultValue(EVENTS_RANGE_LS, { start: 'now-1h', end: 'now' }) || { start: 'now-1h', end: 'now' });
   const requestSeq = useRef(0);
 
   useEffect(() => {
@@ -76,7 +81,7 @@ export default function Events(props: Props) {
       });
   }, [service, promId, range, clusters.join('\0'), namespaces.join('\0'), refreshKey]);
 
-  const visible = useMemo(() => filterEventsByType(events, typeFilter), [events, typeFilter]);
+  const visible = useMemo(() => filterEventsByKeyword(filterEventsByType(events, typeFilter), keyword), [events, typeFilter, keyword]);
   const counts = useMemo(() => countEventsByType(events), [events]);
 
   const columns: ColumnsType<K8sEvent> = useMemo(
@@ -161,6 +166,8 @@ export default function Events(props: Props) {
     <div className='flex flex-col gap-4'>
       <div className='flex flex-wrap items-center justify-between gap-y-2 rounded-lg bg-fc-100 p-4 fc-border'>
         <Space wrap>
+          <TimeRangePicker localKey={EVENTS_RANGE_LS} value={range} onChange={(val) => val && setRange(val)} dateFormat='YYYY-MM-DD HH:mm:ss' />
+          <EventKeywordSearch value={keyword} onChange={setKeyword} placeholder={t('events.search_placeholder')} />
           <Radio.Group value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} buttonStyle='solid'>
             <Radio.Button value='all'>{t('events.type_all')}</Radio.Button>
             <Radio.Button value='warning'>{t('events.type_warning')}</Radio.Button>

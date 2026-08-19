@@ -10,12 +10,14 @@ import {
   classifyPodEvent,
   countEventsByType,
   filterEventsByCategory,
+  filterEventsByKeyword,
   filterEventsByType,
   formatEventObject,
   lastSeenFromValues,
   mergeServiceEvents,
   samplesToEvents,
   sortEvents,
+  summarizeEventHealth,
   summarizePodEvents,
   type K8sEvent,
 } from './events';
@@ -38,9 +40,7 @@ describe('buildServiceNameRegex', () => {
 describe('buildEventerMatcher / buildEventerQueries', () => {
   it('always filters by service name and adds cluster / namespace when known', () => {
     expect(buildEventerMatcher({ service: 'order' })).toBe('{name=~"^order(-[a-z0-9]+)*$"}');
-    expect(buildEventerMatcher({ service: 'order', clusters: ['prod'], namespaces: ['pay', 'core'] })).toBe(
-      '{name=~"^order(-[a-z0-9]+)*$",namespace=~"pay|core",cluster=~"prod"}',
-    );
+    expect(buildEventerMatcher({ service: 'order', clusters: ['prod'], namespaces: ['pay', 'core'] })).toBe('{name=~"^order(-[a-z0-9]+)*$",namespace=~"pay|core",cluster=~"prod"}');
   });
 
   it('uses the n9e dashboard eventer counters', () => {
@@ -130,19 +130,33 @@ describe('buildGlobalEventerMatcher / buildGlobalEventerQueries', () => {
 });
 
 describe('classifyPodEvent / summarizePodEvents / filterEventsByCategory', () => {
-  it('classifies well-known pod reasons and ignores other kinds', () => {
+  it('classifies well-known reasons; specific buckets beat crash / pending', () => {
     expect(classifyPodEvent({ kind: 'Pod', reason: 'Killing' })).toBe('restart');
     expect(classifyPodEvent({ kind: 'Pod', reason: 'BackOff' })).toBe('crash');
     expect(classifyPodEvent({ kind: 'Pod', reason: 'FailedScheduling' })).toBe('pending');
+    expect(classifyPodEvent({ kind: 'Pod', reason: 'OOMKilling' })).toBe('oom');
+    expect(classifyPodEvent({ kind: 'Pod', reason: 'Unhealthy' })).toBe('probe');
+    expect(classifyPodEvent({ kind: 'Pod', reason: 'ImagePullBackOff' })).toBe('image_pull');
+    expect(classifyPodEvent({ kind: 'Pod', reason: 'Evicted' })).toBe('evicted');
+    expect(classifyPodEvent({ kind: 'Pod', reason: 'FailedMount' })).toBe('volume');
+    expect(classifyPodEvent({ kind: 'Node', reason: 'NodeNotReady' })).toBe('node_not_ready');
     expect(classifyPodEvent({ kind: 'Deployment', reason: 'Killing' })).toBeUndefined();
     expect(classifyPodEvent({ kind: 'Pod', reason: 'Pulled' })).toBeUndefined();
   });
 
-  it('counts occurrences and distinct pods; missing collection stays 0', () => {
+  it('counts occurrences and distinct objects; missing collection stays 0', () => {
+    const empty = { events: 0, occurrences: 0, pods: 0 };
     expect(summarizePodEvents([])).toEqual({
-      restart: { events: 0, occurrences: 0, pods: 0 },
-      crash: { events: 0, occurrences: 0, pods: 0 },
-      pending: { events: 0, occurrences: 0, pods: 0 },
+      restart: empty,
+      crash: empty,
+      pending: empty,
+      oom: empty,
+      evicted: empty,
+      image_pull: empty,
+      probe: empty,
+      volume: empty,
+      node_not_ready: empty,
+      health: { warning: 0, normal: 0, warningRows: 0, normalRows: 0, namespaces: 0, pods: 0 },
     });
 
     const events = [
@@ -151,15 +165,46 @@ describe('classifyPodEvent / summarizePodEvents / filterEventsByCategory', () =>
       { id: '3', type: 'warning', reason: 'BackOff', kind: 'Pod', name: 'order-2', namespace: 'pay', count: 5 },
       { id: '4', type: 'warning', reason: 'FailedScheduling', kind: 'Pod', name: 'order-3', namespace: 'core', count: 1 },
       { id: '5', type: 'normal', reason: 'Pulled', kind: 'Pod', name: 'order-1', count: 3 },
+      { id: '6', type: 'warning', reason: 'OOMKilling', kind: 'Pod', name: 'order-4', namespace: 'pay', count: 1 },
     ] as const satisfies readonly K8sEvent[];
 
-    expect(summarizePodEvents(events)).toEqual({
-      restart: { events: 2, occurrences: 4, pods: 1 },
-      crash: { events: 1, occurrences: 5, pods: 1 },
-      pending: { events: 1, occurrences: 1, pods: 1 },
-    });
+    const stats = summarizePodEvents(events);
+    expect(stats.restart).toEqual({ events: 2, occurrences: 4, pods: 1 });
+    expect(stats.crash).toEqual({ events: 1, occurrences: 5, pods: 1 });
+    expect(stats.pending).toEqual({ events: 1, occurrences: 1, pods: 1 });
+    expect(stats.oom).toEqual({ events: 1, occurrences: 1, pods: 1 });
+    expect(stats.health).toEqual({ warning: 7, normal: 7, warningRows: 3, normalRows: 3, namespaces: 2, pods: 5 });
     expect(filterEventsByCategory(events, 'crash')).toHaveLength(1);
-    expect(filterEventsByCategory(events, 'all')).toHaveLength(5);
+    expect(filterEventsByCategory(events, 'oom')).toHaveLength(1);
+    expect(filterEventsByCategory(events, 'all')).toHaveLength(6);
+  });
+});
+
+describe('filterEventsByKeyword / summarizeEventHealth', () => {
+  const events = [
+    { id: '1', type: 'warning', reason: 'BackOff', kind: 'Pod', name: 'order-1', namespace: 'pay', cluster: 'prod', count: 2 },
+    { id: '2', type: 'normal', reason: 'Pulled', kind: 'Pod', name: 'checkout-2', namespace: 'core', count: 1 },
+  ] as const satisfies readonly K8sEvent[];
+
+  it('matches reason / object / namespace / service-like name on already-loaded rows', () => {
+    expect(filterEventsByKeyword(events, 'backoff')).toHaveLength(1);
+    expect(filterEventsByKeyword(events, 'Pod/order-1')).toHaveLength(1);
+    expect(filterEventsByKeyword(events, 'core')).toHaveLength(1);
+    expect(filterEventsByKeyword(events, 'checkout')).toHaveLength(1);
+    expect(filterEventsByKeyword(events, 'prod')).toHaveLength(1);
+    expect(filterEventsByKeyword(events, 'missing-message-body')).toHaveLength(0);
+    expect(filterEventsByKeyword(events, '  ')).toHaveLength(2);
+  });
+
+  it('sums warning / normal occurrences and distinct namespaces / pods', () => {
+    expect(summarizeEventHealth(events)).toEqual({
+      warning: 2,
+      normal: 1,
+      warningRows: 1,
+      normalRows: 1,
+      namespaces: 2,
+      pods: 2,
+    });
   });
 });
 

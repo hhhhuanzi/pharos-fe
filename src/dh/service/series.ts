@@ -1,6 +1,6 @@
 import { SERVICE_GRAPH_METRICS, toPromRange } from '@/dh/trace/dependencies/promql';
 
-import { buildServerRegexMatcher } from './red';
+import { buildServerRegexMatcher, pickServiceName } from './red';
 
 export interface PromMatrixSample {
   metric: Record<string, string>;
@@ -34,7 +34,7 @@ export function buildTopSeriesQueries(services: string[], window: string) {
 export function matrixToSeries(samples: PromMatrixSample[]): NamedSeries[] {
   return samples
     .map((sample) => ({
-      name: (sample.metric?.server || '').trim(),
+      name: pickServiceName(sample.metric),
       points: (sample.values || [])
         .map(([ts, value]) => [Number(ts), Number(value)] as [number, number])
         .filter(([, value]) => Number.isFinite(value)),

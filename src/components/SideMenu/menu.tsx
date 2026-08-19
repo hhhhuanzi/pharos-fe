@@ -34,6 +34,20 @@ export const getMenuList = (embeddedProductMenu: MenuItem[] = [], hideDeprecated
           label: 'menu.service',
         },
         {
+          key: 'dashboards',
+          label: 'menu.dashboards',
+          type: 'tabs',
+          children: [{ key: '/dashboards', label: 'menu.dashboards' }],
+        },
+        {
+          key: '/log/explorer',
+          label: 'menu.logs_explorer',
+        },
+        {
+          key: '/trace/explorer',
+          label: 'menu.traces',
+        },
+        {
           key: '/event-center',
           label: 'menu.event_center',
         },
@@ -47,20 +61,6 @@ export const getMenuList = (embeddedProductMenu: MenuItem[] = [], hideDeprecated
             { key: '/object/explorer', label: 'menu.object_explorer' },
             { key: '/recording-rules', label: 'menu.recording_rules' },
           ],
-        },
-        {
-          key: '/log/explorer',
-          label: 'menu.logs_explorer',
-        },
-        {
-          key: '/trace/explorer',
-          label: 'menu.traces',
-        },
-        {
-          key: 'dashboards',
-          label: 'menu.dashboards',
-          type: 'tabs',
-          children: [{ key: '/dashboards', label: 'menu.dashboards' }],
         },
       ],
     },

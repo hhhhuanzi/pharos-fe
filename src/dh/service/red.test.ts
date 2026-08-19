@@ -1,11 +1,19 @@
 import { SERVICE_GRAPH_METRICS } from '@/dh/trace/dependencies/promql';
 
-import { buildCatalogRedQueries, buildServiceRedQueries, buildServerRegexMatcher, escapePromLabel, extractAssociation, extractLanguages, firstFiniteSample, mergeServiceRed, sumSampleValues } from './red';
+import { buildCatalogRedQueries, buildServiceRedQueries, buildServerRegexMatcher, escapePromLabel, extractAssociation, extractLanguages, firstFiniteSample, mergeServiceRed, pickServiceName, sumSampleValues } from './red';
 import type { PromVectorSample } from '@/dh/trace/dependencies/promql';
 
 function sample(metric: Record<string, string>, value: string): PromVectorSample {
   return { metric, value: [1_700_000_000, value] };
 }
+
+describe('pickServiceName', () => {
+  it('prefers service_name over service / server', () => {
+    expect(pickServiceName({ service_name: 'order', service: 'x', server: 'y' })).toBe('order');
+    expect(pickServiceName({ server: 'graph-only' })).toBe('graph-only');
+    expect(pickServiceName({})).toBe('');
+  });
+});
 
 describe('escapePromLabel', () => {
   it('escapes backslash and quotes for Prom matchers', () => {
@@ -79,6 +87,7 @@ describe('extractLanguages / buildCatalogRedQueries / buildServerRegexMatcher', 
 
   it('builds a quoted regex matcher for several servers', () => {
     expect(buildServerRegexMatcher(['order', 'a.b'])).toBe('{server=~"order|a\\\\.b"}');
+    expect(buildServerRegexMatcher(['order'], 'service_name')).toBe('{service_name=~"order"}');
   });
 });
 

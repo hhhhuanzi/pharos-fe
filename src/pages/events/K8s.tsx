@@ -8,8 +8,17 @@ import { useHistory, useLocation } from 'react-router-dom';
 import { CommonStateContext } from '@/App';
 import PageLayout from '@/components/pageLayout';
 import TimeRangePicker, { getDefaultValue, IRawTimeRange } from '@/components/TimeRangePicker';
-import { buildEventCenterPath, filterEventsByCategory, parseServiceIdentity, summarizePodEvents, type PodEventCategory } from '@/dh/service';
+import {
+  K8S_EVENT_CATEGORIES,
+  buildEventCenterPath,
+  filterEventsByCategory,
+  filterEventsByKeyword,
+  parseServiceIdentity,
+  summarizePodEvents,
+  type PodEventCategory,
+} from '@/dh/service';
 
+import EventKeywordSearch from './components/EventKeywordSearch';
 import EventTable from './components/EventTable';
 import EventTimeline, { TIMELINE_LIMIT } from './components/EventTimeline';
 import PodStatsCards from './components/PodStatsCards';
@@ -31,6 +40,7 @@ export default function EventCenterK8sPage() {
   const [range, setRange] = useState<IRawTimeRange>(() => getDefaultValue(RANGE_LS, { start: 'now-1h', end: 'now' }) || { start: 'now-1h', end: 'now' });
   const [refreshKey, setRefreshKey] = useState(0);
   const [category, setCategory] = useState<CategoryFilter>('all');
+  const [keyword, setKeyword] = useState('');
 
   const query = useMemo(
     () => ({
@@ -43,7 +53,7 @@ export default function EventCenterK8sPage() {
 
   const { events, loading, failed } = useEventerEvents(promId, range, query, refreshKey);
   const stats = useMemo(() => summarizePodEvents(events), [events]);
-  const visible = useMemo(() => filterEventsByCategory(events, category), [events, category]);
+  const visible = useMemo(() => filterEventsByKeyword(filterEventsByCategory(events, category), keyword), [events, category, keyword]);
   const emptyDescription = !promId ? t('empty.no_prometheus') : failed ? t('empty.load_failed') : t('empty.k8s');
 
   const tableLabels = useMemo(
@@ -80,11 +90,14 @@ export default function EventCenterK8sPage() {
         <div className='flex flex-wrap items-center justify-between gap-y-2 rounded-lg bg-fc-100 p-4 fc-border'>
           <Space wrap>
             <TimeRangePicker localKey={RANGE_LS} value={range} onChange={(val) => val && setRange(val)} dateFormat='YYYY-MM-DD HH:mm:ss' />
+            <EventKeywordSearch value={keyword} onChange={setKeyword} placeholder={t('search.placeholder')} />
             <Radio.Group value={category} onChange={(e) => setCategory(e.target.value)} buttonStyle='solid'>
               <Radio.Button value='all'>{t('category.all')}</Radio.Button>
-              <Radio.Button value='restart'>{t('category.restart')}</Radio.Button>
-              <Radio.Button value='crash'>{t('category.crash')}</Radio.Button>
-              <Radio.Button value='pending'>{t('category.pending')}</Radio.Button>
+              {K8S_EVENT_CATEGORIES.map((key) => (
+                <Radio.Button key={key} value={key}>
+                  {t(`category.${key}`)}
+                </Radio.Button>
+              ))}
             </Radio.Group>
             <Tooltip title={t('refresh')}>
               <Button icon={<ReloadOutlined />} onClick={() => setRefreshKey((n) => n + 1)} />

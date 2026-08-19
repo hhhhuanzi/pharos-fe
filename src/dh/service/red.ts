@@ -28,6 +28,17 @@ export interface ServiceOverviewResult {
   empty: boolean;
 }
 
+export const SERVICE_NAME_LABEL_KEYS = ['service_name', 'service', 'server'] as const;
+
+export function pickServiceName(metric: Record<string, string> | undefined): string {
+  if (!metric) return '';
+  for (const key of SERVICE_NAME_LABEL_KEYS) {
+    const value = metric[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
 export function escapePromLabel(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
@@ -56,9 +67,9 @@ export function escapePromRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function buildServerRegexMatcher(services: string[]): string {
+export function buildServerRegexMatcher(services: string[], label = 'server'): string {
   const regex = services.map(escapePromRegex).join('|');
-  return `{server=~"${escapePromLabel(regex)}"}`;
+  return `{${label}=~"${escapePromLabel(regex)}"}`;
 }
 
 function sampleValue(sample: PromVectorSample): number {

@@ -1,5 +1,5 @@
 const zh_HK = {
-  title: '監控儀表盤',
+  title: '監控大盤',
   list: '儀表盤列表',
   back_icon_tip: '返回上一頁，沒有上一頁則返回儀表盤列表',
   back_icon_tip_is_built_in: '返回上一頁，沒有上一頁則返回模板中心',

@@ -1,5 +1,7 @@
 export const PROM_LS = 'n9e-dh-service-graph-prom-id';
 export const RANGE_LS = 'n9e-dh-service-overview-range';
+export const EVENTS_RANGE_LS = 'n9e-dh-service-events-range';
+export const MONITORING_RANGE_LS = 'n9e-dh-service-monitoring-range';
 export const JAEGER_LS = 'n9e-dh-service-jaeger-id';
 export const TOP_N_LS = 'n9e-dh-service-top-n';
 

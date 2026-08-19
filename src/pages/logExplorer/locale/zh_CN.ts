@@ -1,5 +1,5 @@
 const zh_CN = {
-  title: '日志检索',
+  title: '日志分析',
   tab: {
     rename: '重命名',
   },

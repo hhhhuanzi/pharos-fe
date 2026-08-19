@@ -1,6 +1,6 @@
 import type { PromVectorSample } from '@/dh/trace/dependencies/promql';
 
-import { extractAssociation, extractLanguages, formatLanguage, sampleValueSafe, type ServiceAssociation } from './red';
+import { extractAssociation, extractLanguages, formatLanguage, pickServiceName, sampleValueSafe, type ServiceAssociation } from './red';
 
 export interface ServiceRow {
   name: string;
@@ -56,8 +56,8 @@ export function aggregateServiceRows(input: {
 
   const addCount = (samples: PromVectorSample[], field: 'requestCount' | 'failedCount') => {
     samples.forEach((sample) => {
-      const name = sample.metric?.server;
-      const row = ensureRow(byName, name || '');
+      const name = pickServiceName(sample.metric);
+      const row = ensureRow(byName, name);
       if (!row) return;
       const n = sampleValueSafe(sample);
       if (Number.isFinite(n)) {
@@ -71,7 +71,7 @@ export function aggregateServiceRows(input: {
   addCount(input.failed, 'failedCount');
 
   input.p95.forEach((sample) => {
-    const row = ensureRow(byName, sample.metric?.server || '');
+    const row = ensureRow(byName, pickServiceName(sample.metric));
     if (!row) return;
     const n = sampleValueSafe(sample);
     if (Number.isFinite(n)) {
@@ -80,7 +80,7 @@ export function aggregateServiceRows(input: {
     }
   });
   input.p99.forEach((sample) => {
-    const row = ensureRow(byName, sample.metric?.server || '');
+    const row = ensureRow(byName, pickServiceName(sample.metric));
     if (!row) return;
     const n = sampleValueSafe(sample);
     if (Number.isFinite(n)) {
@@ -92,7 +92,7 @@ export function aggregateServiceRows(input: {
   const labeled = [...input.total, ...input.failed];
   const byServerSamples = new Map<string, PromVectorSample[]>();
   labeled.forEach((sample) => {
-    const name = sample.metric?.server?.trim();
+    const name = pickServiceName(sample.metric);
     if (!name) return;
     const list = byServerSamples.get(name) || [];
     list.push(sample);

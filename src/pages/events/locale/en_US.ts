@@ -1,10 +1,13 @@
 const en_US = {
   title: 'Event center',
-  hint: 'Global event center. This release only covers Kubernetes (Prometheus kube-eventer, eventer_events_*). An empty timeline is expected without collectors.',
+  hint: 'Global events. This release only covers Kubernetes (Prometheus kube-eventer, eventer_events_*). An empty timeline is expected without collectors.',
   refresh: 'Refresh',
+  search: {
+    placeholder: 'Search reason / object / namespace / service',
+  },
   k8s: {
     title: 'Kubernetes events',
-    hint: 'Stats count kind=Pod rows whose reason is in the restart / crash / pending sets. 0 is expected without collectors. Counters have no event message.',
+    hint: 'Categories come from kube-eventer reason / kind. 0 is expected without collectors. Counters have no event message.',
   },
   timeline: {
     title: 'Timeline',
@@ -14,12 +17,24 @@ const en_US = {
     title: 'Event dashboard',
     hint: 'This release only covers Kubernetes. Other sources (logs / traces) are not wired; no placeholder data. 0 is expected without collectors.',
     open_k8s: 'Open Kubernetes events',
+    search_placeholder: 'Search sources (Kubernetes / logs / traces)',
+    source_empty: 'No matching sources',
   },
   sources: {
     title: 'Sources',
     hint: 'Other sources (logs / traces) are not wired yet. No placeholder data.',
     k8s: 'Kubernetes',
-    k8s_desc: 'Collected stats for pod restarts / crashes / pending.',
+    k8s_desc: 'Collected stats grouped by Warning event reasons.',
+    logs: 'Logs',
+    logs_desc: 'Not wired yet. Search returns empty; no placeholder data.',
+    traces: 'Traces',
+    traces_desc: 'Not wired yet. Search returns empty; no placeholder data.',
+    unavailable: 'Not connected',
+  },
+  section: {
+    workload: 'Availability / failures',
+    node: 'Cluster / nodes',
+    health: 'Health overview',
   },
   filter: {
     service: 'Filtered by service: {{service}}',
@@ -40,10 +55,24 @@ const en_US = {
     restart: 'Restart',
     crash: 'Crash',
     pending: 'Pending',
+    pending_hint: 'Includes FailedScheduling. kube-eventer has no message, so scheduling cannot be split further.',
+    oom: 'OOMKilled',
+    evicted: 'Evicted',
+    image_pull: 'Image pull failed',
+    probe: 'Probe failed',
+    volume: 'Mount / volume failed',
+    node_not_ready: 'Node not ready',
+  },
+  health: {
+    warning: 'Warning',
+    normal: 'Normal',
+    namespaces: 'Namespaces',
+    pods: 'Pods',
   },
   stats: {
     events: 'Event rows',
     pods: 'Pods',
+    nodes: 'Nodes',
   },
   table: {
     title: 'Event list',

@@ -47,6 +47,17 @@ describe('aggregateServiceRows', () => {
     expect(byName.gateway.p99Seconds).toBeUndefined();
   });
 
+  it('reads service_name from spanmetrics labels', () => {
+    const rows = aggregateServiceRows({
+      total: [sample({ service_name: 'order-api' }, '40')],
+      failed: [],
+      p95: [],
+      p99: [],
+      rangeSeconds: 20,
+    });
+    expect(rows).toMatchObject([{ name: 'order-api', requestCount: 40, qps: 2, hasRed: true }]);
+  });
+
   it('skips series without a server label', () => {
     expect(
       aggregateServiceRows({

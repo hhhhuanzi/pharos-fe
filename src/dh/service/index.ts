@@ -6,3 +6,4 @@ export * from './series';
 export * from './deepLink';
 export * from './events';
 export * from './query';
+export * from './spanmetrics';

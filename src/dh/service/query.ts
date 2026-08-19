@@ -11,8 +11,17 @@ import {
   type ServiceRow,
 } from './list';
 import { buildGlobalEventerQueries, mergeServiceEvents, type GlobalEventQuery, type ServiceEventQuery, type ServiceEventsResult } from './events';
-import { buildCatalogRedQueries, buildServiceRedQueries, mergeServiceRed, toPromRange, type ServiceOverviewResult } from './red';
+import { buildCatalogRedQueries, buildServiceRedQueries, buildServerRegexMatcher, escapePromLabel, mergeServiceRed, toPromRange, type ServiceOverviewResult } from './red';
 import { buildTopSeriesQueries, matrixToSeries, promRangeStep, rateWindow, type NamedSeries, type PromMatrixSample } from './series';
+import {
+  buildSpanmetricsCatalogQueries,
+  buildSpanmetricsServiceQueries,
+  buildSpanmetricsTopQueries,
+  pickSpanmetricsFamily,
+  scaleSampleValues,
+  SPANMETRICS_NAME_REGEX,
+  type SpanmetricsFamily,
+} from './spanmetrics';
 
 async function queryProm(datasourceId: number, query: string, time: number): Promise<PromVectorSample[]> {
   const data = await getPromData(`/api/${N9E_PATHNAME}/proxy/${datasourceId}/api/v1/query`, { query, time });
@@ -26,23 +35,58 @@ async function queryPromRange(datasourceId: number, query: string, start: number
   return Array.isArray(result) ? result : [];
 }
 
-/** Incoming RED for one service from Prometheus `traces_service_graph_*` (as `server`). */
-export async function fetchServiceOverview(datasourceId: number, service: string, startUnix: number, endUnix: number): Promise<ServiceOverviewResult> {
-  const rangeSeconds = Math.max(1, endUnix - startUnix);
-  const queries = buildServiceRedQueries(service, toPromRange(rangeSeconds));
-  const [total, failed, p95, p99] = await Promise.all([
+export type ServiceRedSource = 'spanmetrics' | 'service_graph' | 'none';
+
+async function detectSpanmetricsFamily(datasourceId: number, time: number): Promise<SpanmetricsFamily | undefined> {
+  try {
+    const samples = await queryProm(datasourceId, `count by (__name__) ({__name__=~"${SPANMETRICS_NAME_REGEX}"})`, time);
+    const names = samples.map((sample) => sample.metric?.__name__).filter((name): name is string => Boolean(name));
+    return pickSpanmetricsFamily(names);
+  } catch {
+    return undefined;
+  }
+}
+
+async function queryRedVectors(
+  datasourceId: number,
+  queries: { total: string; failed: string; p95?: string; p99?: string },
+  endUnix: number,
+  durationScale = 1,
+): Promise<{ total: PromVectorSample[]; failed: PromVectorSample[]; p95: PromVectorSample[]; p99: PromVectorSample[] }> {
+  const [total, failed, p95Raw, p99Raw] = await Promise.all([
     queryProm(datasourceId, queries.total, endUnix),
     queryProm(datasourceId, queries.failed, endUnix),
-    queryProm(datasourceId, queries.p95, endUnix),
-    queryProm(datasourceId, queries.p99, endUnix),
+    queries.p95 ? queryProm(datasourceId, queries.p95, endUnix) : Promise.resolve([]),
+    queries.p99 ? queryProm(datasourceId, queries.p99, endUnix) : Promise.resolve([]),
   ]);
-  return mergeServiceRed({ total, failed, p95, p99, rangeSeconds });
+  return {
+    total,
+    failed,
+    p95: scaleSampleValues(p95Raw, durationScale),
+    p99: scaleSampleValues(p99Raw, durationScale),
+  };
+}
+
+/** Incoming RED: spanmetrics first (service itself), then service_graph inbound. */
+export async function fetchServiceOverview(datasourceId: number, service: string, startUnix: number, endUnix: number): Promise<ServiceOverviewResult> {
+  const rangeSeconds = Math.max(1, endUnix - startUnix);
+  const range = toPromRange(rangeSeconds);
+  const family = await detectSpanmetricsFamily(datasourceId, endUnix);
+  if (family) {
+    const vectors = await queryRedVectors(datasourceId, buildSpanmetricsServiceQueries(family, service, range, escapePromLabel), endUnix, family.durationScale);
+    const merged = mergeServiceRed({ ...vectors, rangeSeconds });
+    if (!merged.empty) return merged;
+  }
+  const queries = buildServiceRedQueries(service, range);
+  const vectors = await queryRedVectors(datasourceId, queries, endUnix);
+  return mergeServiceRed({ ...vectors, rangeSeconds });
 }
 
 export interface ServiceCatalogResult {
   rows: ServiceRow[];
   promFailed: boolean;
   jaegerFailed: boolean;
+  redSource: ServiceRedSource;
 }
 
 async function fetchLanguageMap(datasourceId: number, endUnix: number): Promise<Record<string, string>> {
@@ -54,7 +98,7 @@ async function fetchLanguageMap(datasourceId: number, endUnix: number): Promise<
   }
 }
 
-/** Jaeger services ∪ Prom servers, with fleet-wide RED when `traces_service_graph_*` exists. */
+/** Jaeger services ∪ Prom RED. Prefer spanmetrics; fall back to traces_service_graph_*. */
 export async function fetchServiceCatalog(
   promId: number | undefined,
   jaegerId: number | undefined,
@@ -66,6 +110,7 @@ export async function fetchServiceCatalog(
   let promFailed = false;
   let jaegerNames: string[] = [];
   let jaegerFailed = false;
+  let redSource: ServiceRedSource = 'none';
 
   const tasks: Array<Promise<void>> = [];
 
@@ -73,15 +118,23 @@ export async function fetchServiceCatalog(
     tasks.push(
       (async () => {
         try {
-          const queries = buildCatalogRedQueries(toPromRange(rangeSeconds));
-          const [total, failed, p95, p99, langMap] = await Promise.all([
-            queryProm(promId, queries.total, endUnix),
-            queryProm(promId, queries.failed, endUnix),
-            queryProm(promId, queries.p95, endUnix),
-            queryProm(promId, queries.p99, endUnix),
-            fetchLanguageMap(promId, endUnix),
-          ]);
-          promRows = applyLanguageMap(aggregateServiceRows({ total, failed, p95, p99, rangeSeconds }), langMap);
+          const family = await detectSpanmetricsFamily(promId, endUnix);
+          const range = toPromRange(rangeSeconds);
+          const load = async (queries: { total: string; failed: string; p95?: string; p99?: string }, durationScale = 1) => {
+            const vectors = await queryRedVectors(promId, queries, endUnix, durationScale);
+            const langMap = await fetchLanguageMap(promId, endUnix);
+            return applyLanguageMap(aggregateServiceRows({ ...vectors, rangeSeconds }), langMap);
+          };
+          if (family) {
+            const spanRows = await load(buildSpanmetricsCatalogQueries(family, range), family.durationScale);
+            if (spanRows.some((row) => row.hasRed)) {
+              promRows = spanRows;
+              redSource = 'spanmetrics';
+              return;
+            }
+          }
+          promRows = await load(buildCatalogRedQueries(range));
+          redSource = promRows.some((row) => row.hasRed) ? 'service_graph' : 'none';
         } catch {
           promFailed = true;
         }
@@ -107,6 +160,7 @@ export async function fetchServiceCatalog(
     rows: mergeServiceCatalog(jaegerNames, promRows),
     promFailed,
     jaegerFailed,
+    redSource,
   };
 }
 
@@ -125,18 +179,47 @@ export async function fetchServiceTopSeries(
   const empty: ServiceTopSeriesResult = { qps: [], errorRate: [], p95: [] };
   if (services.length === 0) return empty;
   const step = promRangeStep(startUnix, endUnix);
-  const queries = buildTopSeriesQueries(services, rateWindow(step));
+  const window = rateWindow(step);
+  const family = await detectSpanmetricsFamily(datasourceId, endUnix);
+  const spanQueries = family ? buildSpanmetricsTopQueries(family, services, window, buildServerRegexMatcher) : null;
+  const queries = spanQueries || buildTopSeriesQueries(services, window);
   if (!queries) return empty;
-  const [qps, errorRate, p95] = await Promise.all([
-    queryPromRange(datasourceId, queries.qps, startUnix, endUnix, step),
-    queryPromRange(datasourceId, queries.errorRate, startUnix, endUnix, step),
-    queryPromRange(datasourceId, queries.p95, startUnix, endUnix, step),
-  ]);
-  return {
-    qps: matrixToSeries(qps),
-    errorRate: matrixToSeries(errorRate),
-    p95: matrixToSeries(p95),
-  };
+  const durationScale = spanQueries && family ? family.durationScale : 1;
+  try {
+    const [qps, errorRate, p95Raw] = await Promise.all([
+      queryPromRange(datasourceId, queries.qps, startUnix, endUnix, step),
+      queryPromRange(datasourceId, queries.errorRate, startUnix, endUnix, step),
+      queries.p95 ? queryPromRange(datasourceId, queries.p95, startUnix, endUnix, step) : Promise.resolve([]),
+    ]);
+    const p95 =
+      durationScale === 1
+        ? p95Raw
+        : p95Raw.map((sample) => ({
+            ...sample,
+            values: sample.values.map(([ts, value]) => {
+              const n = Number(value);
+              return [ts, Number.isFinite(n) ? String(n * durationScale) : value] as [number, string];
+            }),
+          }));
+    const series = {
+      qps: matrixToSeries(qps),
+      errorRate: matrixToSeries(errorRate),
+      p95: matrixToSeries(p95),
+    };
+    if (spanQueries && series.qps.length === 0 && series.errorRate.length === 0 && series.p95.length === 0) {
+      const fallback = buildTopSeriesQueries(services, window);
+      if (!fallback) return empty;
+      const [fqps, ferror, fp95] = await Promise.all([
+        queryPromRange(datasourceId, fallback.qps, startUnix, endUnix, step),
+        queryPromRange(datasourceId, fallback.errorRate, startUnix, endUnix, step),
+        queryPromRange(datasourceId, fallback.p95, startUnix, endUnix, step),
+      ]);
+      return { qps: matrixToSeries(fqps), errorRate: matrixToSeries(ferror), p95: matrixToSeries(fp95) };
+    }
+    return series;
+  } catch {
+    return empty;
+  }
 }
 
 async function settledProm(datasourceId: number, query: string, time: number): Promise<PromVectorSample[]> {

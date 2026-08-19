@@ -1,5 +1,5 @@
 const en_US = {
-  title: 'Log explorer',
+  title: 'Log analysis',
   tab: {
     rename: 'Rename',
   },

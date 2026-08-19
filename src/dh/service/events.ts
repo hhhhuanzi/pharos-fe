@@ -41,7 +41,10 @@ export function buildServiceNameRegex(service: string): string {
 }
 
 function regexOr(values: string[]): string | undefined {
-  const parts = values.map((value) => value.trim()).filter(Boolean).map(escapePromRegex);
+  const parts = values
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map(escapePromRegex);
   if (parts.length === 0) return undefined;
   return parts.join('|');
 }
@@ -193,35 +196,53 @@ export function formatEventObject(event: Pick<K8sEvent, 'kind' | 'name'>): strin
 }
 
 /**
- * Well-known Kubernetes Event.reason values for pod 重启 / crash / pending.
- * kube-eventer counters have no message body, so this is reason-only.
- * Crash is checked before restart so BackOff is not counted as a start.
+ * Well-known Kubernetes Event.reason values.
+ * kube-eventer counters have no message body, so this is reason + kind only.
+ * More specific buckets (OOM / probe / image pull) are checked before crash / pending.
+ * Scheduling failures stay in pending — eventer has no message to split them further.
  */
-export type PodEventCategory = 'restart' | 'crash' | 'pending';
+export const K8S_EVENT_CATEGORIES = ['restart', 'crash', 'pending', 'oom', 'evicted', 'image_pull', 'probe', 'volume', 'node_not_ready'] as const;
+
+export type K8sEventCategory = (typeof K8S_EVENT_CATEGORIES)[number];
+export type PodEventCategory = K8sEventCategory;
 
 export const POD_RESTART_REASONS = ['Killing', 'Started'] as const;
-export const POD_CRASH_REASONS = ['BackOff', 'CrashLoopBackOff', 'Failed', 'Error', 'OOMKilling', 'Unhealthy'] as const;
-export const POD_PENDING_REASONS = [
-  'FailedScheduling',
-  'FailedBinding',
-  'Unschedulable',
-  'Nominated',
-  'NotTriggerScaleUp',
-  'ImagePullBackOff',
-  'ErrImagePull',
-] as const;
+export const POD_CRASH_REASONS = ['BackOff', 'CrashLoopBackOff', 'Failed', 'Error'] as const;
+export const POD_PENDING_REASONS = ['FailedScheduling', 'FailedBinding', 'Unschedulable', 'Nominated', 'NotTriggerScaleUp'] as const;
+export const POD_OOM_REASONS = ['OOMKilling', 'OOMKilled', 'SystemOOM'] as const;
+export const POD_EVICTED_REASONS = ['Evicted', 'Preempting', 'PreemptionByScheduler'] as const;
+export const POD_IMAGE_PULL_REASONS = ['ImagePullBackOff', 'ErrImagePull', 'InvalidImageName'] as const;
+export const POD_PROBE_REASONS = ['Unhealthy', 'ProbeWarning'] as const;
+export const POD_VOLUME_REASONS = ['FailedMount', 'FailedAttachVolume', 'FailedDetachVolume', 'FailedUnMount', 'FailedMapVolume'] as const;
+export const NODE_NOT_READY_REASONS = ['NodeNotReady'] as const;
 
 const POD_RESTART_REASON_SET = new Set<string>(POD_RESTART_REASONS);
 const POD_CRASH_REASON_SET = new Set<string>(POD_CRASH_REASONS);
 const POD_PENDING_REASON_SET = new Set<string>(POD_PENDING_REASONS);
+const POD_OOM_REASON_SET = new Set<string>(POD_OOM_REASONS);
+const POD_EVICTED_REASON_SET = new Set<string>(POD_EVICTED_REASONS);
+const POD_IMAGE_PULL_REASON_SET = new Set<string>(POD_IMAGE_PULL_REASONS);
+const POD_PROBE_REASON_SET = new Set<string>(POD_PROBE_REASONS);
+const POD_VOLUME_REASON_SET = new Set<string>(POD_VOLUME_REASONS);
+const NODE_NOT_READY_REASON_SET = new Set<string>(NODE_NOT_READY_REASONS);
 
 export function isPodKind(kind: string): boolean {
   return kind.trim().toLowerCase() === 'pod';
 }
 
+export function isNodeKind(kind: string): boolean {
+  return kind.trim().toLowerCase() === 'node';
+}
+
 export function classifyPodEvent(event: Pick<K8sEvent, 'kind' | 'reason'>): PodEventCategory | undefined {
-  if (!isPodKind(event.kind)) return undefined;
   const reason = event.reason.trim();
+  if (POD_OOM_REASON_SET.has(reason)) return 'oom';
+  if (POD_EVICTED_REASON_SET.has(reason)) return 'evicted';
+  if (POD_IMAGE_PULL_REASON_SET.has(reason)) return 'image_pull';
+  if (POD_PROBE_REASON_SET.has(reason)) return 'probe';
+  if (POD_VOLUME_REASON_SET.has(reason)) return 'volume';
+  if (NODE_NOT_READY_REASON_SET.has(reason) || (isNodeKind(event.kind) && reason === 'NotReady')) return 'node_not_ready';
+  if (!isPodKind(event.kind)) return undefined;
   if (POD_CRASH_REASON_SET.has(reason)) return 'crash';
   if (POD_PENDING_REASON_SET.has(reason)) return 'pending';
   if (POD_RESTART_REASON_SET.has(reason)) return 'restart';
@@ -233,7 +254,18 @@ export interface PodCategoryStat {
   events: number;
   /** Sum of kube-eventer counts. */
   occurrences: number;
-  /** Distinct pods (cluster|namespace|name). */
+  /** Distinct objects (cluster|namespace|name); pods for workload reasons, nodes for node_not_ready. */
+  pods: number;
+}
+
+export interface EventHealthStats {
+  /** Sum of kube-eventer warning counts (`eventer_events_error_total` increase). */
+  warning: number;
+  /** Sum of kube-eventer normal counts (`eventer_events_normal_total` increase). */
+  normal: number;
+  warningRows: number;
+  normalRows: number;
+  namespaces: number;
   pods: number;
 }
 
@@ -241,41 +273,101 @@ export interface PodEventStats {
   restart: PodCategoryStat;
   crash: PodCategoryStat;
   pending: PodCategoryStat;
+  oom: PodCategoryStat;
+  evicted: PodCategoryStat;
+  image_pull: PodCategoryStat;
+  probe: PodCategoryStat;
+  volume: PodCategoryStat;
+  node_not_ready: PodCategoryStat;
+  health: EventHealthStats;
 }
 
 function emptyPodStat(): PodCategoryStat {
   return { events: 0, occurrences: 0, pods: 0 };
 }
 
+function emptyHealth(): EventHealthStats {
+  return { warning: 0, normal: 0, warningRows: 0, normalRows: 0, namespaces: 0, pods: 0 };
+}
+
+function objectKey(event: Pick<K8sEvent, 'cluster' | 'namespace' | 'name'>): string {
+  return [event.cluster || '', event.namespace || '', event.name].join('|');
+}
+
 function toPodStat(list: K8sEvent[]): PodCategoryStat {
   if (list.length === 0) return emptyPodStat();
-  const podKeys = new Set<string>();
+  const objectKeys = new Set<string>();
   let occurrences = 0;
   list.forEach((event) => {
     occurrences += event.count;
-    podKeys.add([event.cluster || '', event.namespace || '', event.name].join('|'));
+    objectKeys.add(objectKey(event));
   });
-  return { events: list.length, occurrences, pods: podKeys.size };
+  return { events: list.length, occurrences, pods: objectKeys.size };
+}
+
+export function summarizeEventHealth(events: K8sEvent[]): EventHealthStats {
+  if (events.length === 0) return emptyHealth();
+  let warning = 0;
+  let normal = 0;
+  let warningRows = 0;
+  let normalRows = 0;
+  const namespaces = new Set<string>();
+  const pods = new Set<string>();
+  events.forEach((event) => {
+    if (event.type === 'warning') {
+      warning += event.count;
+      warningRows += 1;
+    } else {
+      normal += event.count;
+      normalRows += 1;
+    }
+    if (event.namespace) namespaces.add(event.namespace);
+    if (isPodKind(event.kind) && event.name) pods.add(objectKey(event));
+  });
+  return { warning, normal, warningRows, normalRows, namespaces: namespaces.size, pods: pods.size };
 }
 
 export function summarizePodEvents(events: K8sEvent[]): PodEventStats {
-  const restart: K8sEvent[] = [];
-  const crash: K8sEvent[] = [];
-  const pending: K8sEvent[] = [];
+  const buckets: Record<K8sEventCategory, K8sEvent[]> = {
+    restart: [],
+    crash: [],
+    pending: [],
+    oom: [],
+    evicted: [],
+    image_pull: [],
+    probe: [],
+    volume: [],
+    node_not_ready: [],
+  };
   events.forEach((event) => {
     const category = classifyPodEvent(event);
-    if (category === 'restart') restart.push(event);
-    else if (category === 'crash') crash.push(event);
-    else if (category === 'pending') pending.push(event);
+    if (category) buckets[category].push(event);
   });
   return {
-    restart: toPodStat(restart),
-    crash: toPodStat(crash),
-    pending: toPodStat(pending),
+    restart: toPodStat(buckets.restart),
+    crash: toPodStat(buckets.crash),
+    pending: toPodStat(buckets.pending),
+    oom: toPodStat(buckets.oom),
+    evicted: toPodStat(buckets.evicted),
+    image_pull: toPodStat(buckets.image_pull),
+    probe: toPodStat(buckets.probe),
+    volume: toPodStat(buckets.volume),
+    node_not_ready: toPodStat(buckets.node_not_ready),
+    health: summarizeEventHealth(events),
   };
 }
 
 export function filterEventsByCategory(events: K8sEvent[], category: PodEventCategory | 'all'): K8sEvent[] {
   if (category === 'all') return events;
   return events.filter((event) => classifyPodEvent(event) === category);
+}
+
+/** Filters already-loaded rows. kube-eventer has no message body — that field never matches. */
+export function filterEventsByKeyword(events: K8sEvent[], keyword: string): K8sEvent[] {
+  const q = keyword.trim().toLowerCase();
+  if (!q) return events;
+  return events.filter((event) => {
+    const haystack = [event.reason, event.kind, event.name, formatEventObject(event), event.namespace || '', event.cluster || ''].join(' ').toLowerCase();
+    return haystack.includes(q);
+  });
 }

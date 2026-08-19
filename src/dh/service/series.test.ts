@@ -33,11 +33,15 @@ describe('matrixToSeries / filterSeriesByNames / alignServiceSeries', () => {
         [3, '2'],
       ] as Array<[number, string]>,
     },
+    { metric: { service_name: 'pay' }, values: [[1, '3']] as Array<[number, string]> },
     { metric: { server: '' }, values: [[1, '9']] as Array<[number, string]> },
   ];
 
   it('drops empty names and non-finite points', () => {
-    expect(matrixToSeries(matrix)).toEqual([{ name: 'order', points: [[1, 1.5], [3, 2]] }]);
+    expect(matrixToSeries(matrix)).toEqual([
+      { name: 'order', points: [[1, 1.5], [3, 2]] },
+      { name: 'pay', points: [[1, 3]] },
+    ]);
   });
 
   it('keeps the requested name order', () => {

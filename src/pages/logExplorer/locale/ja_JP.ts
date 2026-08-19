@@ -1,5 +1,5 @@
 const ja_JP = {
-  title: 'ログ検索',
+  title: 'ログ分析',
   tab: {
     rename: '名前を変更',
   },
