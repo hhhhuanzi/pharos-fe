@@ -13,6 +13,7 @@ import { SIZE } from '@/utils/constant';
 import { scrollToFirstError } from '@/utils';
 import SectionCard, { SectionItem } from '@/pages/alertRules/FormNG/components/SectionCard';
 import { ChannelItem, getSimplifiedItems as getNotificationChannels } from '@/pages/notificationChannels/services';
+import { NotifyConfigsPanel } from '@/dh/notify-flow';
 
 // @ts-ignore
 import ExtraConfig from 'plus:/parcels/notificationRules/ExtraConfig';
@@ -21,7 +22,6 @@ import { NS, DEFAULT_VALUES } from '../../constants';
 import { RuleItem } from '../../types';
 import { normalizeFormValues } from '../../utils/normalizeValues';
 import { getEventTags } from '../../services';
-import RuleConfig from './RuleConfig';
 import EventPipelineConfigs from './EventPipelineConfigs';
 import { useGlobalState } from './Attributes/globalState';
 
@@ -49,7 +49,6 @@ export default function FormCpt(props: Props) {
   const { disabled, initialValues, onOk, onCancel } = props;
   const [form] = Form.useForm();
   const [userGroups, setUserGroups] = useState<{ id: number; name: string }[]>([]);
-  const [activeIndex, setActiveIndex] = useState<number>();
   const [eventKeys, setEventKeys] = useState<string[]>([]);
   const [, setAlertRules] = useGlobalState('alertRules');
 
@@ -91,6 +90,7 @@ export default function FormCpt(props: Props) {
   const [toggleAllSignal, setToggleAllSignal] = useState<{ action: 'expand' | 'collapse'; ts: number } | null>(null);
   // 校验失败时通知对应通知配置展开筛选条件面板，否则 display:none 的错误项无法被滚动定位
   const [expandFiltersSignal, setExpandFiltersSignal] = useState<{ indices: number[]; ts: number } | null>(null);
+  const [focusNotifySignal, setFocusNotifySignal] = useState<{ index: number; ts: number } | null>(null);
   const allExpanded = MAIN_SECTION_KEYS.every((key) => sectionCollapsed[key] === false);
 
   // 备注默认收起，编辑已有备注时展开
@@ -144,14 +144,18 @@ export default function FormCpt(props: Props) {
   const expandErrorSections = (errorFields?: { name: (string | number)[] }[]) => {
     const sectionKeys: string[] = [];
     const filterIndices: number[] = [];
+    const notifyIndices: number[] = [];
     let hasExtraConfigError = false;
     _.forEach(errorFields, ({ name }) => {
       const root = name?.[0];
       if (root === 'notify_configs') {
         sectionKeys.push('notify');
-        // 筛选条件面板内的字段出错时，还需展开对应条目的筛选面板
-        if (_.isNumber(name?.[1]) && _.includes(['severities', 'time_ranges', 'label_keys', 'attributes'], name?.[2])) {
-          filterIndices.push(name[1] as number);
+        if (_.isNumber(name?.[1])) {
+          notifyIndices.push(name[1] as number);
+          // 筛选条件面板内的字段出错时，还需展开对应条目的筛选面板
+          if (_.includes(['severities', 'time_ranges', 'label_keys', 'attributes'], name?.[2])) {
+            filterIndices.push(name[1] as number);
+          }
         }
       } else if (root === 'pipeline_configs') {
         sectionKeys.push('pipeline');
@@ -172,6 +176,9 @@ export default function FormCpt(props: Props) {
     }
     if (filterIndices.length) {
       setExpandFiltersSignal({ indices: _.uniq(filterIndices), ts: Date.now() });
+    }
+    if (notifyIndices.length) {
+      setFocusNotifySignal({ index: notifyIndices[0], ts: Date.now() });
     }
     // 升级/聚合分区在 plus 侧内部管理折叠状态，借助展开全部信号展开
     if (hasExtraConfigError) {
@@ -210,28 +217,18 @@ export default function FormCpt(props: Props) {
         <SectionCard item={sections[0]} index={0} collapsed={sectionCollapsed.notify} setCollapsed={(collapsed) => setSectionCollapsed((prev) => ({ ...prev, notify: collapsed }))}>
           <Form.List name='notify_configs'>
             {(fields, { add, remove, move }) => (
-              <>
-                {fields.map((field) => (
-                  <RuleConfig
-                    key={field.key}
-                    disabled={disabled}
-                    fields={fields}
-                    field={field}
-                    activeIndex={activeIndex}
-                    setActiveIndex={setActiveIndex}
-                    add={add}
-                    remove={remove}
-                    move={move}
-                    eventKeys={eventKeys}
-                    expandFiltersSignal={expandFiltersSignal}
-                  />
-                ))}
-                {!disabled && (
-                  <Button className='w-full' type='dashed' onClick={() => add(DEFAULT_VALUES.notify_configs[0])} icon={<PlusOutlined />}>
-                    {t('notification_configuration.add_btn')}
-                  </Button>
-                )}
-              </>
+              <NotifyConfigsPanel
+                disabled={disabled}
+                fields={fields}
+                add={add}
+                remove={remove}
+                move={move}
+                eventKeys={eventKeys}
+                expandFiltersSignal={expandFiltersSignal}
+                focusNotifySignal={focusNotifySignal}
+                channels={channels}
+                userGroups={userGroups}
+              />
             )}
           </Form.List>
         </SectionCard>
