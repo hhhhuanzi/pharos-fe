@@ -1,0 +1,164 @@
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Collapse, Empty, Spin } from 'antd';
+import { useTranslation } from 'react-i18next';
+
+import { CommonStateContext } from '@/App';
+import { getDefaultValue, timeRangeUnix, type IRawTimeRange } from '@/components/TimeRangePicker';
+import { NS } from '@/pages/service/constants';
+import { MONITORING_RANGE_LS } from '@/pages/service/storage';
+
+import { fetchMonitoringScopes } from './api';
+import { pickMonitoringDatasourceId, readMonitoringDatasourceId, storeMonitoringDatasourceId, type MonitoringDatasource } from './datasource';
+import { MONITORING_SECTIONS } from './panels';
+import { resolveScopeOption, scopeOptionKey, type MonitoringScopeOption } from './scope';
+import SectionPanels from './components/SectionPanels';
+import Toolbar from './components/Toolbar';
+
+export interface ServiceMonitoringProps {
+  service: string;
+  /** Preferred scope from the URL / trace association. Discovery decides what actually has metrics. */
+  clusters?: string[];
+  namespaces?: string[];
+}
+
+const DEFAULT_RANGE: IRawTimeRange = { start: 'now-1h', end: 'now' };
+
+/**
+ * The page is 6+ screens tall, so a section header that scrolls away leaves no way to tell
+ * which section is on screen. Pinning each header inside its own item makes them hand over
+ * to each other while scrolling. The bar needs an opaque fill or panels show through it.
+ */
+const SECTION_COLLAPSE_CLASS = [
+  '[&>.ant-collapse-item]:mb-4 [&>.ant-collapse-item:last-child]:mb-0',
+  // -top-4 cancels the scroll container's 16px padding, so nothing shows above a pinned header.
+  '[&_.ant-collapse-header]:sticky [&_.ant-collapse-header]:-top-4 [&_.ant-collapse-header]:z-10',
+  '[&_.ant-collapse-header]:items-center [&_.ant-collapse-header]:rounded-lg [&_.ant-collapse-header]:bg-fc-200 [&_.ant-collapse-header]:py-2',
+  '[&_.ant-collapse-header]:border-0 [&_.ant-collapse-header]:border-l-4 [&_.ant-collapse-header]:border-solid [&_.ant-collapse-header]:border-l-primary',
+  '[&_.ant-collapse-content-box]:px-0 [&_.ant-collapse-content-box]:pb-0',
+].join(' ');
+
+function EmptyState({ description }: { description: string }) {
+  return (
+    <div className='flex min-h-[240px] items-center justify-center rounded-lg bg-fc-100 p-4 fc-border'>
+      <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={description} />
+    </div>
+  );
+}
+
+export default function ServiceMonitoring({ service, clusters, namespaces }: ServiceMonitoringProps) {
+  const { t } = useTranslation(NS);
+  const { groupedDatasourceList } = useContext(CommonStateContext);
+  const datasourceList: MonitoringDatasource[] = groupedDatasourceList.prometheus || [];
+  const datasourceIds = datasourceList.map((item) => item.id).join(',');
+
+  const [range, setRange] = useState<IRawTimeRange>(() => getDefaultValue(MONITORING_RANGE_LS, DEFAULT_RANGE) || DEFAULT_RANGE);
+  const [datasourceId, setDatasourceId] = useState<number | undefined>();
+  const [scopeOptions, setScopeOptions] = useState<MonitoringScopeOption[]>([]);
+  const [scopeLoading, setScopeLoading] = useState(false);
+  const [selectedScopeKey, setSelectedScopeKey] = useState<string>();
+  const [refreshKey, setRefreshKey] = useState(0);
+  const scopeSeq = useRef(0);
+
+  // The datasource list arrives asynchronously, so re-pick until the current choice is in it.
+  useEffect(() => {
+    setDatasourceId((current) => (current != null && datasourceList.some((item) => item.id === current) ? current : pickMonitoringDatasourceId(datasourceList, readMonitoringDatasourceId())));
+  }, [datasourceIds]);
+
+  useEffect(() => {
+    setSelectedScopeKey(undefined);
+  }, [service]);
+
+  useEffect(() => {
+    if (!service || datasourceId == null) {
+      setScopeOptions([]);
+      return;
+    }
+    const { end } = timeRangeUnix(range);
+    const seq = scopeSeq.current + 1;
+    scopeSeq.current = seq;
+    setScopeLoading(true);
+    fetchMonitoringScopes(datasourceId, service, end)
+      .then((options) => {
+        if (scopeSeq.current !== seq) return;
+        setScopeOptions(options);
+      })
+      .catch(() => {
+        if (scopeSeq.current !== seq) return;
+        setScopeOptions([]);
+      })
+      .finally(() => {
+        if (scopeSeq.current !== seq) return;
+        setScopeLoading(false);
+      });
+  }, [service, datasourceId, range, refreshKey]);
+
+  const preferredCluster = clusters?.length === 1 ? clusters[0] : undefined;
+  // Multiple namespaces mean Pharos could not tell them apart; omitting it is the documented degradation.
+  const preferredNamespace = namespaces?.length === 1 ? namespaces[0] : undefined;
+
+  const activeScopeOption = useMemo(() => {
+    if (selectedScopeKey) {
+      const selected = scopeOptions.find((option) => scopeOptionKey(option) === selectedScopeKey);
+      if (selected) return selected;
+    }
+    return resolveScopeOption(scopeOptions, { cluster: preferredCluster, namespace: preferredNamespace });
+  }, [scopeOptions, selectedScopeKey, preferredCluster, preferredNamespace]);
+
+  const scope = useMemo(
+    () => (activeScopeOption ? { service, cluster: activeScopeOption.cluster } : undefined),
+    [service, activeScopeOption?.cluster],
+  );
+
+  const handleDatasourceChange = (id: number) => {
+    setDatasourceId(id);
+    storeMonitoringDatasourceId(id);
+    setSelectedScopeKey(undefined);
+  };
+
+  const renderBody = () => {
+    if (!datasourceList.length) return <EmptyState description={t('overview.no_prometheus')} />;
+    if (datasourceId == null) return <EmptyState description={t('monitoring.no_datasource')} />;
+    if (scopeLoading && !scope) {
+      return (
+        <div className='flex min-h-[240px] items-center justify-center rounded-lg bg-fc-100 p-4 fc-border'>
+          <Spin />
+        </div>
+      );
+    }
+    if (!scope) return <EmptyState description={t('monitoring.no_scope', { service })} />;
+    return (
+      <Collapse
+        ghost
+        destroyInactivePanel
+        className={SECTION_COLLAPSE_CLASS}
+        defaultActiveKey={MONITORING_SECTIONS.filter((section) => section.defaultOpen).map((section) => section.id)}
+      >
+        {MONITORING_SECTIONS.map((section) => (
+          // No forceRender on purpose: an unmounted panel is how sections stay lazy.
+          // text-l1 keeps the title one step under PageLayout's 16px bold page title; the bar and
+          // the left rule carry the grouping weight instead.
+          <Collapse.Panel key={section.id} header={<span className='text-l1 font-bold text-title'>{t(section.titleKey)}</span>}>
+            <SectionPanels section={section} scope={scope} datasourceId={datasourceId} range={range} refreshKey={refreshKey} />
+          </Collapse.Panel>
+        ))}
+      </Collapse>
+    );
+  };
+
+  return (
+    <div className='flex flex-col gap-4'>
+      <Toolbar
+        range={range}
+        onRangeChange={setRange}
+        datasourceList={datasourceList}
+        datasourceId={datasourceId}
+        onDatasourceChange={handleDatasourceChange}
+        scopeOptions={scopeOptions}
+        activeScope={activeScopeOption}
+        onScopeChange={setSelectedScopeKey}
+        onRefresh={() => setRefreshKey((key) => key + 1)}
+      />
+      {renderBody()}
+    </div>
+  );
+}
