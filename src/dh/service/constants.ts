@@ -7,13 +7,13 @@ export const TRACE_CLUSTER_TAG = 'k8s.cluster.name';
 export const TRACE_NAMESPACE_TAG = 'k8s.namespace.name';
 
 /**
- * ES query_string fields for service → logs. `service.name` matches the OTel resource
- * attribute already used in the log fields sidebar tests; k8s keys follow the same convention.
- * Not CMDB — if the index uses different names the query will simply return empty.
+ * Fluent Bit kubernetes filter fields actually ingested into ES (see PLAN-log-index-layout /
+ * DESIGN-log-trace-correlation). `service.name` is an OTel resource key and is not on the log
+ * documents; service dimension is `kubernetes.container_name` (= service name).
  */
-export const LOG_SERVICE_FIELD = 'service.name';
-export const LOG_CLUSTER_FIELD = 'k8s.cluster.name';
-export const LOG_NAMESPACE_FIELD = 'k8s.namespace.name';
+export const LOG_SERVICE_FIELD = 'kubernetes.container_name';
+export const LOG_CLUSTER_FIELD = 'cluster';
+export const LOG_NAMESPACE_FIELD = 'kubernetes.namespace_name';
 
 export { LOG_EXPLORER_PATH, TRACE_EXPLORER_PATH };
 
@@ -23,6 +23,19 @@ export { LOG_EXPLORER_PATH, TRACE_EXPLORER_PATH };
  */
 export const CLUSTER_LABEL_KEYS = ['k8s_cluster_name', 'k8s_cluster', 'cluster', 'k8s.cluster.name'] as const;
 export const NAMESPACE_LABEL_KEYS = ['k8s_namespace_name', 'k8s_namespace', 'namespace', 'k8s.namespace.name'] as const;
+
+/**
+ * `deployment.environment.name` is declared as a spanmetrics connector dimension, so only
+ * spanmetrics series carry it. `traces_service_graph_*` declares no dimensions, so rows coming
+ * from the fallback have no environment and the column stays blank.
+ */
+export const ENV_LABEL_KEYS = ['deployment_environment_name', 'deployment_environment', 'deployment.environment.name'] as const;
+
+/**
+ * `sum by (...)` needs one concrete label name. Grouping by a label the series does not have
+ * yields an empty value instead of an error, so adding it is safe on setups without it.
+ */
+export const ENV_GROUP_LABEL = 'deployment_environment_name';
 
 /**
  * Language labels that already appear on traces / Prom (OTel resource → Prom underscores).

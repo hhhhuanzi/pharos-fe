@@ -1,6 +1,6 @@
 import { SERVICE_GRAPH_METRICS } from '@/dh/trace/dependencies/promql';
 
-import { buildCatalogRedQueries, buildServiceRedQueries, buildServerRegexMatcher, escapePromLabel, extractAssociation, extractLanguages, firstFiniteSample, mergeServiceRed, pickServiceName, sumSampleValues } from './red';
+import { buildCatalogRedQueries, buildServiceRedQueries, buildServerRegexMatcher, escapePromLabel, extractAssociation, extractLanguages, firstFiniteSample, mergeServiceRed, pickServiceEnv, pickServiceName, serviceKey, sumSampleValues } from './red';
 import type { PromVectorSample } from '@/dh/trace/dependencies/promql';
 
 function sample(metric: Record<string, string>, value: string): PromVectorSample {
@@ -12,6 +12,20 @@ describe('pickServiceName', () => {
     expect(pickServiceName({ service_name: 'order', service: 'x', server: 'y' })).toBe('order');
     expect(pickServiceName({ server: 'graph-only' })).toBe('graph-only');
     expect(pickServiceName({})).toBe('');
+  });
+});
+
+describe('pickServiceEnv / serviceKey', () => {
+  it('reads the spanmetrics environment dimension and leaves service_graph series without one', () => {
+    expect(pickServiceEnv({ service_name: 'quote', deployment_environment_name: 'prod' })).toBe('prod');
+    expect(pickServiceEnv({ server: 'quote' })).toBeUndefined();
+    expect(pickServiceEnv(undefined)).toBeUndefined();
+  });
+
+  it('keys a row by service + environment, and stays empty without a service name', () => {
+    expect(serviceKey('quote', 'prod')).toBe('quote (prod)');
+    expect(serviceKey('quote')).toBe('quote');
+    expect(serviceKey('', 'prod')).toBe('');
   });
 });
 

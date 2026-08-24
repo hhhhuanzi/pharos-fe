@@ -1,5 +1,7 @@
 export interface ServiceIdentity {
   service?: string;
+  /** Deployment environment; same service name can exist in several of them. */
+  env?: string;
   cluster?: string;
   namespace?: string;
   /** Jaeger datasource id used to list services and jump to traces. */
@@ -30,6 +32,7 @@ function asPositiveInt(value: unknown): number | undefined {
 export function parseServiceIdentity(parsed: Record<string, unknown>): ServiceIdentity {
   return {
     service: asString(parsed.service),
+    env: asString(parsed.env),
     cluster: asString(parsed.cluster),
     namespace: asString(parsed.namespace),
     ds: asPositiveInt(parsed.ds),
@@ -43,6 +46,7 @@ export function parseServiceIdentity(parsed: Record<string, unknown>): ServiceId
 export function identityToQuery(identity: ServiceIdentity): Record<string, string> {
   const query: Record<string, string> = {};
   if (identity.service) query.service = identity.service;
+  if (identity.env) query.env = identity.env;
   if (identity.cluster) query.cluster = identity.cluster;
   if (identity.namespace) query.namespace = identity.namespace;
   if (identity.ds != null) query.ds = String(identity.ds);
@@ -53,9 +57,11 @@ export function mergeIdentity(current: ServiceIdentity, patch: Partial<ServiceId
   const next: ServiceIdentity = { ...current, ...patch };
   if (!next.service) {
     delete next.service;
+    delete next.env;
     delete next.cluster;
     delete next.namespace;
   }
+  if (!next.env) delete next.env;
   if (!next.cluster) delete next.cluster;
   if (!next.namespace) delete next.namespace;
   if (next.ds == null) delete next.ds;
@@ -86,14 +92,17 @@ export function buildServiceListPath(query: { tab?: string } = {}): string {
 
 export function buildServiceDetailPath(
   service: string,
-  query: { tab?: string; ds?: number; cluster?: string; namespace?: string } = {},
+  query: { tab?: string; ds?: number; env?: string; cluster?: string; namespace?: string; start?: number; end?: number } = {},
 ): string {
   const path = `/service/${encodeServiceParam(service)}`;
   const params = new URLSearchParams();
   if (query.tab) params.set('tab', query.tab);
   if (query.ds != null) params.set('ds', String(query.ds));
+  if (query.env) params.set('env', query.env);
   if (query.cluster) params.set('cluster', query.cluster);
   if (query.namespace) params.set('namespace', query.namespace);
+  if (query.start != null) params.set('start', String(query.start));
+  if (query.end != null) params.set('end', String(query.end));
   const qs = params.toString();
   return qs ? `${path}?${qs}` : path;
 }

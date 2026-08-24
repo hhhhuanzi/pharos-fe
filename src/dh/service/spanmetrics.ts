@@ -1,3 +1,6 @@
+import { ENV_GROUP_LABEL } from './constants';
+import { buildPromRatio } from './series';
+
 /** OTel spanmetrics families commonly exported to Prometheus. Prefer namespaced names first. */
 
 export const SPANMETRICS_CALLS_CANDIDATES = [
@@ -52,8 +55,13 @@ export function spanmetricsErrorMatcher(): string {
 }
 
 export function buildSpanmetricsCatalogQueries(family: SpanmetricsFamily, range: string) {
-  /** Keep language on catalog vectors so the list column can read it; rows still merge by service in JS. */
-  const by = `${family.serviceLabel}, telemetry_sdk_language`;
+  /**
+   * Environment must be in the grouping: without it same-named services from different
+   * environments are summed into one row and their latency buckets merged into one bogus
+   * quantile. Language stays on the vector so the list column can read it; language-split
+   * series still merge per service in JS.
+   */
+  const by = `${family.serviceLabel}, ${ENV_GROUP_LABEL}, telemetry_sdk_language`;
   const errorSel = `{${spanmetricsErrorMatcher()}}`;
   const queries: { total: string; failed: string; p95?: string; p99?: string } = {
     total: `sum by (${by}) (increase(${family.calls}[${range}]))`,
@@ -66,9 +74,17 @@ export function buildSpanmetricsCatalogQueries(family: SpanmetricsFamily, range:
   return queries;
 }
 
-export function buildSpanmetricsServiceQueries(family: SpanmetricsFamily, service: string, range: string, escapeLabel: (value: string) => string) {
-  const matcher = `{${family.serviceLabel}="${escapeLabel(service)}"}`;
-  const errorSel = `{${family.serviceLabel}="${escapeLabel(service)}", ${spanmetricsErrorMatcher()}}`;
+export function buildSpanmetricsServiceQueries(
+  family: SpanmetricsFamily,
+  service: string,
+  range: string,
+  escapeLabel: (value: string) => string,
+  env?: string,
+) {
+  /** Detail page must read the same slice as the list row it was opened from. */
+  const envSel = env ? `, ${ENV_GROUP_LABEL}="${escapeLabel(env)}"` : '';
+  const matcher = `{${family.serviceLabel}="${escapeLabel(service)}"${envSel}}`;
+  const errorSel = `{${family.serviceLabel}="${escapeLabel(service)}"${envSel}, ${spanmetricsErrorMatcher()}}`;
   const queries: { total: string; failed: string; p95?: string; p99?: string } = {
     total: `increase(${family.calls}${matcher}[${range}])`,
     failed: `increase(${family.calls}${errorSel}[${range}])`,
@@ -89,10 +105,12 @@ export function buildSpanmetricsTopQueries(
   if (services.length === 0) return null;
   const matcher = buildMatcher(services, family.serviceLabel);
   const errorMatcher = matcher.replace(/\}$/, `, ${spanmetricsErrorMatcher()}}`);
-  const by = family.serviceLabel;
+  const by = `${family.serviceLabel}, ${ENV_GROUP_LABEL}`;
+  const total = `sum by (${by}) (rate(${family.calls}${matcher}[${window}]))`;
+  const failed = `sum by (${by}) (rate(${family.calls}${errorMatcher}[${window}]))`;
   const queries: { qps: string; errorRate: string; p95?: string } = {
-    qps: `sum by (${by}) (rate(${family.calls}${matcher}[${window}]))`,
-    errorRate: `sum by (${by}) (rate(${family.calls}${errorMatcher}[${window}])) / sum by (${by}) (rate(${family.calls}${matcher}[${window}]))`,
+    qps: total,
+    errorRate: buildPromRatio(failed, total),
   };
   if (family.durationBucket) {
     queries.p95 = `histogram_quantile(0.95, sum by (${by}, le) (rate(${family.durationBucket}${matcher}[${window}])))`;

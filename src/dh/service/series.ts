@@ -1,6 +1,6 @@
 import { SERVICE_GRAPH_METRICS, toPromRange } from '@/dh/trace/dependencies/promql';
 
-import { buildServerRegexMatcher, pickServiceName } from './red';
+import { buildServerRegexMatcher, pickServiceEnv, pickServiceName, serviceKey } from './red';
 
 export interface PromMatrixSample {
   metric: Record<string, string>;
@@ -21,20 +21,28 @@ export function rateWindow(stepSeconds: number): string {
   return toPromRange(Math.max(60, stepSeconds * 4));
 }
 
+/** PromQL `A / B` drops series that only exist on B. Fill zeros so services with no errors still appear. */
+export function buildPromRatio(numerator: string, denominator: string): string {
+  return `(${numerator} or (${denominator} * 0)) / ${denominator}`;
+}
+
 export function buildTopSeriesQueries(services: string[], window: string) {
   if (services.length === 0) return null;
   const matcher = buildServerRegexMatcher(services);
+  const total = `sum by (server) (rate(${SERVICE_GRAPH_METRICS.total}${matcher}[${window}]))`;
+  const failed = `sum by (server) (rate(${SERVICE_GRAPH_METRICS.failed}${matcher}[${window}]))`;
   return {
-    qps: `sum by (server) (rate(${SERVICE_GRAPH_METRICS.total}${matcher}[${window}]))`,
-    errorRate: `sum by (server) (rate(${SERVICE_GRAPH_METRICS.failed}${matcher}[${window}])) / sum by (server) (rate(${SERVICE_GRAPH_METRICS.total}${matcher}[${window}]))`,
+    qps: total,
+    errorRate: buildPromRatio(failed, total),
     p95: `histogram_quantile(0.95, sum by (server, le) (rate(${SERVICE_GRAPH_METRICS.serverBucket}${matcher}[${window}])))`,
   };
 }
 
+/** Series name is the row key, so two environments of one service draw as two lines. */
 export function matrixToSeries(samples: PromMatrixSample[]): NamedSeries[] {
   return samples
     .map((sample) => ({
-      name: pickServiceName(sample.metric),
+      name: serviceKey(pickServiceName(sample.metric), pickServiceEnv(sample.metric)),
       points: (sample.values || [])
         .map(([ts, value]) => [Number(ts), Number(value)] as [number, number])
         .filter(([, value]) => Number.isFinite(value)),
@@ -49,6 +57,51 @@ export function filterSeriesByNames(series: NamedSeries[], names: string[]): Nam
     if (item) acc.push(item);
     return acc;
   }, []);
+}
+
+export function collectSeriesTimes(series: NamedSeries[]): number[] {
+  const timeSet = new Set<number>();
+  series.forEach((item) => {
+    item.points.forEach(([ts]) => timeSet.add(ts));
+  });
+  return Array.from(timeSet).sort((a, b) => a - b);
+}
+
+/**
+ * Keep the requested name order. Names Prom omitted (classic `A/B` drop of zero-error series)
+ * are filled with `fill` at the timestamps of series that did arrive.
+ */
+export function fillMissingSeries(series: NamedSeries[], names: string[], fill = 0): NamedSeries[] {
+  const times = collectSeriesTimes(series);
+  const byName = new Map(series.map((item) => [item.name, item]));
+  return names.reduce<NamedSeries[]>((acc, name) => {
+    const existing = byName.get(name);
+    if (existing) {
+      acc.push(existing);
+      return acc;
+    }
+    if (times.length === 0) return acc;
+    acc.push({ name, points: times.map((ts) => [ts, fill] as [number, number]) });
+    return acc;
+  }, []);
+}
+
+const ERROR_RATE_Y_FLOORS = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1] as const;
+
+/**
+ * Error-rate / throttling values are ratios (0–1). uPlot's default scale is 0–100 when every
+ * point is 0; `formatErrorRate` then paints the axis as 10000%. Pass the result through
+ * `scalesBuilder({ yRange: [0, errorRateYMax(values)] })` — `yMinMax` does not lock auto-range.
+ */
+export function errorRateYMax(values: Array<number | null | undefined>): number {
+  let max = 0;
+  values.forEach((value) => {
+    if (typeof value === 'number' && Number.isFinite(value) && value > max) max = value;
+  });
+  if (max <= 0) return 0.01;
+  const padded = max * 1.1;
+  if (max > 1) return padded;
+  return ERROR_RATE_Y_FLOORS.find((step) => step >= padded) ?? 1;
 }
 
 /** First-seen service names get a stable palette index so multiple charts share colors. */

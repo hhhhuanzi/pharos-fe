@@ -11,7 +11,7 @@ describe('escapeEsQueryValue', () => {
 });
 
 describe('buildServiceLogQuery', () => {
-  it('starts from service.name and ANDs cluster / namespace when present', () => {
+  it('starts from kubernetes.container_name and ANDs cluster / namespace when present', () => {
     expect(buildServiceLogQuery({ service: 'order' })).toBe(`${LOG_SERVICE_FIELD}:"order"`);
     expect(buildServiceLogQuery({ service: 'order', cluster: 'prod', namespace: 'pay' })).toBe(
       `${LOG_SERVICE_FIELD}:"order" AND ${LOG_CLUSTER_FIELD}:"prod" AND ${LOG_NAMESPACE_FIELD}:"pay"`,
@@ -72,6 +72,6 @@ describe('resolveServiceLogDeepLink', () => {
     expect(url).toContain('/log/explorer?');
     expect(url).toContain('data_source_id=1');
     expect(url).toContain('index_pattern=1');
-    expect(url).toContain('service.name');
+    expect(url).toContain('kubernetes.container_name');
   });
 });

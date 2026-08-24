@@ -1,6 +1,18 @@
 import { SERVICE_GRAPH_METRICS } from '@/dh/trace/dependencies/promql';
 
-import { alignServiceSeries, assignServiceColors, buildTopSeriesQueries, colorsForSeries, filterSeriesByNames, matrixToSeries, promRangeStep, rateWindow } from './series';
+import {
+  alignServiceSeries,
+  assignServiceColors,
+  buildPromRatio,
+  buildTopSeriesQueries,
+  colorsForSeries,
+  errorRateYMax,
+  fillMissingSeries,
+  filterSeriesByNames,
+  matrixToSeries,
+  promRangeStep,
+  rateWindow,
+} from './series';
 
 describe('promRangeStep / rateWindow', () => {
   it('keeps at least 15s step and a 60s rate window', () => {
@@ -17,7 +29,12 @@ describe('buildTopSeriesQueries', () => {
   it('regex-matches the given servers for qps / error rate / p95', () => {
     const q = buildTopSeriesQueries(['order', 'a.b'], '5m');
     expect(q?.qps).toBe(`sum by (server) (rate(${SERVICE_GRAPH_METRICS.total}{server=~"order|a\\\\.b"}[5m]))`);
-    expect(q?.errorRate).toContain(`${SERVICE_GRAPH_METRICS.failed}{server=~"order|a\\\\.b"}[5m]`);
+    expect(q?.errorRate).toBe(
+      buildPromRatio(
+        `sum by (server) (rate(${SERVICE_GRAPH_METRICS.failed}{server=~"order|a\\\\.b"}[5m]))`,
+        `sum by (server) (rate(${SERVICE_GRAPH_METRICS.total}{server=~"order|a\\\\.b"}[5m]))`,
+      ),
+    );
     expect(q?.p95).toContain('histogram_quantile(0.95');
     expect(q?.p95).toContain(`${SERVICE_GRAPH_METRICS.serverBucket}{server=~"order|a\\\\.b"}[5m]`);
   });
@@ -44,12 +61,37 @@ describe('matrixToSeries / filterSeriesByNames / alignServiceSeries', () => {
     ]);
   });
 
+  it('names series per service + environment so two environments do not collapse into one line', () => {
+    const perEnv = [
+      { metric: { service_name: 'quote', deployment_environment_name: 'prod' }, values: [[1, '5']] as Array<[number, string]> },
+      { metric: { service_name: 'quote', deployment_environment_name: 'test' }, values: [[1, '1']] as Array<[number, string]> },
+      { metric: { deployment_environment_name: 'prod' }, values: [[1, '9']] as Array<[number, string]> },
+    ];
+    expect(matrixToSeries(perEnv)).toEqual([
+      { name: 'quote (prod)', points: [[1, 5]] },
+      { name: 'quote (test)', points: [[1, 1]] },
+    ]);
+  });
+
   it('keeps the requested name order', () => {
     const series = [
       { name: 'b', points: [[1, 1] as [number, number]] },
       { name: 'a', points: [[1, 2] as [number, number]] },
     ];
     expect(filterSeriesByNames(series, ['a', 'missing', 'b']).map((item) => item.name)).toEqual(['a', 'b']);
+  });
+
+  it('fills Prom-omitted names with zeros so a 0% service still draws', () => {
+    const series = [{ name: 'quote', points: [[1, 0] as [number, number], [2, 0] as [number, number]] }];
+    expect(fillMissingSeries(series, ['admin', 'quote', 'auth'])).toEqual([
+      { name: 'admin', points: [[1, 0], [2, 0]] },
+      { name: 'quote', points: [[1, 0], [2, 0]] },
+      { name: 'auth', points: [[1, 0], [2, 0]] },
+    ]);
+  });
+
+  it('does not invent timestamps when nothing arrived', () => {
+    expect(fillMissingSeries([], ['admin', 'quote'])).toEqual([]);
   });
 
   it('aligns timestamps and fills gaps with null', () => {
@@ -93,5 +135,22 @@ describe('assignServiceColors / colorsForSeries', () => {
     expect(qps[0]).toBe(p95[1]);
     expect(errorRate[0]).toBe(p95[0]);
     expect(errorRate[1]).toBe(p95[3]);
+  });
+});
+
+describe('buildPromRatio / errorRateYMax', () => {
+  it('keeps zero-error series via `or (denom * 0)`', () => {
+    expect(buildPromRatio('failed', 'total')).toBe('(failed or (total * 0)) / total');
+  });
+
+  it('floors an all-zero chart at 1% so uPlot cannot default to 0–100', () => {
+    expect(errorRateYMax([0, 0, null, undefined])).toBe(0.01);
+  });
+
+  it('picks a nice ceiling from the observed ratio', () => {
+    expect(errorRateYMax([0.008, 0.012])).toBe(0.02);
+    expect(errorRateYMax([0.4])).toBe(0.5);
+    expect(errorRateYMax([1])).toBe(1);
+    expect(errorRateYMax([2])).toBe(2.2);
   });
 });

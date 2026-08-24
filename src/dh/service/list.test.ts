@@ -1,6 +1,6 @@
 import type { PromVectorSample } from '@/dh/trace/dependencies/promql';
 
-import { aggregateServiceRows, filterRowsByServiceName, mergeServiceCatalog, pickTopServices, type ServiceRow } from './list';
+import { aggregateServiceRows, dedupeRefs, filterRowsByServiceName, mergeServiceCatalog, pickTopServices, uniqueRefNames, type ServiceRow } from './list';
 
 function sample(metric: Record<string, string>, value: string): PromVectorSample {
   return { metric, value: [1_700_000_000, value] };
@@ -89,6 +89,37 @@ describe('aggregateServiceRows', () => {
     });
   });
 
+  it('keeps same-named services in different environments apart', () => {
+    const rows = aggregateServiceRows({
+      total: [
+        sample({ service_name: 'quote', deployment_environment_name: 'prod' }, '900'),
+        sample({ service_name: 'quote', deployment_environment_name: 'test' }, '10'),
+      ],
+      failed: [sample({ service_name: 'quote', deployment_environment_name: 'test' }, '5')],
+      p95: [
+        sample({ service_name: 'quote', deployment_environment_name: 'prod' }, '0.006'),
+        sample({ service_name: 'quote', deployment_environment_name: 'test' }, '15'),
+      ],
+      p99: [],
+      rangeSeconds: 100,
+    });
+    expect(rows).toHaveLength(2);
+    const byEnv = Object.fromEntries(rows.map((item) => [item.env, item]));
+    expect(byEnv.prod).toMatchObject({ name: 'quote', env: 'prod', requestCount: 900, failedCount: 0, errorRate: 0, p95Seconds: 0.006 });
+    expect(byEnv.test).toMatchObject({ name: 'quote', env: 'test', requestCount: 10, failedCount: 5, errorRate: 0.5, p95Seconds: 15 });
+  });
+
+  it('leaves env undefined for service_graph series, which has no environment dimension', () => {
+    const rows = aggregateServiceRows({
+      total: [sample({ server: 'order' }, '10')],
+      failed: [],
+      p95: [],
+      p99: [],
+      rangeSeconds: 10,
+    });
+    expect(rows[0].env).toBeUndefined();
+  });
+
   it('skips series without a server label', () => {
     expect(
       aggregateServiceRows({
@@ -115,6 +146,20 @@ describe('mergeServiceCatalog', () => {
       hasRed: false,
     });
   });
+
+  it('does not add an env-less duplicate for a service that already has RED in some environment', () => {
+    const merged = mergeServiceCatalog(['quote'], [row({ name: 'quote', env: 'prod', requestCount: 10 })]);
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ name: 'quote', env: 'prod' });
+  });
+
+  it('orders same-named rows by environment', () => {
+    const merged = mergeServiceCatalog(
+      [],
+      [row({ name: 'quote', env: 'test', requestCount: 5 }), row({ name: 'quote', env: 'prod', requestCount: 5 })],
+    );
+    expect(merged.map((item) => item.env)).toEqual(['prod', 'test']);
+  });
 });
 
 describe('filterRowsByServiceName', () => {
@@ -138,12 +183,38 @@ describe('pickTopServices', () => {
   ];
 
   it('ranks by the requested metric and ignores rows without RED', () => {
-    expect(pickTopServices(rows, 2, 'requestCount')).toEqual(['hot', 'slow']);
-    expect(pickTopServices(rows, 2, 'errorRate')).toEqual(['broken', 'slow']);
-    expect(pickTopServices(rows, 1, 'p95Seconds')).toEqual(['slow']);
+    expect(pickTopServices(rows, 2, 'requestCount').map((ref) => ref.key)).toEqual(['hot', 'slow']);
+    expect(pickTopServices(rows, 2, 'errorRate').map((ref) => ref.key)).toEqual(['broken', 'slow']);
+    expect(pickTopServices(rows, 1, 'p95Seconds').map((ref) => ref.key)).toEqual(['slow']);
   });
 
   it('returns an empty list when n is 0', () => {
     expect(pickTopServices(rows, 0, 'requestCount')).toEqual([]);
+  });
+
+  it('keys each environment separately so both draw as their own line', () => {
+    const multiEnv: ServiceRow[] = [
+      row({ name: 'quote', env: 'prod', requestCount: 900 }),
+      row({ name: 'quote', env: 'test', requestCount: 10 }),
+    ];
+    expect(pickTopServices(multiEnv, 2, 'requestCount')).toEqual([
+      { name: 'quote', env: 'prod', key: 'quote (prod)' },
+      { name: 'quote', env: 'test', key: 'quote (test)' },
+    ]);
+    expect(uniqueRefNames(pickTopServices(multiEnv, 2, 'requestCount'))).toEqual(['quote']);
+  });
+
+  it('drops duplicate keys when merging the three top lists', () => {
+    const shared = { name: 'quote', env: 'prod', key: 'quote (prod)' } as const;
+    expect(dedupeRefs([shared], [shared], [{ name: 'pay', key: 'pay' }])).toEqual([shared, { name: 'pay', key: 'pay' }]);
+  });
+
+  it('still ranks services whose error rate is 0, so the error chart is not just the one noisy service', () => {
+    const mixed: ServiceRow[] = [
+      row({ name: 'busy', requestCount: 100, errorRate: 0, failedCount: 0 }),
+      row({ name: 'quiet', requestCount: 10, errorRate: 0, failedCount: 0 }),
+      row({ name: 'broken', requestCount: 8, errorRate: 0.4, failedCount: 3 }),
+    ];
+    expect(pickTopServices(mixed, 3, 'errorRate').map((ref) => ref.key)).toEqual(['broken', 'busy', 'quiet']);
   });
 });

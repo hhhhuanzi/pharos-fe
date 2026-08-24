@@ -8,6 +8,8 @@ import {
   aggregateServiceRows,
   languageMapFromSamples,
   mergeServiceCatalog,
+  uniqueRefNames,
+  type ServiceRef,
   type ServiceRow,
 } from './list';
 import { buildGlobalEventerQueries, mergeServiceEvents, type GlobalEventQuery, type ServiceEventQuery, type ServiceEventsResult } from './events';
@@ -67,13 +69,28 @@ async function queryRedVectors(
   };
 }
 
-/** Incoming RED: spanmetrics first (service itself), then service_graph inbound. */
-export async function fetchServiceOverview(datasourceId: number, service: string, startUnix: number, endUnix: number): Promise<ServiceOverviewResult> {
+/**
+ * Incoming RED: spanmetrics first (service itself), then service_graph inbound. `env` narrows the
+ * spanmetrics slice to the environment the list row came from; service_graph has no environment
+ * dimension, so the fallback stays fleet-wide for that service.
+ */
+export async function fetchServiceOverview(
+  datasourceId: number,
+  service: string,
+  startUnix: number,
+  endUnix: number,
+  env?: string,
+): Promise<ServiceOverviewResult> {
   const rangeSeconds = Math.max(1, endUnix - startUnix);
   const range = toPromRange(rangeSeconds);
   const family = await detectSpanmetricsFamily(datasourceId, endUnix);
   if (family) {
-    const vectors = await queryRedVectors(datasourceId, buildSpanmetricsServiceQueries(family, service, range, escapePromLabel), endUnix, family.durationScale);
+    const vectors = await queryRedVectors(
+      datasourceId,
+      buildSpanmetricsServiceQueries(family, service, range, escapePromLabel, env),
+      endUnix,
+      family.durationScale,
+    );
     const merged = mergeServiceRed({ ...vectors, rangeSeconds });
     if (!merged.empty) return merged;
   }
@@ -172,11 +189,12 @@ export interface ServiceTopSeriesResult {
 
 export async function fetchServiceTopSeries(
   datasourceId: number,
-  services: string[],
+  refs: ServiceRef[],
   startUnix: number,
   endUnix: number,
 ): Promise<ServiceTopSeriesResult> {
   const empty: ServiceTopSeriesResult = { qps: [], errorRate: [], p95: [] };
+  const services = uniqueRefNames(refs);
   if (services.length === 0) return empty;
   const step = promRangeStep(startUnix, endUnix);
   const window = rateWindow(step);

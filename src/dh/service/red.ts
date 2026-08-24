@@ -1,6 +1,6 @@
 import { SERVICE_GRAPH_METRICS, toPromRange, type PromVectorSample } from '@/dh/trace/dependencies/promql';
 
-import { CLUSTER_LABEL_KEYS, LANGUAGE_LABEL_KEYS, NAMESPACE_LABEL_KEYS } from './constants';
+import { CLUSTER_LABEL_KEYS, ENV_LABEL_KEYS, LANGUAGE_LABEL_KEYS, NAMESPACE_LABEL_KEYS } from './constants';
 
 export { toPromRange };
 
@@ -37,6 +37,20 @@ export function pickServiceName(metric: Record<string, string> | undefined): str
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return '';
+}
+
+export function pickServiceEnv(metric: Record<string, string> | undefined): string | undefined {
+  if (!metric) return undefined;
+  return pickLabel(metric, ENV_LABEL_KEYS);
+}
+
+/**
+ * Same service name in two environments is two rows, so the environment has to be part of the
+ * key everywhere: table `rowKey`, RED aggregation buckets and chart series names.
+ */
+export function serviceKey(name: string, env?: string): string {
+  if (!name) return '';
+  return env ? `${name} (${env})` : name;
 }
 
 export function escapePromLabel(value: string): string {

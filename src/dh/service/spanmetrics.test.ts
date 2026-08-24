@@ -49,17 +49,19 @@ describe('spanmetrics queries', () => {
     serviceLabel: 'service_name',
   } as const;
 
-  it('aggregates catalog RED by service_name and status_code errors', () => {
+  it('keeps environment in the grouping so same-named services are not summed together', () => {
     const q = buildSpanmetricsCatalogQueries(family, '1h');
-    expect(q.total).toBe('sum by (service_name, telemetry_sdk_language) (increase(traces_span_metrics_calls_total[1h]))');
+    expect(q.total).toBe(
+      'sum by (service_name, deployment_environment_name, telemetry_sdk_language) (increase(traces_span_metrics_calls_total[1h]))',
+    );
     expect(q.failed).toBe(
-      'sum by (service_name, telemetry_sdk_language) (increase(traces_span_metrics_calls_total{status_code=~"STATUS_CODE_ERROR|ERROR"}[1h]))',
+      'sum by (service_name, deployment_environment_name, telemetry_sdk_language) (increase(traces_span_metrics_calls_total{status_code=~"STATUS_CODE_ERROR|ERROR"}[1h]))',
     );
     expect(q.p95).toBe(
-      'histogram_quantile(0.95, sum by (service_name, telemetry_sdk_language, le) (rate(traces_span_metrics_duration_milliseconds_bucket[1h])))',
+      'histogram_quantile(0.95, sum by (service_name, deployment_environment_name, telemetry_sdk_language, le) (rate(traces_span_metrics_duration_milliseconds_bucket[1h])))',
     );
     expect(q.p99).toBe(
-      'histogram_quantile(0.99, sum by (service_name, telemetry_sdk_language, le) (rate(traces_span_metrics_duration_milliseconds_bucket[1h])))',
+      'histogram_quantile(0.99, sum by (service_name, deployment_environment_name, telemetry_sdk_language, le) (rate(traces_span_metrics_duration_milliseconds_bucket[1h])))',
     );
   });
 
@@ -68,10 +70,26 @@ describe('spanmetrics queries', () => {
     expect(q.total).toBe('increase(traces_span_metrics_calls_total{service_name="a\\"b"}[5m])');
   });
 
-  it('builds top series matchers on the service label', () => {
+  it('narrows to one environment when the detail page was opened from an env-scoped row', () => {
+    const q = buildSpanmetricsServiceQueries(family, 'order', '5m', (value) => value, 'prod');
+    expect(q.total).toBe('increase(traces_span_metrics_calls_total{service_name="order", deployment_environment_name="prod"}[5m])');
+    expect(q.failed).toBe(
+      'increase(traces_span_metrics_calls_total{service_name="order", deployment_environment_name="prod", status_code=~"STATUS_CODE_ERROR|ERROR"}[5m])',
+    );
+    expect(q.p95).toBe(
+      'histogram_quantile(0.95, sum by (le) (rate(traces_span_metrics_duration_milliseconds_bucket{service_name="order", deployment_environment_name="prod"}[5m])))',
+    );
+  });
+
+  it('builds top series matchers on the service label and splits lines per environment', () => {
     const q = buildSpanmetricsTopQueries(family, ['order', 'pay'], '5m', () => '{service_name=~"order|pay"}');
-    expect(q?.qps).toBe('sum by (service_name) (rate(traces_span_metrics_calls_total{service_name=~"order|pay"}[5m]))');
-    expect(q?.errorRate).toContain('STATUS_CODE_ERROR');
+    expect(q?.qps).toBe(
+      'sum by (service_name, deployment_environment_name) (rate(traces_span_metrics_calls_total{service_name=~"order|pay"}[5m]))',
+    );
+    expect(q?.errorRate).toContain('sum by (service_name, deployment_environment_name)');
+    expect(q?.p95).toBe(
+      'histogram_quantile(0.95, sum by (service_name, deployment_environment_name, le) (rate(traces_span_metrics_duration_milliseconds_bucket{service_name=~"order|pay"}[5m])))',
+    );
   });
 
   it('includes the probe regex for known metric names', () => {

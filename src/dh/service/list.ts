@@ -1,9 +1,20 @@
 import type { PromVectorSample } from '@/dh/trace/dependencies/promql';
 
-import { extractAssociation, extractLanguages, formatLanguage, pickServiceName, sampleValueSafe, type ServiceAssociation } from './red';
+import {
+  extractAssociation,
+  extractLanguages,
+  formatLanguage,
+  pickServiceEnv,
+  pickServiceName,
+  sampleValueSafe,
+  serviceKey,
+  type ServiceAssociation,
+} from './red';
 
 export interface ServiceRow {
   name: string;
+  /** spanmetrics `deployment_environment_name`; undefined when the series carries no such label. */
+  env?: string;
   language?: string;
   requestCount?: number;
   failedCount?: number;
@@ -17,33 +28,49 @@ export interface ServiceRow {
 
 export type TopMetric = 'requestCount' | 'errorRate' | 'p95Seconds';
 
+/** A row's identity: PromQL matchers need the raw name, charts and tables need the key. */
+export interface ServiceRef {
+  name: string;
+  env?: string;
+  key: string;
+}
+
+export function serviceRefOf(row: Pick<ServiceRow, 'name' | 'env'>): ServiceRef {
+  const ref: ServiceRef = { name: row.name, key: serviceKey(row.name, row.env) };
+  if (row.env) ref.env = row.env;
+  return ref;
+}
+
 interface MutableRow extends ServiceRow {
   requestCount: number;
   failedCount: number;
 }
 
-function emptyRow(name: string): MutableRow {
-  return {
+function emptyRow(name: string, env?: string): MutableRow {
+  const row: MutableRow = {
     name,
     requestCount: 0,
     failedCount: 0,
     association: { clusters: [], namespaces: [] },
     hasRed: false,
   };
+  if (env) row.env = env;
+  return row;
 }
 
-function ensureRow(byName: Map<string, MutableRow>, name: string): MutableRow | null {
+function ensureRow(byKey: Map<string, MutableRow>, name: string, env?: string): MutableRow | null {
   const trimmed = name.trim();
   if (!trimmed) return null;
-  let row = byName.get(trimmed);
+  const key = serviceKey(trimmed, env);
+  let row = byKey.get(key);
   if (!row) {
-    row = emptyRow(trimmed);
-    byName.set(trimmed, row);
+    row = emptyRow(trimmed, env);
+    byKey.set(key, row);
   }
   return row;
 }
 
-/** Group Prom samples by `server` and sum RED. Language / cluster stay on the row when labels exist. */
+/** Group Prom samples by service + environment and sum RED. Language / cluster stay on the row when labels exist. */
 export function aggregateServiceRows(input: {
   total: PromVectorSample[];
   failed: PromVectorSample[];
@@ -51,13 +78,12 @@ export function aggregateServiceRows(input: {
   p99: PromVectorSample[];
   rangeSeconds: number;
 }): ServiceRow[] {
-  const byName = new Map<string, MutableRow>();
+  const byKey = new Map<string, MutableRow>();
   const rangeSeconds = Math.max(1, input.rangeSeconds);
 
   const addCount = (samples: PromVectorSample[], field: 'requestCount' | 'failedCount') => {
     samples.forEach((sample) => {
-      const name = pickServiceName(sample.metric);
-      const row = ensureRow(byName, name);
+      const row = ensureRow(byKey, pickServiceName(sample.metric), pickServiceEnv(sample.metric));
       if (!row) return;
       const n = sampleValueSafe(sample);
       if (Number.isFinite(n)) {
@@ -71,7 +97,7 @@ export function aggregateServiceRows(input: {
   addCount(input.failed, 'failedCount');
 
   input.p95.forEach((sample) => {
-    const row = ensureRow(byName, pickServiceName(sample.metric));
+    const row = ensureRow(byKey, pickServiceName(sample.metric), pickServiceEnv(sample.metric));
     if (!row) return;
     const n = sampleValueSafe(sample);
     if (Number.isFinite(n)) {
@@ -80,7 +106,7 @@ export function aggregateServiceRows(input: {
     }
   });
   input.p99.forEach((sample) => {
-    const row = ensureRow(byName, pickServiceName(sample.metric));
+    const row = ensureRow(byKey, pickServiceName(sample.metric), pickServiceEnv(sample.metric));
     if (!row) return;
     const n = sampleValueSafe(sample);
     if (Number.isFinite(n)) {
@@ -90,17 +116,18 @@ export function aggregateServiceRows(input: {
   });
 
   const labeled = [...input.total, ...input.failed];
-  const byServerSamples = new Map<string, PromVectorSample[]>();
+  const samplesByKey = new Map<string, PromVectorSample[]>();
   labeled.forEach((sample) => {
     const name = pickServiceName(sample.metric);
     if (!name) return;
-    const list = byServerSamples.get(name) || [];
+    const key = serviceKey(name.trim(), pickServiceEnv(sample.metric));
+    const list = samplesByKey.get(key) || [];
     list.push(sample);
-    byServerSamples.set(name, list);
+    samplesByKey.set(key, list);
   });
 
-  return Array.from(byName.values()).map((row) => {
-    const samples = byServerSamples.get(row.name) || [];
+  return Array.from(byKey.values()).map((row) => {
+    const samples = samplesByKey.get(serviceKey(row.name, row.env)) || [];
     const association = extractAssociation(samples);
     const language = formatLanguage(extractLanguages(samples));
     const next: ServiceRow = {
@@ -108,6 +135,7 @@ export function aggregateServiceRows(input: {
       association,
       hasRed: row.hasRed,
     };
+    if (row.env) next.env = row.env;
     if (language) next.language = language;
     if (row.hasRed) {
       next.requestCount = row.requestCount;
@@ -142,27 +170,35 @@ export function languageMapFromSamples(samples: PromVectorSample[], nameKeys: re
   return map;
 }
 
-/** Jaeger `/api/v3/services` ∪ Prom `server` labels. No RED → metrics stay undefined. */
+/**
+ * Jaeger `/api/v3/services` ∪ Prom rows. Jaeger returns bare names with no environment, so a
+ * service that already has RED in any environment must not gain a second env-less row.
+ */
 export function mergeServiceCatalog(jaegerNames: string[], promRows: ServiceRow[]): ServiceRow[] {
-  const byName = new Map<string, ServiceRow>();
+  const byKey = new Map<string, ServiceRow>();
+  const promNames = new Set<string>();
   promRows.forEach((row) => {
-    if (row.name) byName.set(row.name, row);
+    if (!row.name) return;
+    byKey.set(serviceKey(row.name, row.env), row);
+    promNames.add(row.name);
   });
   jaegerNames.forEach((raw) => {
     const name = raw.trim();
-    if (!name || byName.has(name)) return;
-    byName.set(name, {
+    if (!name || promNames.has(name)) return;
+    byKey.set(name, {
       name,
       association: { clusters: [], namespaces: [] },
       hasRed: false,
     });
   });
-  return Array.from(byName.values()).sort((a, b) => {
+  return Array.from(byKey.values()).sort((a, b) => {
     if (a.hasRed !== b.hasRed) return a.hasRed ? -1 : 1;
     const aCount = a.requestCount ?? -1;
     const bCount = b.requestCount ?? -1;
     if (aCount !== bCount) return bCount - aCount;
-    return a.name.localeCompare(b.name);
+    const byName = a.name.localeCompare(b.name);
+    if (byName !== 0) return byName;
+    return (a.env ?? '').localeCompare(b.env ?? '');
   });
 }
 
@@ -172,7 +208,7 @@ export function filterRowsByServiceName(rows: ServiceRow[], query: string): Serv
   return rows.filter((row) => row.name.toLowerCase().includes(needle));
 }
 
-export function pickTopServices(rows: ServiceRow[], n: number, metric: TopMetric): string[] {
+export function pickTopServices(rows: ServiceRow[], n: number, metric: TopMetric): ServiceRef[] {
   const limit = Math.max(0, Math.floor(n));
   const scored = rows
     .filter((row) => {
@@ -185,7 +221,24 @@ export function pickTopServices(rows: ServiceRow[], n: number, metric: TopMetric
     .sort((a, b) => {
       const diff = (b[metric] as number) - (a[metric] as number);
       if (diff !== 0) return diff;
-      return a.name.localeCompare(b.name);
+      const byName = a.name.localeCompare(b.name);
+      if (byName !== 0) return byName;
+      return (a.env ?? '').localeCompare(b.env ?? '');
     });
-  return scored.slice(0, limit).map((row) => row.name);
+  return scored.slice(0, limit).map(serviceRefOf);
+}
+
+/** Charts keep one line per row, but the PromQL matcher only takes service names. */
+export function uniqueRefNames(refs: ServiceRef[]): string[] {
+  return Array.from(new Set(refs.map((ref) => ref.name).filter(Boolean)));
+}
+
+export function dedupeRefs(...groups: ServiceRef[][]): ServiceRef[] {
+  const byKey = new Map<string, ServiceRef>();
+  groups.forEach((group) => {
+    group.forEach((ref) => {
+      if (!byKey.has(ref.key)) byKey.set(ref.key, ref);
+    });
+  });
+  return Array.from(byKey.values());
 }

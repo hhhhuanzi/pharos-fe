@@ -7,7 +7,7 @@ import type { AlignedData, Options } from 'uplot';
 import UPlotChart, { axisBuilder, cursorBuider, paddingSide, scalesBuilder, seriesBuider, tooltipPlugin } from '@/components/UPlotChart';
 import { CommonStateContext } from '@/App';
 import { hexPalette } from '@/pages/dashboard/config';
-import { alignServiceSeries, assignServiceColors, colorsForSeries, filterSeriesByNames, type NamedSeries } from '@/dh/service';
+import { alignServiceSeries, assignServiceColors, colorsForSeries, errorRateYMax, fillMissingSeries, filterSeriesByNames, type NamedSeries } from '@/dh/service';
 
 import { NS } from '../constants';
 import { formatErrorRate, formatLatency, formatQps } from '../format';
@@ -36,13 +36,20 @@ function ChartCard(props: ChartCardProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const size = useSize(wrapRef);
   const width = size?.width || 0;
-  const visible = useMemo(() => filterSeriesByNames(series, names), [series, names]);
+  const visible = useMemo(
+    () => (kind === 'errorRate' ? fillMissingSeries(series, names) : filterSeriesByNames(series, names)),
+    [kind, series, names],
+  );
   const aligned = useMemo(() => alignServiceSeries(visible), [visible]);
   const colors = useMemo(() => colorsForSeries(aligned.labels, colorByName, hexPalette), [aligned.labels, colorByName]);
+  const yMax = useMemo(
+    () => (kind === 'errorRate' ? errorRateYMax(aligned.frames.slice(1).flat()) : undefined),
+    [aligned.frames, kind],
+  );
   const id = `n9e-dh-service-top-${kind}`;
 
   const options: Options | undefined = useMemo(() => {
-    if (width <= 0 || aligned.labels.length === 0) return undefined;
+    if (width <= 0 || aligned.labels.length === 0 || aligned.times.length === 0) return undefined;
     return {
       width,
       height: 160,
@@ -57,7 +64,8 @@ function ChartCard(props: ChartCardProps) {
         }),
       ],
       cursor: cursorBuider({}),
-      scales: scalesBuilder({}),
+      // yRange (not yMinMax): uPlot still auto-scales from min/max, which is 0–100 when every point is 0.
+      scales: scalesBuilder(yMax != null ? { yRange: [0, yMax] } : {}),
       series: seriesBuider({
         baseSeries: aligned.labels.map((label) => ({ label })),
         colors,
@@ -79,7 +87,7 @@ function ChartCard(props: ChartCardProps) {
         }),
       ],
     };
-  }, [aligned.labels, colors, darkMode, kind, width]);
+  }, [aligned.labels, aligned.times.length, colors, darkMode, kind, width, yMax]);
 
   return (
     <div className='fc-border flex h-[220px] flex-col rounded-lg bg-fc-100 p-4'>
