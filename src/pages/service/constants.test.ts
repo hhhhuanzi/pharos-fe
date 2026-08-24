@@ -1,4 +1,17 @@
-import { DEFAULT_DETAIL_TAB, DEFAULT_LIST_TAB, DETAIL_TABS, isDetailTab, isListTab, LIST_TABS, PATH, PERM } from './constants';
+import { RELEASE_FLAGS } from '@/dh/releaseFlags';
+
+import {
+  DEFAULT_DETAIL_TAB,
+  DEFAULT_LIST_TAB,
+  DEFERRED_DETAIL_TABS,
+  DETAIL_TABS,
+  isDetailTab,
+  isListTab,
+  isVisibleDetailTab,
+  LIST_TABS,
+  PATH,
+  PERM,
+} from './constants';
 
 describe('service constants', () => {
   it('keeps menu key and permission path identical', () => {
@@ -14,5 +27,20 @@ describe('service constants', () => {
     expect(isDetailTab(DEFAULT_DETAIL_TAB)).toBe(true);
     expect(isListTab('events')).toBe(false);
     expect(isDetailTab('overview')).toBe(false);
+    expect(DEFERRED_DETAIL_TABS).toEqual(['events', 'flamegraph', 'exceptions'] as const);
+    expect(isVisibleDetailTab('monitoring')).toBe(true);
+    expect(isVisibleDetailTab('topology')).toBe(true);
+    expect(isVisibleDetailTab('logs')).toBe(true);
+    expect(isVisibleDetailTab('traces')).toBe(true);
+    expect(isVisibleDetailTab('events')).toBe(RELEASE_FLAGS.serviceDeferredTabs);
+    expect(isVisibleDetailTab('flamegraph')).toBe(RELEASE_FLAGS.serviceDeferredTabs);
+    expect(isVisibleDetailTab('exceptions')).toBe(RELEASE_FLAGS.serviceDeferredTabs);
+  });
+
+  it('hides 事件 / 性能火焰图 / 异常堆栈 while the 1.2.0 flag is off', () => {
+    expect(RELEASE_FLAGS.serviceDeferredTabs).toBe(false);
+    DEFERRED_DETAIL_TABS.forEach((tab) => {
+      expect(isVisibleDetailTab(tab)).toBe(false);
+    });
   });
 });

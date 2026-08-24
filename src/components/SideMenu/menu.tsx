@@ -5,6 +5,7 @@ import React from 'react';
 import { RobotOutlined } from '@ant-design/icons';
 
 import IconFont from '@/components/IconFont';
+import { RELEASE_FLAGS } from '@/dh/releaseFlags';
 
 import { MenuItem } from './types';
 import './locale';
@@ -47,10 +48,14 @@ export const getMenuList = (embeddedProductMenu: MenuItem[] = [], hideDeprecated
           key: '/trace/explorer',
           label: 'menu.traces',
         },
-        {
-          key: '/event-center',
-          label: 'menu.event_center',
-        },
+        ...(RELEASE_FLAGS.serviceDeferredTabs
+          ? [
+              {
+                key: '/event-center',
+                label: 'menu.event_center',
+              },
+            ]
+          : []),
         {
           key: 'metrics',
           label: 'menu.metrics',
