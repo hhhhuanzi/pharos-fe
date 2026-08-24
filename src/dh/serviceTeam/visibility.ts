@@ -5,7 +5,8 @@ import type { NamedTeam, ServiceTeamFilterResult, ServiceTeamItem, ServiceTeamMe
 /** 与 BE IsOpsRole / CanViewAll 对齐，仅在 filter/check API 不可用时作回退。 */
 export function localCanViewAll(profile?: { admin?: boolean; roles?: string[] }): boolean {
   if (profile?.admin === true) return true;
-  const roles = Array.isArray(profile?.roles) ? profile.roles : [];
+  const rawRoles = profile?.roles;
+  const roles = Array.isArray(rawRoles) ? rawRoles : [];
   return roles.some((raw) => {
     const n = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
     return n === 'sre' || n === '运维';

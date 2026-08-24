@@ -321,7 +321,7 @@ function ServiceGraphCanvasInner(props: IProps) {
   const [nodes, setNodes] = useState<Node<ServiceNodeData>[]>(() => toRfNodes(laidOut, nodeLabels || {}, nodeSubtitles || {}, nodeGlyphs || {}));
   const [hoveredNode, setHoveredNode] = useState<string>();
   const [hoveredEdge, setHoveredEdge] = useState<string>();
-  const hoverLeaveTimer = useRef<ReturnType<typeof window.setTimeout>>();
+  const hoverLeaveTimer = useRef<number>();
 
   const setEdgeHover = useCallback((id?: string) => {
     if (hoverLeaveTimer.current) window.clearTimeout(hoverLeaveTimer.current);

@@ -2,8 +2,9 @@ export interface PositionedNode {
   id: string;
   position: { x: number; y: number };
   dragging?: boolean;
-  width?: number;
-  height?: number;
+  // reactflow 的 Node 用 null 表示「尚未测量」，这里跟着放宽，避免调用方要先做一层转换。
+  width?: number | null;
+  height?: number | null;
   positionAbsolute?: { x: number; y: number };
 }
 

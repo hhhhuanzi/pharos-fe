@@ -34,7 +34,7 @@ export function isUsableIndexPattern(pattern: IndexPatternCandidate | undefined)
   );
 }
 
-export function buildServiceLogFormValues(pattern: IndexPatternCandidate, service?: string): ServiceLogFormValues | undefined {
+export function buildServiceLogFormValues(pattern: IndexPatternCandidate | undefined, service?: string): ServiceLogFormValues | undefined {
   if (!isUsableIndexPattern(pattern)) return undefined;
   const dateField = typeof pattern.time_field === 'string' && pattern.time_field.trim() ? pattern.time_field : '@timestamp';
   return {
