@@ -1,51 +1,55 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
+import { Spin } from 'antd';
 import { useTranslation } from 'react-i18next';
 
-import { getLogExplorerTarget, getLogTraceConfig } from '@/dh/logTrace/config';
-import { buildServiceLogQuery, type ServiceIdentity } from '@/dh/service';
+import type { ServiceAssociation, ServiceIdentity } from '@/dh/service';
+import { useServiceLogTarget } from '@/dh/serviceLog';
 import Explorer from '@/pages/logExplorer/Explorer';
-import getFormValuesBySearchParams from '@/pages/logExplorer/utils/getFormValuesBySearchParams';
 
 import { NS } from '../constants';
 import TabEmpty from './TabEmpty';
 
 interface Props {
-  identity: Pick<ServiceIdentity, 'service' | 'cluster' | 'namespace'>;
+  identity: Pick<ServiceIdentity, 'service' | 'env' | 'cluster' | 'namespace'>;
+  association: ServiceAssociation;
+  associationReady: boolean;
+  promId?: number;
 }
 
-function buildEmbeddedLogFormValues(identity: Props['identity']) {
-  if (!identity.service) return undefined;
-  const target = getLogExplorerTarget(getLogTraceConfig());
-  if (!target) return undefined;
-  const params: Record<string, string> = {
-    data_source_name: 'elasticsearch',
-    data_source_id: String(target.datasourceId),
-    query: buildServiceLogQuery(identity),
-  };
-  if (target.indexPattern != null) {
-    params.index_pattern = String(target.indexPattern);
-  } else if (target.index) {
-    params.index = target.index;
-  }
-  const formValues = getFormValuesBySearchParams(params);
-  if (!formValues) return undefined;
-  return {
-    ...formValues,
-    refreshFlag: 'refreshFlag_service_embed',
-  };
-}
-
-export default function Logs({ identity }: Props) {
+export default function Logs({ identity, association, associationReady, promId }: Props) {
   const { t } = useTranslation(NS);
-  const initialFormValues = useMemo(
-    () => buildEmbeddedLogFormValues(identity),
-    [identity.service, identity.cluster, identity.namespace],
-  );
   const [isInited, setIsInited] = useState(false);
-  const [formValues, setFormValues] = useState(initialFormValues);
+  const target = useServiceLogTarget({
+    service: identity.service,
+    env: identity.env,
+    namespace: identity.namespace,
+    associationNamespaces: association.namespaces,
+    associationReady,
+    promId,
+  });
 
-  if (!formValues) {
-    return <TabEmpty description={t('overview.logs_missing_config')} />;
+  if (target.status === 'loading') {
+    return (
+      <div className='flex min-h-[240px] items-center justify-center rounded-lg bg-fc-100 p-4 fc-border'>
+        <Spin />
+      </div>
+    );
+  }
+
+  if (target.status === 'missing_scope') {
+    return <TabEmpty description={t('overview.logs_missing_scope')} />;
+  }
+
+  if (target.status === 'ambiguous_namespace') {
+    return <TabEmpty description={t('overview.logs_ambiguous_namespace')} />;
+  }
+
+  if (target.status === 'pattern_missing') {
+    return <TabEmpty description={t('overview.logs_index_pattern_missing', { pattern: target.indexPatternName })} />;
+  }
+
+  if (target.status === 'error' || !target.formValues) {
+    return <TabEmpty description={t('overview.logs_index_pattern_load_failed')} />;
   }
 
   return (
@@ -56,11 +60,7 @@ export default function Logs({ identity }: Props) {
         defaultFormValuesControl={{
           isInited,
           setIsInited: () => setIsInited(true),
-          defaultFormValues: formValues,
-          setDefaultFormValues: (newValues) => {
-            setIsInited(true);
-            setFormValues(newValues);
-          },
+          defaultFormValues: target.formValues,
         }}
       />
     </div>
