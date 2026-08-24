@@ -35,6 +35,7 @@ import Tags from '@/components/TableTags/Tags';
 import './index.less';
 import './locale';
 import usePagination from '@/components/usePagination';
+import { BindServicesEntry } from '@/dh/serviceTeam';
 
 const { confirm } = Modal;
 export const PAGE_SIZE = 20;
@@ -356,14 +357,17 @@ const Resource: React.FC = () => {
                     onPressEnter={(e) => handleSearch('member', searchMemberValue)}
                   />
                 </Col>
-                <Button
-                  type='primary'
-                  onClick={() => {
-                    handleClick(ActionType.AddUser, teamId);
-                  }}
-                >
-                  {t('team.add_member')}
-                </Button>
+                <Space>
+                  <BindServicesEntry teamId={teamId} />
+                  <Button
+                    type='primary'
+                    onClick={() => {
+                      handleClick(ActionType.AddUser, teamId);
+                    }}
+                  >
+                    {t('team.add_member')}
+                  </Button>
+                </Space>
               </Row>
 
               <EnhancedTable
