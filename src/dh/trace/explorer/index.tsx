@@ -7,9 +7,11 @@ import { getTraceByID } from '@/pages/traceCpt/services';
 import { transformTraceData } from '@/pages/traceCpt/utils';
 import type { SearchTraceIDType, SearchTraceType, Trace } from '@/pages/traceCpt/type';
 import { ViewLogsLink } from '@/dh/logTrace';
+import type { IRawTimeRange } from '@/components/TimeRangePicker';
 import type { TracePluginType } from '../types';
 import { SpanFlamegraph } from '../spanFlamegraph';
 import TraceList from './TraceList';
+import { isSpanFlamegraphSwitchVisible } from './visibility';
 import '@/pages/traceCpt/index.less';
 
 type DetailView = 'waterfall' | 'span-flame';
@@ -20,17 +22,18 @@ interface IProps {
   initPluginType?: TracePluginType;
   initService?: string;
   initTags?: string;
+  initRange?: IRawTimeRange;
   /** Service-detail embed: pin type + datasource + service (do not hide the selects). */
   lockService?: boolean;
 }
 
 /**
  * Pharos trace explorer (R-28): the search result list is a table rather than a card feed, so a
- * single screen carries far more traces. The detail view reuses the upstream waterfall and hangs
- * the dh span flame graph beside it.
+ * single screen carries far more traces. The detail view reuses the upstream waterfall.
+ * Span flamegraph Radio is gated by `isSpanFlamegraphSwitchVisible` (1.2.0 off).
  */
 export default function TraceExplorer(props: IProps) {
-  const { init, initPluginId, initPluginType, initService, initTags, lockService } = props;
+  const { init, initPluginId, initPluginType, initService, initTags, initRange, lockService } = props;
   const { t } = useTranslation('trace');
   const [search, setSearch] = useState<SearchTraceType>();
   const [curTrace, setCurTrace] = useState<Trace>();
@@ -80,6 +83,7 @@ export default function TraceExplorer(props: IProps) {
           initPluginType={initPluginType}
           initService={initService}
           initTags={initTags}
+          initRange={initRange}
           lockService={lockService}
           onSearch={handleSearch}
           resultLoading={listLoading || detailLoading}
@@ -95,14 +99,16 @@ export default function TraceExplorer(props: IProps) {
             }}
             extra={
               <Space className='ml-2' size={8}>
-                <Radio.Group
-                  value={detailView}
-                  buttonStyle='solid'
-                  onChange={(e) => setDetailView(e.target.value)}
-                >
-                  <Radio.Button value='waterfall'>{t('span_flame.waterfall')}</Radio.Button>
-                  <Radio.Button value='span-flame'>{t('span_flame.title')}</Radio.Button>
-                </Radio.Group>
+                {isSpanFlamegraphSwitchVisible() && (
+                  <Radio.Group
+                    value={detailView}
+                    buttonStyle='solid'
+                    onChange={(e) => setDetailView(e.target.value)}
+                  >
+                    <Radio.Button value='waterfall'>{t('span_flame.waterfall')}</Radio.Button>
+                    <Radio.Button value='span-flame'>{t('span_flame.title')}</Radio.Button>
+                  </Radio.Group>
+                )}
                 <ViewLogsLink
                   entry='detail'
                   pluginType={activePluginType}
@@ -112,7 +118,11 @@ export default function TraceExplorer(props: IProps) {
                 />
               </Space>
             }
-            body={detailView === 'span-flame' ? <SpanFlamegraph key={curTrace.traceID} trace={curTrace} /> : undefined}
+            body={
+              isSpanFlamegraphSwitchVisible() && detailView === 'span-flame' ? (
+                <SpanFlamegraph key={curTrace.traceID} trace={curTrace} />
+              ) : undefined
+            }
           />
         ) : (
           <TraceList

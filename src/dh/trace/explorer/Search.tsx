@@ -19,6 +19,8 @@ interface IProps {
   initPluginType?: TracePluginType;
   /** Prefill Service when opening from the service page (no trace id). */
   initService?: string;
+  /** Prefill the time window (e.g. topology → traces with the same range). */
+  initRange?: IRawTimeRange;
   /** Kept for deep-link compat; tags filter was removed from the compact bar. */
   initTags?: string;
   /** Service-detail embed: pin investigation context (type + datasource + service). */
@@ -45,7 +47,7 @@ const traceIdFieldClass = 'mb-0 w-[400px] max-w-full';
 export default function Search(props: IProps) {
   const { t } = useTranslation('trace');
   const { groupedDatasourceList } = useContext(CommonStateContext);
-  const { onSearch, resultLoading, init, initPluginId, initPluginType, initService, lockService } = props;
+  const { onSearch, resultLoading, init, initPluginId, initPluginType, initService, initRange, lockService } = props;
   /** Same flag as lockService: embed locks type + datasource + service together. */
   const contextLocked = Boolean(lockService && initService);
   const [cate, setCate] = useState<TracePluginType>(initPluginType || 'jaeger');
@@ -63,7 +65,7 @@ export default function Search(props: IProps) {
       : filteredServices;
   const hasInstanceCol = instances.length > 1;
   const [range, setRange] = useState<IRawTimeRange>(
-    () => getDefaultValue(TRACE_SEARCH_RANGE_LS, TRACE_SEARCH_DEFAULT_RANGE) || TRACE_SEARCH_DEFAULT_RANGE,
+    () => initRange || getDefaultValue(TRACE_SEARCH_RANGE_LS, TRACE_SEARCH_DEFAULT_RANGE) || TRACE_SEARCH_DEFAULT_RANGE,
   );
   const parsedRange = parseRange(range);
 
