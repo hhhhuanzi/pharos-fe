@@ -1,77 +1,92 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Empty, Input, Select, Space, Spin, Table, Tooltip } from 'antd';
+import { useDebounce } from 'ahooks';
+import { Button, Empty, Input, Select, Space, Spin, Tooltip } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
-import type { ColumnsType } from 'antd/lib/table';
 import { useTranslation } from 'react-i18next';
 import TimeRangePicker, { getDefaultValue, IRawTimeRange, timeRangeUnix } from '@/components/TimeRangePicker';
 import InputGroupWithFormItem from '@/components/InputGroupWithFormItem';
 import { CommonStateContext } from '@/App';
-import { formatDuration } from '@/pages/traceCpt/utils/date';
 import type { PharosServiceEdge } from '../contract';
+import type { TracePluginType } from '../types';
 import { edgeKey } from './promql';
 import { fetchServiceGraph } from './query';
+import { filterOneHopEdges } from './graphVisual';
+import { type GraphNodeKind } from './layout';
+import { enrichVirtualGraph, type VirtualGraphEnrichment } from './peerType';
 import ServiceGraphCanvas from './Graph';
+import ServiceNodeDrawer from './ServiceNodeDrawer';
+import VirtualPeerDrawer from './VirtualPeerDrawer';
+import { fetchPeerMetasForGraph } from './virtualPeerQuery';
 
 const RANGE_LS = 'n9e-dh-service-graph-range';
 const PROM_LS = 'n9e-dh-service-graph-prom-id';
+const JAEGER_LS = 'n9e-dh-service-jaeger-id';
+const EMPTY_METAS = new Map();
 
-function readStoredPromId(): number | undefined {
-  const raw = localStorage.getItem(PROM_LS);
+function readStoredId(key: string): number | undefined {
+  const raw = localStorage.getItem(key);
   if (!raw) return undefined;
   const n = Number(raw);
   return Number.isFinite(n) ? n : undefined;
 }
 
-function formatQps(requestCount: number, rangeSeconds: number): string {
-  if (rangeSeconds <= 0) return '-';
-  const qps = requestCount / rangeSeconds;
-  if (qps >= 100) return qps.toFixed(0);
-  if (qps >= 1) return qps.toFixed(1);
-  return qps.toFixed(2);
-}
-
-function formatErrorRate(rate: number): string {
-  return `${(rate * 100).toFixed(rate >= 0.1 ? 1 : 2)}%`;
+function pickDatasourceId(list: Array<{ id: number }>, preferred?: number): number | undefined {
+  if (preferred != null && list.some((ds) => ds.id === preferred)) return preferred;
+  return list[0]?.id;
 }
 
 /**
  * Track B (R-30): service-graph edges with RED, read from Prometheus `traces_service_graph_*`.
  * Official `/trace/dependencies` is a thin mount; this file owns the page body.
+ *
+ * `focusService` from the parent means detail topology: render a 1-hop subgraph only.
+ * The global `/service` page omits it and keeps the full graph.
  */
 interface Props {
-  /** When set, dim / hide edges that do not touch this service. */
   focusService?: string;
 }
 
+interface SelectedNode {
+  id: string;
+  kind: GraphNodeKind;
+}
+
 export default function ServiceGraphPage(props: Props) {
-  const { focusService: focusFromParent } = props;
+  const { focusService: oneHopService } = props;
   const { t } = useTranslation('trace');
   const { groupedDatasourceList } = useContext(CommonStateContext);
   const prometheusList = groupedDatasourceList.prometheus || [];
+  const jaegerList = groupedDatasourceList.jaeger || [];
+  const skywalkingList = groupedDatasourceList.skywalking || [];
+  const tracingPlugin: TracePluginType = jaegerList.length > 0 ? 'jaeger' : skywalkingList.length > 0 ? 'skywalking' : 'jaeger';
+  const tracingList = tracingPlugin === 'skywalking' ? skywalkingList : jaegerList;
 
   const [datasourceId, setDatasourceId] = useState<number | undefined>(() => {
-    const stored = readStoredPromId();
+    const stored = readStoredId(PROM_LS);
     if (stored && prometheusList.some((ds) => ds.id === stored)) return stored;
     return prometheusList[0]?.id;
   });
+  const tracingId = pickDatasourceId(tracingList, tracingPlugin === 'jaeger' ? readStoredId(JAEGER_LS) : undefined);
   const [range, setRange] = useState<IRawTimeRange>(() => getDefaultValue(RANGE_LS, { start: 'now-1h', end: 'now' }) || { start: 'now-1h', end: 'now' });
   const [edges, setEdges] = useState<PharosServiceEdge[]>([]);
   const [rangeSeconds, setRangeSeconds] = useState(3600);
+  const [rangeMs, setRangeMs] = useState(() => {
+    const { start, end } = timeRangeUnix({ start: 'now-1h', end: 'now' });
+    return { start: start * 1000, end: end * 1000 };
+  });
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [serviceFilter, setServiceFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string>();
-  const [focusService, setFocusService] = useState<string | undefined>(focusFromParent);
-
-  useEffect(() => {
-    setFocusService(focusFromParent);
-  }, [focusFromParent]);
+  const [selectedNode, setSelectedNode] = useState<SelectedNode>();
+  const [traceEnrichment, setTraceEnrichment] = useState<{ key: string; value: VirtualGraphEnrichment }>();
   const requestSeq = useRef(0);
+  const enrichSeq = useRef(0);
 
   useEffect(() => {
     if (datasourceId != null) return;
-    const stored = readStoredPromId();
+    const stored = readStoredId(PROM_LS);
     if (stored && prometheusList.some((ds) => ds.id === stored)) {
       setDatasourceId(stored);
       return;
@@ -95,6 +110,7 @@ export default function ServiceGraphPage(props: Props) {
         if (requestSeq.current !== seq) return;
         setEdges(res.edges);
         setRangeSeconds(Math.max(1, end - start));
+        setRangeMs({ start: start * 1000, end: end * 1000 });
       })
       .catch(() => {
         if (requestSeq.current !== seq) return;
@@ -107,50 +123,78 @@ export default function ServiceGraphPage(props: Props) {
       });
   }, [datasourceId, range, refreshKey]);
 
-  const visibleEdges = useMemo(() => {
-    const q = serviceFilter.trim().toLowerCase();
-    if (!q) return edges;
-    return edges.filter((edge) => edge.client.toLowerCase().includes(q) || edge.server.toLowerCase().includes(q));
-  }, [edges, serviceFilter]);
+  const scopedEdges = useMemo(() => (oneHopService ? filterOneHopEdges(edges, oneHopService) : edges), [edges, oneHopService]);
+  const scopedKey = useMemo(
+    () => scopedEdges.map((edge) => edgeKey(edge.client, edge.server, edge.connectionType)).sort().join('\n'),
+    [scopedEdges],
+  );
+  const namedEnrichment = useMemo(() => enrichVirtualGraph(scopedEdges, EMPTY_METAS), [scopedEdges]);
 
-  const columns: ColumnsType<PharosServiceEdge> = [
-    { title: t('graph.columns.client'), dataIndex: 'client', ellipsis: true },
-    { title: t('graph.columns.server'), dataIndex: 'server', ellipsis: true },
-    {
-      title: t('graph.columns.connection'),
-      dataIndex: 'connectionType',
-      width: 120,
-      render: (v: string) => v || '-',
-    },
-    {
-      title: t('graph.columns.requests'),
-      dataIndex: 'requestCount',
-      width: 100,
-      sorter: (a, b) => a.requestCount - b.requestCount,
-      render: (v: number) => Math.round(v).toLocaleString(),
-    },
-    {
-      title: t('graph.columns.qps'),
-      key: 'qps',
-      width: 80,
-      render: (_: unknown, row) => formatQps(row.requestCount, rangeSeconds),
-    },
-    {
-      title: t('graph.columns.error_rate'),
-      dataIndex: 'errorRate',
-      width: 100,
-      defaultSortOrder: 'descend',
-      sorter: (a, b) => a.errorRate - b.errorRate,
-      render: (v: number) => <span className={v >= 0.05 ? 'text-error' : v >= 0.01 ? 'text-warning' : 'text-success'}>{formatErrorRate(v)}</span>,
-    },
-    {
-      title: t('graph.columns.p95'),
-      dataIndex: 'p95Seconds',
-      width: 100,
-      sorter: (a, b) => (a.p95Seconds || 0) - (b.p95Seconds || 0),
-      render: (v?: number) => (v == null ? '-' : formatDuration(Math.round(v * 1e6))),
-    },
-  ];
+  useEffect(() => {
+    if (tracingId == null || scopedEdges.length === 0) return;
+
+    const seq = enrichSeq.current + 1;
+    enrichSeq.current = seq;
+    const key = scopedKey;
+    fetchPeerMetasForGraph({
+      dataSourceId: tracingId,
+      pluginType: tracingPlugin,
+      edges: scopedEdges,
+      startMs: rangeMs.start,
+      endMs: rangeMs.end,
+    })
+      .then((metas) => {
+        if (enrichSeq.current !== seq) return;
+        setTraceEnrichment({ key, value: enrichVirtualGraph(scopedEdges, metas) });
+      })
+      .catch(() => {
+        if (enrichSeq.current !== seq) return;
+      });
+  }, [scopedEdges, scopedKey, tracingId, tracingPlugin, rangeMs.start, rangeMs.end]);
+
+  const enrichment = traceEnrichment?.key === scopedKey ? traceEnrichment.value : namedEnrichment;
+  const displayEdges = enrichment.edges;
+  const nodeLabels = enrichment.labels;
+  const nodeSubtitles = enrichment.subtitles;
+  const nodeGlyphs = enrichment.glyphs;
+
+  // Each new edge set re-runs dagre (up to 6 passes on the global graph), so the keystroke
+  // itself must not drive the relayout — the raw value stays on the input for responsiveness.
+  const appliedFilter = useDebounce(serviceFilter, { wait: 300 });
+
+  const visibleEdges = useMemo(() => {
+    const q = appliedFilter.trim().toLowerCase();
+    if (!q) return displayEdges;
+    return displayEdges.filter((edge) => {
+      const clientLabel = (nodeLabels?.[edge.client] || edge.client).toLowerCase();
+      const serverLabel = (nodeLabels?.[edge.server] || edge.server).toLowerCase();
+      const clientSub = (nodeSubtitles?.[edge.client] || '').toLowerCase();
+      const serverSub = (nodeSubtitles?.[edge.server] || '').toLowerCase();
+      return (
+        edge.client.toLowerCase().includes(q) ||
+        edge.server.toLowerCase().includes(q) ||
+        clientLabel.includes(q) ||
+        serverLabel.includes(q) ||
+        clientSub.includes(q) ||
+        serverSub.includes(q)
+      );
+    });
+  }, [displayEdges, appliedFilter, nodeLabels, nodeSubtitles]);
+
+  /** Clicking an edge pins its metric chip; clicking it again (or the canvas) releases it. */
+  const handleSelectEdge = (id: string | undefined) => {
+    setSelectedId((current) => (id && current !== id ? id : undefined));
+    setSelectedNode(undefined);
+  };
+
+  const handleSelectNode = (id: string | undefined, kind?: GraphNodeKind) => {
+    if (!id || !kind) {
+      setSelectedNode(undefined);
+      return;
+    }
+    setSelectedNode({ id, kind });
+    setSelectedId(undefined);
+  };
 
   return (
     <div className='flex flex-col gap-4'>
@@ -190,7 +234,10 @@ export default function ServiceGraphPage(props: Props) {
         <div className='mt-2 text-hint text-sm'>{t('graph.hint')}</div>
       </div>
 
-      <div className='fc-border rounded-lg bg-fc-100 h-[480px]'>
+      {/* The call-detail table used to sit below; give the freed space to the canvas. The floor
+          stays under the space a short window actually leaves, so the canvas never pushes the page
+          into a scrollbar — scrolling belongs to the graph, not to the page around it. */}
+      <div className='fc-border overflow-hidden rounded-lg bg-fc-50 h-[calc(100vh-300px)] min-h-[420px]'>
         {datasourceId == null ? (
           <div className='flex h-full items-center justify-center'>
             <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('graph.no_prometheus')} />
@@ -210,32 +257,43 @@ export default function ServiceGraphPage(props: Props) {
         ) : (
           <ServiceGraphCanvas
             edges={visibleEdges}
+            rangeSeconds={rangeSeconds}
             selectedId={selectedId}
-            focusService={focusService}
-            onSelectEdge={setSelectedId}
-            onSelectService={setFocusService}
+            selectedNode={selectedNode?.id}
+            nodeLabels={nodeLabels}
+            nodeSubtitles={nodeSubtitles}
+            nodeGlyphs={nodeGlyphs}
+            focusService={oneHopService}
+            onSelectEdge={handleSelectEdge}
+            onSelectNode={handleSelectNode}
           />
         )}
       </div>
 
-      <div className='fc-border rounded-lg bg-fc-100 p-4'>
-        <div className='mb-2 text-title text-l1 font-bold'>{t('graph.table_title', { num: visibleEdges.length })}</div>
-        <Table
-          size='small'
-          rowKey={(row) => edgeKey(row.client, row.server, row.connectionType)}
-          columns={columns}
-          dataSource={visibleEdges}
-          loading={loading}
-          pagination={visibleEdges.length > 50 ? { pageSize: 50, hideOnSinglePage: true } : false}
-          rowClassName={(row) => (edgeKey(row.client, row.server, row.connectionType) === selectedId ? 'bg-fc-200' : '')}
-          onRow={(row) => ({
-            onClick: () => {
-              const id = edgeKey(row.client, row.server, row.connectionType);
-              setSelectedId((prev) => (prev === id ? undefined : id));
-            },
-          })}
-        />
-      </div>
+      <VirtualPeerDrawer
+        nodeId={selectedNode?.kind === 'virtual' ? selectedNode.id : undefined}
+        displayName={
+          selectedNode
+            ? [nodeLabels?.[selectedNode.id], nodeSubtitles?.[selectedNode.id]].filter(Boolean).join(' · ') || selectedNode.id
+            : undefined
+        }
+        edges={displayEdges}
+        dataSourceId={tracingId}
+        pluginType={tracingPlugin}
+        startMs={rangeMs.start}
+        endMs={rangeMs.end}
+        onClose={() => setSelectedNode(undefined)}
+      />
+      <ServiceNodeDrawer
+        nodeId={selectedNode?.kind === 'service' ? selectedNode.id : undefined}
+        edges={displayEdges}
+        dataSourceId={tracingId}
+        pluginType={tracingPlugin}
+        startMs={rangeMs.start}
+        endMs={rangeMs.end}
+        rangeSeconds={rangeSeconds}
+        onClose={() => setSelectedNode(undefined)}
+      />
     </div>
   );
 }

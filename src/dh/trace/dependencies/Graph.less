@@ -1,0 +1,97 @@
+/* React Flow chrome only. Node/edge look lives in Tailwind on the components. */
+.dh-service-graph {
+  /* Frames between a relayout and the matching viewport transform: the cards are already at
+     their new coordinates but the pane is still panned/zoomed for the previous layout, so edges
+     would streak across the canvas. Chrome (Controls / MiniMap / Background) lives outside
+     `.react-flow__viewport`, so zoom buttons and panning stay available the whole time. */
+  &.dh-service-graph--measuring .react-flow__viewport {
+    visibility: hidden;
+  }
+
+  /* Edge SVG is a full-size overlay with inline z-index; keep it under node cards
+     so a left-in / right-out path cannot paint through the box. */
+  .react-flow__edges {
+    z-index: 1 !important;
+  }
+  .react-flow__nodes,
+  .react-flow__edgelabel-renderer {
+    z-index: 2;
+  }
+  /* HTML chips must form their own layer so SVG strokes paint behind the
+     opaque card. Same z as nodes: nodes come later in the DOM and win if a
+     chip overlaps a service card. */
+  .react-flow__edgelabel-renderer {
+    isolation: isolate;
+  }
+
+  /* Card text lives inside the zoomed pane, so its screen size follows the fit zoom; the scale
+     comes from JS (`nodeFontScale`) as a custom property on the pane wrapper. It has to be Less
+     rather than a Tailwind `text-*` class because Tailwind is `important: true` in this repo and
+     would win over the calc. Base sizes mirror the Tailwind scale: l1 / xs / base. */
+  .dh-service-node__label {
+    font-size: calc(14px * var(--dh-node-font-scale, 1));
+  }
+  .dh-service-node__subtitle {
+    font-size: calc(10px * var(--dh-node-font-scale, 1));
+  }
+  .dh-service-node__glyph {
+    font-size: calc(12px * var(--dh-node-font-scale, 1));
+  }
+
+  .react-flow__handle {
+    width: 4px;
+    height: 4px;
+    min-width: 0;
+    min-height: 0;
+    border: 0;
+    opacity: 0;
+    background: transparent;
+  }
+
+  /* On a graph too dense to fit, the minimap is the only way to tell where you are, so it stays
+     legible instead of fading into the background. */
+  .react-flow__minimap {
+    background: var(--fc-fill-1);
+    border: 1px solid var(--fc-border-color);
+    border-radius: 8px;
+    opacity: 0.85;
+  }
+
+  .react-flow__minimap:hover {
+    opacity: 1;
+  }
+
+  .react-flow__controls {
+    box-shadow: none;
+    border: 1px solid var(--fc-border-color);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .react-flow__controls-button {
+    width: 24px;
+    height: 24px;
+    background: var(--fc-fill-2);
+    border-bottom-color: var(--fc-border-color);
+    fill: var(--fc-text-3);
+  }
+
+  /* Text button among icon buttons: `fill` styles the SVG siblings, this one needs `color`. */
+  .dh-service-graph__actual-size span {
+    display: block;
+    color: var(--fc-text-3);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  .react-flow__edge-path {
+    stroke-linecap: round;
+  }
+
+  /* Pinned chips outlive the pointer, so they need to read as "kept" rather than "hovering". */
+  .dh-edge-metric--pinned {
+    border-color: var(--fc-fill-primary);
+    box-shadow: 0 2px 8px rgb(var(--fc-fill-3-rgb) / 0.45);
+  }
+}
