@@ -6,6 +6,7 @@ import { useTranslation, Trans } from 'react-i18next';
 
 import InputGroupWithFormItem from '@/components/InputGroupWithFormItem';
 import { useIsAuthorized } from '@/components/AuthorizationWrapper';
+import { useEsIndexTypeScope } from '@/dh/logPerm';
 import { generateQueryNameByIndex } from '@/components/QueryName/utils';
 import IndexPatternSelect from '@/plugins/elasticsearch/AlertRule/Queries/IndexPatternSelect';
 import DateField from '@/plugins/elasticsearch/AlertRule/Queries/DateField';
@@ -26,6 +27,7 @@ interface Props {
 export default function Query(props: Props) {
   const { t } = useTranslation('alertRules');
   const { field, datasourceValue, indexOptions, disabled } = props;
+  const { allowRawIndex, defaultIndexType } = useEsIndexTypeScope();
   const indexPatternsAuthorized = useIsAuthorized(['/log/index-patterns']);
   const [indexSearch, setIndexSearch] = useState('');
   const [indexPatternsRefreshFlag, setIndexPatternsRefreshFlag] = useState(_.uniqueId('indexPatternsRefreshFlag_'));
@@ -64,19 +66,25 @@ export default function Query(props: Props) {
                 <InputGroupWithFormItem
                   label={
                     <Space>
-                      <Form.Item {...field} name={[field.name, 'index_type']} noStyle initialValue='index'>
+                      <Form.Item {...field} name={[field.name, 'index_type']} noStyle initialValue={defaultIndexType}>
                         <Select
                           bordered={false}
-                          options={[
-                            {
-                              label: t('datasource:es.index'),
-                              value: 'index',
-                            },
-                            {
-                              label: t('datasource:es.indexPatterns'),
-                              value: 'index_pattern',
-                            },
-                          ]}
+                          options={_.concat(
+                            allowRawIndex
+                              ? [
+                                  {
+                                    label: t('datasource:es.index'),
+                                    value: 'index',
+                                  },
+                                ]
+                              : [],
+                            [
+                              {
+                                label: t('datasource:es.indexPatterns'),
+                                value: 'index_pattern',
+                              },
+                            ],
+                          )}
                           dropdownMatchSelectWidth={false}
                         />
                       </Form.Item>

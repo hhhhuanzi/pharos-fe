@@ -9,6 +9,7 @@ import QueryName from '@/components/QueryName';
 import DocumentDrawer from '@/components/DocumentDrawer';
 import { CommonStateContext } from '@/App';
 import { useIsAuthorized } from '@/components/AuthorizationWrapper';
+import { useEsIndexTypeScope } from '@/dh/logPerm';
 import IndexPatternSettingsBtn from '@/pages/explorer/Elasticsearch/components/IndexPatternSettingsBtn';
 import { getESIndexPatterns } from '@/pages/log/IndexPatterns/services';
 import CardContainer, { CardContainerHeader } from '@/pages/alertRules/FormNG/components/CardContainer';
@@ -36,6 +37,7 @@ export default function Query(props: Props) {
   const { darkMode } = useContext(CommonStateContext);
   const { field } = props;
   const { hideIndexPattern, datasourceValue, indexOptions, disabled, onClose } = props;
+  const { allowRawIndex, defaultIndexType } = useEsIndexTypeScope();
   const indexPatternsAuthorized = useIsAuthorized(['/log/index-patterns']);
   const [indexSearch, setIndexSearch] = useState('');
   const [indexPatternsRefreshFlag, setIndexPatternsRefreshFlag] = useState(_.uniqueId('indexPatternsRefreshFlag_'));
@@ -75,17 +77,19 @@ export default function Query(props: Props) {
                 <InputGroupWithFormItem
                   label={
                     <Space>
-                      <Form.Item {...field} name={[field.name, 'index_type']} noStyle initialValue='index'>
+                      <Form.Item {...field} name={[field.name, 'index_type']} noStyle initialValue={hideIndexPattern ? 'index' : defaultIndexType}>
                         <Select
                           data-testid={`es-query-${field.name}-index-type-select`}
                           bordered={false}
                           options={_.concat(
-                            [
-                              {
-                                label: t('datasource:es.index'),
-                                value: 'index',
-                              },
-                            ],
+                            allowRawIndex || hideIndexPattern
+                              ? [
+                                  {
+                                    label: t('datasource:es.index'),
+                                    value: 'index',
+                                  },
+                                ]
+                              : [],
                             hideIndexPattern ? [] : [{ label: t('datasource:es.indexPatterns'), value: 'index_pattern' }],
                           )}
                           dropdownMatchSelectWidth={false}

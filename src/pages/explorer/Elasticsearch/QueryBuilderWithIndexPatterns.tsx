@@ -10,6 +10,7 @@ import TimeRangePicker from '@/components/TimeRangePicker';
 import { getESIndexPatterns, standardizeFieldConfig } from '@/pages/log/IndexPatterns/services';
 import InputGroupWithFormItem from '@/components/InputGroupWithFormItem';
 import { useIsAuthorized } from '@/components/AuthorizationWrapper';
+import { useIndexPatternScope } from '@/dh/logPerm';
 import KQLInput from '@/components/KQLInput';
 import IndexPatternSettingsBtn from '@/pages/explorer/Elasticsearch/components/IndexPatternSettingsBtn';
 import ConditionHistoricalRecords from '@/components/HistoricalRecords/ConditionHistoricalRecords';
@@ -34,6 +35,7 @@ export default function QueryBuilder(props: Props) {
   const params = new URLSearchParams(useLocation().search);
   const { onExecute, datasourceValue, form, setFields, onIndexChange, loading, setHistory, resetFilters } = props;
   const [indexPatterns, setIndexPatterns] = useState<any[]>([]);
+  const { filter: filterIndexPatterns } = useIndexPatternScope();
   const indexPattern = Form.useWatch(['query', 'indexPattern']);
   const indexPatternObj = _.find(indexPatterns, (item) => item.id === indexPattern);
   const date_field = Form.useWatch(['query', 'date_field']);
@@ -69,8 +71,9 @@ export default function QueryBuilder(props: Props) {
   );
   const fetchESIndexPatterns = (callback?: (res) => void) => {
     getESIndexPatterns(datasourceValue).then((res) => {
-      setIndexPatterns(res);
-      callback && callback(res);
+      const visible = filterIndexPatterns(res);
+      setIndexPatterns(visible);
+      callback && callback(visible);
     });
   };
 

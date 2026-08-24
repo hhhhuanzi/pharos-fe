@@ -23,6 +23,7 @@ import { DatasourceCateEnum, IS_PLUS } from '@/utils/constant';
 import { DatasourceSelectV3 } from '@/components/DatasourceSelect';
 import { IRawTimeRange } from '@/components/TimeRangePicker';
 import { CommonStateContext } from '@/App';
+import { useEsIndexTypeScope } from '@/dh/logPerm';
 import { Dashboard } from '@/store/dashboardInterface';
 
 import { IVariable } from './definition';
@@ -79,6 +80,7 @@ function EditItem(props: IProps) {
   const anonymousAccess = dashboard.public === 1 && dashboard.public_cate === 0;
   const [form] = Form.useForm();
   const { groupedDatasourceList, datasourceCateOptions, datasourceList } = useContext(CommonStateContext);
+  const { allowRawIndex } = useEsIndexTypeScope();
   const otherVars = _.filter(vars, (item) => item.name !== data.name);
   const varType = Form.useWatch(['type'], form);
   const datesourceCate = Form.useWatch(['datasource', 'cate'], form);
@@ -173,6 +175,9 @@ function EditItem(props: IProps) {
                   ),
                   (item) => {
                     const cateData = _.find(datasourceCateOptions, { value: item.plugin_type });
+                    if (item.plugin_type === DatasourceCateEnum.elasticsearch && !allowRawIndex) {
+                      return false;
+                    }
                     return cateData?.dashboard === true && cateData.dashboardVariable === true && (cateData.graphPro ? IS_PLUS : true);
                   },
                 );

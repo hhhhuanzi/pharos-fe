@@ -6,6 +6,7 @@ import _ from 'lodash';
 import { useRequest } from 'ahooks';
 
 import { CommonStateContext } from '@/App';
+import { useEsIndexTypeScope } from '@/dh/logPerm';
 import { DatasourceCateEnum, IS_PLUS } from '@/utils/constant';
 import { DatasourceSelectV3 } from '@/components/DatasourceSelect';
 import DocumentDrawer from '@/components/DocumentDrawer';
@@ -32,6 +33,7 @@ export default function Query(props: Props) {
   const { t, i18n } = useTranslation('dashboard');
   const [range] = useGlobalState('range');
   const { datasourceCateOptions, datasourceList, darkMode } = useContext(CommonStateContext);
+  const { allowRawIndex } = useEsIndexTypeScope();
   const { formatedReg, datasourceVars, variablesWithOptions } = props;
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [options, setOptions] = useState<
@@ -128,6 +130,9 @@ export default function Query(props: Props) {
               ),
               (item) => {
                 const cateData = _.find(datasourceCateOptions, { value: item.plugin_type });
+                if (item.plugin_type === DatasourceCateEnum.elasticsearch && !allowRawIndex) {
+                  return false;
+                }
                 return cateData?.dashboard === true && cateData.dashboardVariable === true && (cateData.graphPro ? IS_PLUS : true);
               },
             );

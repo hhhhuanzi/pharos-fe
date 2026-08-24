@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { Form, Checkbox, Space, Button, Tooltip, Popover } from 'antd';
+import { Form, Checkbox, Space, Button, Tooltip, Popover, Empty } from 'antd';
 import { SettingOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import _ from 'lodash';
@@ -10,6 +10,7 @@ import { CommonStateContext } from '@/App';
 import OutlinedAutoComplete from '@/components/OutlinedAutoComplete';
 import { OutlinedSelect } from '@/components/OutlinedSelect';
 import { useIsAuthorized } from '@/components/AuthorizationWrapper';
+import { useIndexPatternScope } from '@/dh/logPerm';
 import { getESIndexPatterns, standardizeFieldConfig } from '@/pages/log/IndexPatterns/services';
 
 import { NAME_SPACE } from '../../constants';
@@ -42,6 +43,7 @@ export default function indexCpt(props: Props) {
   const { t } = useTranslation(NAME_SPACE);
   const { esIndexMode } = useContext(CommonStateContext);
   const { disabled, executeQuery, organizeFields, setOrganizeFields, onIndexDataChange, handleValueFilter, requestParams, isOpenSearch } = props;
+  const { filter: filterIndexPatterns } = useIndexPatternScope();
 
   const indexPatternsAuthorized = useIsAuthorized(['/log/index-patterns']);
 
@@ -107,7 +109,7 @@ export default function indexCpt(props: Props) {
     },
   );
 
-  const { data: indexPatterns, run: runIndexPatterns } = useRequest(() => getESIndexPatterns(datasourceValue), {
+  const { data: indexPatterns, run: runIndexPatterns } = useRequest(() => getESIndexPatterns(datasourceValue).then(filterIndexPatterns), {
     refreshDeps: [datasourceValue],
     ready: !!datasourceValue && queryValues?.mode === 'index-patterns',
     onSuccess: (data) => {
@@ -187,7 +189,7 @@ export default function indexCpt(props: Props) {
         <div className='flex-shrink-0'>
           <Form.Item
             name={['query', 'mode']}
-            initialValue={esIndexMode !== 'all' ? esIndexMode : isOpenSearch ? 'indices' : 'index-patterns'}
+            initialValue={isOpenSearch ? 'indices' : esIndexMode !== 'all' ? esIndexMode : 'index-patterns'}
             hidden={isOpenSearch || esIndexMode !== 'all'}
           >
             <OutlinedSelect
@@ -394,6 +396,9 @@ export default function indexCpt(props: Props) {
                   }}
                 />
               </Form.Item>
+              {indexPatterns && indexPatterns.length === 0 && (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description='无可用索引模式，请联系管理员授权' />
+              )}
             </>
           )}
         </div>

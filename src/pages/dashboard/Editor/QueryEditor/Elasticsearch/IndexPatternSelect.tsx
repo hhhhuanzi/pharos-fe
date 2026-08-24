@@ -3,6 +3,8 @@ import { Form, Select } from 'antd';
 import _ from 'lodash';
 import { useTranslation } from 'react-i18next';
 
+import { useVisibleIndexPatterns } from '@/dh/logPerm';
+
 interface Props {
   field: any;
   name?: string[]; // 订阅规则里在 field.name 和 index_pattern 之间插入的字段
@@ -12,6 +14,7 @@ interface Props {
 export default function IndexPatternSelect(props: Props) {
   const { t } = useTranslation();
   const { field, name = [], indexPatterns } = props;
+  const visibleIndexPatterns = useVisibleIndexPatterns(indexPatterns);
 
   return (
     <Form.Item
@@ -26,7 +29,7 @@ export default function IndexPatternSelect(props: Props) {
       ]}
     >
       <Select
-        options={_.map(indexPatterns, (item) => {
+        options={_.map(visibleIndexPatterns, (item) => {
           return {
             label: item.name,
             value: item.id,

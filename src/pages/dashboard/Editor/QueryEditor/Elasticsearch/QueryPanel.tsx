@@ -11,6 +11,7 @@ import { generateQueryNameByIndex } from '@/components/QueryName/utils';
 import InputGroupWithFormItem from '@/components/InputGroupWithFormItem';
 import KQLInput from '@/components/KQLInput';
 import LegendInput from '@/pages/dashboard/Components/LegendInput';
+import { useEsIndexTypeScope } from '@/dh/logPerm';
 import { getESIndexPatterns } from '@/pages/log/IndexPatterns/services';
 
 import { Panel } from '../../Components/Collapse';
@@ -32,6 +33,7 @@ interface Props {
 
 export default function QueryPanel({ fields, field, index, add, remove, datasourceValue }: Props) {
   const { t } = useTranslation('dashboard');
+  const { allowRawIndex, defaultIndexType } = useEsIndexTypeScope();
   const [indexPatterns, setIndexPatterns] = useState<any[]>([]);
   const prefixName = ['targets', field.name];
   const chartForm = Form.useFormInstance();
@@ -84,9 +86,9 @@ export default function QueryPanel({ fields, field, index, add, remove, datasour
       }
     >
       <Form.Item noStyle {...field} name={[field.name, 'refId']} hidden />
-      <Form.Item {...field} name={[field.name, 'query', 'index_type']} initialValue='index'>
+      <Form.Item {...field} name={[field.name, 'query', 'index_type']} initialValue={defaultIndexType}>
         <Radio.Group>
-          <Radio value='index'>{t('datasource:es.index')}</Radio>
+          {allowRawIndex && <Radio value='index'>{t('datasource:es.index')}</Radio>}
           <Radio value='index_pattern'>{t('datasource:es.indexPatterns')}</Radio>
         </Radio.Group>
       </Form.Item>

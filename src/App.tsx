@@ -226,7 +226,7 @@ function App() {
       updateDarkMode(mode);
       setCommonState((state) => ({ ...state, darkMode: mode }));
     },
-    esIndexMode: 'all',
+    esIndexMode: 'index-patterns',
     dashboardSaveMode: 'manual',
     screenTemplates: [],
     installTs: 0,

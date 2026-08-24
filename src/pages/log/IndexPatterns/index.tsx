@@ -24,6 +24,7 @@ import { arrayMoveImmutable } from 'array-move';
 import PageLayout from '@/components/pageLayout';
 import EnhancedTable from '@/components/EnhancedTable';
 import AuthorizationWrapper from '@/components/AuthorizationWrapper';
+import { useIndexPatternScope } from '@/dh/logPerm';
 import { CommonStateContext } from '@/App';
 import { getESIndexPatterns, deleteESIndexPattern, putESIndexPattern, putESIndexPatternWeights } from './services';
 import FormModal from './FormModal';
@@ -44,6 +45,7 @@ const SortableRow = SortableElement((props: React.HTMLAttributes<HTMLTableRowEle
 export default function Servers() {
   const { t } = useTranslation('es-index-patterns');
   const { groupedDatasourceList, datasourceList } = useContext(CommonStateContext);
+  const { filter: filterIndexPatterns } = useIndexPatternScope();
   const [search, setSearch] = useState('');
   const [data, setData] = useState<IndexPattern[]>([]);
   const [loading, setLoading] = useState(false);
@@ -54,7 +56,7 @@ export default function Servers() {
     setLoading(true);
     return getESIndexPatterns()
       .then((res) => {
-        setData(res);
+        setData(filterIndexPatterns(res));
         if (init && indexPatternId) {
           const indexPattern = _.find(res, { id: Number(indexPatternId) });
           if (indexPattern) {
