@@ -4,8 +4,10 @@ import type { ColumnsType } from 'antd/lib/table';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
-import { buildServiceDetailPath, type ServiceRow } from '@/dh/service';
+import { buildServiceDetailPath, serviceKey, type ServiceRow } from '@/dh/service';
+import { BusinessTags, type ServiceTeamMeta } from '@/dh/serviceTeam';
 
+import EnvTag from '../components/EnvTag';
 import { NS } from '../constants';
 import { errorRateClass, formatCount, formatErrorRate, formatLanguage, formatLatency, formatQps } from '../format';
 
@@ -13,13 +15,14 @@ interface Props {
   rows: ServiceRow[];
   loading: boolean;
   jaegerId?: number;
+  teamMeta?: ServiceTeamMeta;
 }
 
 const TABLE_CLASS =
   'n9e-dh-service-table [&_.ant-table-thead>tr>th]:px-3 [&_.ant-table-thead>tr>th]:py-2 [&_.ant-table-tbody>tr>td]:px-3 [&_.ant-table-tbody>tr>td]:py-2';
 
 export default function ServiceTable(props: Props) {
-  const { rows, loading, jaegerId } = props;
+  const { rows, loading, jaegerId, teamMeta } = props;
   const { t } = useTranslation(NS);
 
   const columns: ColumnsType<ServiceRow> = useMemo(
@@ -29,11 +32,27 @@ export default function ServiceTable(props: Props) {
         dataIndex: 'name',
         ellipsis: true,
         width: 280,
-        render: (name: string) => (
-          <Link className='inline-flex max-w-full items-center truncate' title={name} to={buildServiceDetailPath(name, { ds: jaegerId })}>
+        render: (name: string, row) => (
+          <Link
+            className='inline-flex max-w-full items-center truncate'
+            title={name}
+            to={buildServiceDetailPath(name, { ds: jaegerId, env: row.env })}
+          >
             {name}
           </Link>
         ),
+      },
+      {
+        title: t('table.env'),
+        dataIndex: 'env',
+        width: 112,
+        render: (value?: string) => <EnvTag value={value} />,
+      },
+      {
+        title: t('table.team'),
+        key: 'team',
+        width: 200,
+        render: (_: unknown, row: ServiceRow) => <BusinessTags teams={teamMeta?.teamsByName[row.name]} />,
       },
       {
         title: t('table.language'),
@@ -80,7 +99,7 @@ export default function ServiceTable(props: Props) {
         render: (value?: number) => formatLatency(value),
       },
     ],
-    [jaegerId, t],
+    [jaegerId, t, teamMeta],
   );
 
   return (
@@ -88,11 +107,11 @@ export default function ServiceTable(props: Props) {
       <Table
         size='small'
         tableLayout='fixed'
-        rowKey='name'
+        rowKey={(row) => serviceKey(row.name, row.env)}
         columns={columns}
         dataSource={rows}
         loading={loading}
-        scroll={{ x: 848 }}
+        scroll={{ x: 1120 }}
         pagination={rows.length > 50 ? { pageSize: 50, hideOnSinglePage: true, showSizeChanger: true, pageSizeOptions: ['20', '50', '100'] } : false}
       />
     </div>

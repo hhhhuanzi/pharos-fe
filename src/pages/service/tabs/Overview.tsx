@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import InputGroupWithFormItem from '@/components/InputGroupWithFormItem';
 import TimeRangePicker, { IRawTimeRange } from '@/components/TimeRangePicker';
 import { TOP_N_OPTIONS, type NamedSeries, type ServiceRow } from '@/dh/service';
+import type { ServiceTeamMeta } from '@/dh/serviceTeam';
 
 import { NS } from '../constants';
 import { RANGE_LS, TOP_N_LS } from '../storage';
@@ -40,6 +41,7 @@ interface Props {
   seriesLoading: boolean;
   failed: boolean;
   onRefresh: () => void;
+  teamMeta?: ServiceTeamMeta;
 }
 
 export default function Overview(props: Props) {
@@ -65,6 +67,7 @@ export default function Overview(props: Props) {
     seriesLoading,
     failed,
     onRefresh,
+    teamMeta,
   } = props;
   const { t } = useTranslation(NS);
 
@@ -121,10 +124,13 @@ export default function Overview(props: Props) {
           <TopCharts qps={qps} errorRate={errorRate} p95={p95} qpsNames={qpsNames} errorNames={errorNames} p95Names={p95Names} loading={seriesLoading} />
           {rows.length === 0 && !loading ? (
             <div className='flex min-h-[240px] items-center justify-center rounded-lg bg-fc-100 p-4 fc-border'>
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('overview.table_empty')} />
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={t(teamMeta?.catalogFiltered ? 'overview.table_empty_no_team' : 'overview.table_empty')}
+              />
             </div>
           ) : (
-            <ServiceTable rows={rows} loading={loading} jaegerId={jaegerId} />
+            <ServiceTable rows={rows} loading={loading} jaegerId={jaegerId} teamMeta={teamMeta} />
           )}
         </>
       )}
