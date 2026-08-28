@@ -130,7 +130,7 @@ export default function Overview(props: Props) {
               />
             </div>
           ) : (
-            <ServiceTable rows={rows} loading={loading} jaegerId={jaegerId} teamMeta={teamMeta} />
+            <ServiceTable rows={rows} loading={loading} jaegerId={jaegerId} teamMeta={teamMeta} search={search} />
           )}
         </>
       )}

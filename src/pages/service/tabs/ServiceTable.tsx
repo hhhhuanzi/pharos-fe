@@ -1,29 +1,42 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Table } from 'antd';
 import type { ColumnsType } from 'antd/lib/table';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
+import usePagination from '@/components/usePagination';
 import { buildServiceDetailPath, serviceKey, type ServiceRow } from '@/dh/service';
 import { BusinessTags, type ServiceTeamMeta } from '@/dh/serviceTeam';
 
 import EnvTag from '../components/EnvTag';
 import { NS } from '../constants';
 import { errorRateClass, formatCount, formatErrorRate, formatLanguage, formatLatency, formatQps } from '../format';
+import { TABLE_PAGESIZE_LS } from '../storage';
 
 interface Props {
   rows: ServiceRow[];
   loading: boolean;
   jaegerId?: number;
   teamMeta?: ServiceTeamMeta;
+  search: string;
 }
 
 const TABLE_CLASS =
   'n9e-dh-service-table [&_.ant-table-thead>tr>th]:px-3 [&_.ant-table-thead>tr>th]:py-2 [&_.ant-table-tbody>tr>td]:px-3 [&_.ant-table-tbody>tr>td]:py-2';
 
 export default function ServiceTable(props: Props) {
-  const { rows, loading, jaegerId, teamMeta } = props;
+  const { rows, loading, jaegerId, teamMeta, search } = props;
   const { t } = useTranslation(NS);
+  const pagination = usePagination({ pageSizeLocalstorageKey: TABLE_PAGESIZE_LS });
+  const [current, setCurrent] = useState(1);
+
+  useEffect(() => {
+    setCurrent(1);
+  }, [search]);
+
+  const pageSize = pagination.pageSize;
+  const maxPage = Math.max(1, Math.ceil(rows.length / pageSize) || 1);
+  const page = Math.min(current, maxPage);
 
   const columns: ColumnsType<ServiceRow> = useMemo(
     () => [
@@ -112,7 +125,12 @@ export default function ServiceTable(props: Props) {
         dataSource={rows}
         loading={loading}
         scroll={{ x: 1120 }}
-        pagination={rows.length > 50 ? { pageSize: 50, hideOnSinglePage: true, showSizeChanger: true, pageSizeOptions: ['20', '50', '100'] } : false}
+        pagination={{
+          ...pagination,
+          current: page,
+          total: rows.length,
+          onChange: (next) => setCurrent(next),
+        }}
       />
     </div>
   );

@@ -4,6 +4,7 @@ export const EVENTS_RANGE_LS = 'n9e-dh-service-events-range';
 export const MONITORING_RANGE_LS = 'n9e-dh-service-monitoring-range';
 export const JAEGER_LS = 'n9e-dh-service-jaeger-id';
 export const TOP_N_LS = 'n9e-dh-service-top-n';
+export const TABLE_PAGESIZE_LS = 'n9e-dh-service-list-pagesize';
 
 export function readStoredId(key: string): number | undefined {
   const raw = localStorage.getItem(key);
