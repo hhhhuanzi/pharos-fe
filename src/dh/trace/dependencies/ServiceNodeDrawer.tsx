@@ -14,6 +14,8 @@ import { PEER_TRACE_LIMIT } from './virtualPeerQuery';
 interface Props {
   nodeId?: string;
   edges: PharosServiceEdge[];
+  /** Services the current user may see; resource attributes are only queried for these. */
+  allowedServices: ReadonlySet<string>;
   dataSourceId?: number;
   pluginType: TracePluginType;
   startMs: number;
@@ -27,13 +29,20 @@ function fieldLabelKey(id: ServiceResourceFieldId): string {
 }
 
 export default function ServiceNodeDrawer(props: Props) {
-  const { nodeId, edges, dataSourceId, pluginType, startMs, endMs, rangeSeconds, onClose } = props;
+  const { nodeId, edges, allowedServices, dataSourceId, pluginType, startMs, endMs, rangeSeconds, onClose } = props;
   const { t } = useTranslation('trace');
   const [loading, setLoading] = useState(false);
   const [resources, setResources] = useState<ServiceResourceField[]>();
   const [traceCount, setTraceCount] = useState(0);
   const [error, setError] = useState<string>();
   const requestSeq = useRef(0);
+
+  /**
+   * The neighbour table comes from already team-filtered edges, so it stays. Resource attributes
+   * come from the node's own traces, which only its owners may read — an unknown whitelist keeps
+   * them hidden instead of falling back to querying.
+   */
+  const traceAllowed = Boolean(nodeId) && allowedServices.has(nodeId || '');
 
   const neighbors = useMemo(() => (nodeId ? neighborRows(nodeId, edges) : []), [nodeId, edges]);
   const upstream = useMemo(() => neighbors.filter((row) => row.direction === 'upstream'), [neighbors]);
@@ -47,7 +56,7 @@ export default function ServiceNodeDrawer(props: Props) {
   };
 
   useEffect(() => {
-    if (!nodeId || dataSourceId == null) {
+    if (!nodeId || dataSourceId == null || !traceAllowed) {
       setLoading(false);
       setResources(undefined);
       setTraceCount(0);
@@ -84,7 +93,7 @@ export default function ServiceNodeDrawer(props: Props) {
         if (requestSeq.current !== seq) return;
         setLoading(false);
       });
-  }, [nodeId, dataSourceId, pluginType, startMs, endMs, t]);
+  }, [nodeId, dataSourceId, pluginType, startMs, endMs, traceAllowed, t]);
 
   const handleClose = () => {
     requestSeq.current += 1;
@@ -149,7 +158,9 @@ export default function ServiceNodeDrawer(props: Props) {
           <div>
             <div className='mb-3 text-l1 font-bold text-title'>{t('graph.node.resources')}</div>
             <div className='mb-3 text-base text-hint'>{t('graph.node.resources_hint')}</div>
-            {dataSourceId == null ? (
+            {!traceAllowed ? (
+              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('graph.node.resources_restricted')} />
+            ) : dataSourceId == null ? (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('graph.node.no_jaeger')} />
             ) : error ? (
               <Alert type='error' showIcon message={error} />

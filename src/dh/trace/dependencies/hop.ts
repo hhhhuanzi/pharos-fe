@@ -12,6 +12,15 @@ export function adjacentClients(nodeId: string, edges: PharosServiceEdge[]): str
     .map(([name]) => name);
 }
 
+/**
+ * `adjacentClients` narrowed to the services the current user may see, so trace queries for a
+ * shared middleware node never run on another team's behalf. An empty `allowedServices` yields an
+ * empty list: a missing whitelist must not widen the query set.
+ */
+export function visibleAdjacentClients(nodeId: string, edges: PharosServiceEdge[], allowedServices: ReadonlySet<string>): string[] {
+  return adjacentClients(nodeId, edges).filter((client) => allowedServices.has(client));
+}
+
 /** Callees of `nodeId` (the server side of edges out of this node), heaviest first. */
 export function adjacentServers(nodeId: string, edges: PharosServiceEdge[]): string[] {
   const counts = new Map<string, number>();

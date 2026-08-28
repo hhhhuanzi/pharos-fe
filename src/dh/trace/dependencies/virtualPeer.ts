@@ -160,6 +160,18 @@ export interface MatchVirtualNodeOptions {
   operationName?: string;
 }
 
+export interface AggregateVirtualPeerOptions extends MatchVirtualNodeOptions {
+  /**
+   * Emitting services whose spans may be aggregated. Matching a trace by caller does not mean
+   * every span in it was emitted by that caller: a trace pulled for `turms-gateway` also carries
+   * the spans `nome-sec-admin` sent to the same shared database.
+   *
+   * Required rather than optional so no call site can drop the whitelist and silently widen the
+   * result back to every emitter in the sampled traces.
+   */
+  allowedServices: ReadonlySet<string>;
+}
+
 const RABBIT_OPERATION = /^(basic\.|amqp\b|rabbitmq\b)/i;
 
 function peerAddressForMatch(tags: TraceKeyValuePair[] | undefined): string {
@@ -275,12 +287,13 @@ export function formatPeerInstance(instance: Pick<PeerInstance, 'address' | 'por
 /**
  * Collect every tag on matching client spans (span + resource/process), then curate
  * key fields (first non-empty key in each fallback list) and instance rows by address+port.
+ * Only spans emitted by `options.allowedServices` contribute.
  */
 export function aggregateVirtualPeerSpans(
   traces: TraceResponse[],
   nodeName: string,
   truncated: boolean,
-  options?: MatchVirtualNodeOptions,
+  options: AggregateVirtualPeerOptions,
 ): VirtualPeerAggregate {
   const valueSets = new Map<string, Set<string>>();
   const matchedSpans: MatchedPeerSpan[] = [];
@@ -291,10 +304,11 @@ export function aggregateVirtualPeerSpans(
 
   traces.forEach((trace) => {
     (trace.spans || []).forEach((span) => {
+      const service = trace.processes?.[span.processID]?.serviceName || '';
+      if (!options.allowedServices.has(service)) return;
       const spanTags = span.tags || [];
       if (!spanMatchesVirtualNode(spanTags, nodeName, { ...options, operationName: span.operationName })) return;
       const tags = tagsOf(span, trace);
-      const service = trace.processes?.[span.processID]?.serviceName || '';
       matchedSpans.push({
         traceId: trace.traceID,
         spanId: span.spanID,

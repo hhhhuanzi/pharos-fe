@@ -1,11 +1,4 @@
-import {
-  getJaegerServices,
-  getJaegerOperations,
-  searchJaegerTraces,
-  findJaegerTraceSummaries,
-  getJaegerTraceById,
-  getJaegerDependencies,
-} from './jaeger';
+import { getJaegerServices, getJaegerOperations, searchJaegerTraces, findDhTraceSummaries, getJaegerTraceById, getJaegerDependencies } from './jaeger';
 import { transformTraceData } from '@/pages/traceCpt/utils';
 import { traceResponseToSummary } from '../contract';
 import { TraceSearchParams, TraceByIdParams } from '../types';
@@ -62,23 +55,48 @@ describe('jaeger adapter (api_v3)', () => {
       attributes: { 'http.status_code': '200' },
     };
 
-    it('sends snake_case query.* params (RFC3339 time range) to /api/v3/traces', async () => {
-      mockRequest.mockResolvedValue({ result: { resourceSpans: [] } });
+    it('goes through the authorized /dh/trace-search endpoint, not the datasource proxy', async () => {
+      mockRequest.mockResolvedValue({ dat: { result: { resourceSpans: [] } } });
       await searchJaegerTraces(baseParams);
       expect(mockRequest).toHaveBeenCalledWith(
-        '/api/n9e/proxy/1/api/v3/traces',
+        '/api/n9e/dh/trace-search',
         expect.objectContaining({
           method: 'Get',
           silence: true,
           params: {
-            'query.service_name': 'svc-a',
-            'query.operation_name': 'GET /foo',
-            'query.start_time_min': new Date(1731000000000).toISOString(),
-            'query.start_time_max': new Date(1731000060000).toISOString(),
-            'query.duration_min': '10ms',
-            'query.duration_max': '2s',
-            'query.num_traces': '20',
-            'query.attributes': JSON.stringify({ 'http.status_code': '200' }),
+            datasource_id: 1,
+            plugin_type: 'jaeger',
+            service: 'svc-a',
+            operation: 'GET /foo',
+            start_time_min: 1731000000000,
+            start_time_max: 1731000060000,
+            duration_min: '10ms',
+            duration_max: '2s',
+            num_traces: 20,
+            attributes: JSON.stringify({ 'http.status_code': '200' }),
+          },
+        }),
+      );
+    });
+
+    it('omits optional filters that are not set (the attributes hint is optional)', async () => {
+      mockRequest.mockResolvedValue({ dat: { result: { resourceSpans: [] } } });
+      await searchJaegerTraces({
+        data_source_id: 1,
+        plugin_type: 'jaeger',
+        service: 'svc-a',
+        start_time_min: 1731000000000,
+        start_time_max: 1731000060000,
+      });
+      expect(mockRequest).toHaveBeenCalledWith(
+        '/api/n9e/dh/trace-search',
+        expect.objectContaining({
+          params: {
+            datasource_id: 1,
+            plugin_type: 'jaeger',
+            service: 'svc-a',
+            start_time_min: 1731000000000,
+            start_time_max: 1731000060000,
           },
         }),
       );
@@ -86,43 +104,45 @@ describe('jaeger adapter (api_v3)', () => {
 
     it('groups a combined FindTraces OTLP response into one TraceResponse per traceId', async () => {
       mockRequest.mockResolvedValue({
-        result: {
-          resourceSpans: [
-            {
-              resource: { attributes: [{ key: 'service.name', value: { stringValue: 'svc-a' } }] },
-              scopeSpans: [
-                {
-                  spans: [
-                    {
-                      traceId: 'AAAA000000000000000000000000AA',
-                      spanId: '1000000000000001',
-                      name: 'root-a',
-                      kind: 2,
-                      startTimeUnixNano: '1700000000000000000',
-                      endTimeUnixNano: '1700000000100000000',
-                    },
-                  ],
-                },
-              ],
-            },
-            {
-              resource: { attributes: [{ key: 'service.name', value: { stringValue: 'svc-b' } }] },
-              scopeSpans: [
-                {
-                  spans: [
-                    {
-                      traceId: 'BBBB000000000000000000000000BB',
-                      spanId: '2000000000000002',
-                      name: 'root-b',
-                      kind: 2,
-                      startTimeUnixNano: '1700000001000000000',
-                      endTimeUnixNano: '1700000001200000000',
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
+        dat: {
+          result: {
+            resourceSpans: [
+              {
+                resource: { attributes: [{ key: 'service.name', value: { stringValue: 'svc-a' } }] },
+                scopeSpans: [
+                  {
+                    spans: [
+                      {
+                        traceId: 'AAAA000000000000000000000000AA',
+                        spanId: '1000000000000001',
+                        name: 'root-a',
+                        kind: 2,
+                        startTimeUnixNano: '1700000000000000000',
+                        endTimeUnixNano: '1700000000100000000',
+                      },
+                    ],
+                  },
+                ],
+              },
+              {
+                resource: { attributes: [{ key: 'service.name', value: { stringValue: 'svc-b' } }] },
+                scopeSpans: [
+                  {
+                    spans: [
+                      {
+                        traceId: 'BBBB000000000000000000000000BB',
+                        spanId: '2000000000000002',
+                        name: 'root-b',
+                        kind: 2,
+                        startTimeUnixNano: '1700000001000000000',
+                        endTimeUnixNano: '1700000001200000000',
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
         },
       });
       const result = await searchJaegerTraces(baseParams);
@@ -133,29 +153,33 @@ describe('jaeger adapter (api_v3)', () => {
       expect(Object.values(traceA.processes)[0].serviceName).toBe('svc-a');
     });
 
+    // Summary computation moved to the backend (`pkg/dh/tracesummary`), but the FE mapper is kept
+    // as the naming baseline for that port — these two cases are its contract.
     it('maps a search root with messaging.system into Pharos summary.rootType=mq', async () => {
       mockRequest.mockResolvedValue({
-        result: {
-          resourceSpans: [
-            {
-              resource: { attributes: [{ key: 'service.name', value: { stringValue: 'rome-sec-index' } }] },
-              scopeSpans: [
-                {
-                  spans: [
-                    {
-                      traceId: 'aaaa000000000000000000000000aa',
-                      spanId: '1000000000000001',
-                      name: 'process',
-                      kind: 5,
-                      startTimeUnixNano: '1700000000000000000',
-                      endTimeUnixNano: '1700000000100000000',
-                      attributes: [{ key: 'messaging.system', value: { stringValue: 'rabbitmq' } }],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
+        dat: {
+          result: {
+            resourceSpans: [
+              {
+                resource: { attributes: [{ key: 'service.name', value: { stringValue: 'rome-sec-index' } }] },
+                scopeSpans: [
+                  {
+                    spans: [
+                      {
+                        traceId: 'aaaa000000000000000000000000aa',
+                        spanId: '1000000000000001',
+                        name: 'process',
+                        kind: 5,
+                        startTimeUnixNano: '1700000000000000000',
+                        endTimeUnixNano: '1700000000100000000',
+                        attributes: [{ key: 'messaging.system', value: { stringValue: 'rabbitmq' } }],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
         },
       });
       const [trace] = await searchJaegerTraces(baseParams);
@@ -168,25 +192,27 @@ describe('jaeger adapter (api_v3)', () => {
 
     it('leaves Pharos summary.rootType empty for operation=process without tags', async () => {
       mockRequest.mockResolvedValue({
-        result: {
-          resourceSpans: [
-            {
-              resource: { attributes: [{ key: 'service.name', value: { stringValue: 'rome-sec-index' } }] },
-              scopeSpans: [
-                {
-                  spans: [
-                    {
-                      traceId: 'bbbb000000000000000000000000bb',
-                      spanId: '2000000000000002',
-                      name: 'process',
-                      startTimeUnixNano: '1700000000000000000',
-                      endTimeUnixNano: '1700000000100000000',
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
+        dat: {
+          result: {
+            resourceSpans: [
+              {
+                resource: { attributes: [{ key: 'service.name', value: { stringValue: 'rome-sec-index' } }] },
+                scopeSpans: [
+                  {
+                    spans: [
+                      {
+                        traceId: 'bbbb000000000000000000000000bb',
+                        spanId: '2000000000000002',
+                        name: 'process',
+                        startTimeUnixNano: '1700000000000000000',
+                        endTimeUnixNano: '1700000000100000000',
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
         },
       });
       const [trace] = await searchJaegerTraces(baseParams);
@@ -196,14 +222,75 @@ describe('jaeger adapter (api_v3)', () => {
       });
     });
 
-    it('returns [] (not an error) when the gateway 404s with "No traces found"', async () => {
+    it('returns [] (not an error) when nothing matched (404) or the envelope is empty', async () => {
       mockRequest.mockRejectedValue({ status: 404, message: 'No traces found' });
+      expect(await searchJaegerTraces(baseParams)).toEqual([]);
+      mockRequest.mockReset();
+      mockRequest.mockResolvedValue({ dat: {} });
       expect(await searchJaegerTraces(baseParams)).toEqual([]);
     });
 
-    it('propagates non-404 errors', async () => {
+    it('propagates non-404 errors, including the 403 for a service outside my teams', async () => {
       mockRequest.mockRejectedValue({ status: 500, message: 'boom' });
       await expect(searchJaegerTraces(baseParams)).rejects.toEqual({ status: 500, message: 'boom' });
+      mockRequest.mockReset();
+      mockRequest.mockRejectedValue({ status: 403, message: 'service does not belong to your team' });
+      await expect(searchJaegerTraces(baseParams)).rejects.toEqual({ status: 403, message: 'service does not belong to your team' });
+    });
+  });
+
+  describe('findDhTraceSummaries', () => {
+    const baseParams: TraceSearchParams = {
+      data_source_id: 1,
+      plugin_type: 'jaeger',
+      service: 'svc-a',
+      start_time_min: 1731000000000,
+      start_time_max: 1731000060000,
+      num_traces: 50,
+    };
+
+    const row = {
+      traceId: 'aaaa000000000000000000000000aa',
+      rootService: 'gateway',
+      rootOperation: 'GET /orders',
+      rootInterface: 'GET /orders',
+      rootType: 'web',
+      startTimeUs: 1700000000000000,
+      durationUs: 500000,
+      spanCount: 3,
+      errorSpanCount: 1,
+      orphanSpanCount: 0,
+      services: [
+        { name: 'order', spanCount: 2, errorSpanCount: 1 },
+        { name: 'gateway', spanCount: 1, errorSpanCount: 0 },
+      ],
+    } as const;
+
+    it('hits /dh/trace-summaries and returns the backend rows unchanged', async () => {
+      mockRequest.mockResolvedValue({ dat: { summaries: [{ ...row }], truncated: true } });
+      const result = await findDhTraceSummaries(baseParams);
+      expect(mockRequest).toHaveBeenCalledWith(
+        '/api/n9e/dh/trace-summaries',
+        expect.objectContaining({
+          method: 'Get',
+          silence: true,
+          params: expect.objectContaining({ datasource_id: 1, service: 'svc-a', num_traces: 50 }),
+        }),
+      );
+      expect(result).toEqual({ summaries: [{ ...row }], truncated: true });
+    });
+
+    it('treats a 404 as an empty result and propagates the 403', async () => {
+      mockRequest.mockRejectedValue({ status: 404, message: 'no traces found' });
+      expect(await findDhTraceSummaries(baseParams)).toEqual({ summaries: [], truncated: false });
+      mockRequest.mockReset();
+      mockRequest.mockRejectedValue({ status: 403, message: 'service does not belong to your team' });
+      await expect(findDhTraceSummaries(baseParams)).rejects.toEqual({ status: 403, message: 'service does not belong to your team' });
+    });
+
+    it('degrades to an empty list when the envelope carries no summaries', async () => {
+      mockRequest.mockResolvedValue({ dat: {} });
+      expect(await findDhTraceSummaries(baseParams)).toEqual({ summaries: [], truncated: false });
     });
   });
 
@@ -212,54 +299,60 @@ describe('jaeger adapter (api_v3)', () => {
 
     it('converts parentSpanId into references[0] (CHILD_OF) and preserves microsecond timestamps', async () => {
       mockRequest.mockResolvedValue({
-        result: {
-          resourceSpans: [
-            {
-              resource: {
-                attributes: [
-                  { key: 'service.name', value: { stringValue: 'svc-a' } },
-                  { key: 'host.name', value: { stringValue: 'host-1' } },
-                ],
-              },
-              scopeSpans: [
-                {
-                  scope: { name: 'my-instrumentation', version: '1.0' },
-                  spans: [
-                    {
-                      traceId: 'aaaa000000000000000000000000aa',
-                      spanId: '1000000000000001',
-                      name: 'root',
-                      kind: 2,
-                      startTimeUnixNano: '1700000000000000000',
-                      endTimeUnixNano: '1700000000500000000',
-                      attributes: [{ key: 'http.status_code', value: { intValue: '200' } }],
-                    },
-                    {
-                      traceId: 'aaaa000000000000000000000000aa',
-                      spanId: '1000000000000002',
-                      parentSpanId: '1000000000000001',
-                      name: 'child',
-                      kind: 3,
-                      startTimeUnixNano: '1700000000100000000',
-                      endTimeUnixNano: '1700000000200000000',
-                      status: { code: 2, message: 'boom' },
-                      events: [
-                        {
-                          timeUnixNano: '1700000000150000000',
-                          name: 'exception',
-                          attributes: [{ key: 'exception.message', value: { stringValue: 'boom' } }],
-                        },
-                      ],
-                    },
+        dat: {
+          result: {
+            resourceSpans: [
+              {
+                resource: {
+                  attributes: [
+                    { key: 'service.name', value: { stringValue: 'svc-a' } },
+                    { key: 'host.name', value: { stringValue: 'host-1' } },
                   ],
                 },
-              ],
-            },
-          ],
+                scopeSpans: [
+                  {
+                    scope: { name: 'my-instrumentation', version: '1.0' },
+                    spans: [
+                      {
+                        traceId: 'aaaa000000000000000000000000aa',
+                        spanId: '1000000000000001',
+                        name: 'root',
+                        kind: 2,
+                        startTimeUnixNano: '1700000000000000000',
+                        endTimeUnixNano: '1700000000500000000',
+                        attributes: [{ key: 'http.status_code', value: { intValue: '200' } }],
+                      },
+                      {
+                        traceId: 'aaaa000000000000000000000000aa',
+                        spanId: '1000000000000002',
+                        parentSpanId: '1000000000000001',
+                        name: 'child',
+                        kind: 3,
+                        startTimeUnixNano: '1700000000100000000',
+                        endTimeUnixNano: '1700000000200000000',
+                        status: { code: 2, message: 'boom' },
+                        events: [
+                          {
+                            timeUnixNano: '1700000000150000000',
+                            name: 'exception',
+                            attributes: [{ key: 'exception.message', value: { stringValue: 'boom' } }],
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
         },
       });
 
       const [trace] = await getJaegerTraceById(params);
+      expect(mockRequest).toHaveBeenCalledWith(
+        '/api/n9e/dh/trace/aaaa000000000000000000000000aa',
+        expect.objectContaining({ params: { datasource_id: 1, plugin_type: 'jaeger' } }),
+      );
       expect(trace.traceID).toBe('aaaa000000000000000000000000aa');
       expect(Object.keys(trace.processes)).toHaveLength(1);
       const process = Object.values(trace.processes)[0];
@@ -308,138 +401,18 @@ describe('jaeger adapter (api_v3)', () => {
     });
 
     it('returns [] when the trace is not found (404)', async () => {
-      mockRequest.mockRejectedValue({ status: 404, message: 'trace not found' });
+      mockRequest.mockRejectedValue({ status: 404, message: 'no such trace' });
       expect(await getJaegerTraceById(params)).toEqual([]);
     });
-  });
 
-  describe('findJaegerTraceSummaries', () => {
-    const baseParams: TraceSearchParams = {
-      data_source_id: 1,
-      plugin_type: 'jaeger',
-      service: 'svc-a',
-      start_time_min: 1731000000000,
-      start_time_max: 1731000060000,
-      num_traces: 50,
-    };
-
-    it('hits /api/v3/trace-summaries with search_depth and maps into Pharos summaries', async () => {
-      mockRequest.mockResolvedValue({
-        result: {
-          summaries: [
-            {
-              traceId: 'AAAA000000000000000000000000AA',
-              rootServiceName: 'gateway',
-              rootOperationName: 'GET /orders',
-              minStartTimeUnixNano: '1700000000000000000',
-              maxEndTimeUnixNano: '1700000000500000000',
-              spanCount: 3,
-              errorSpanCount: 1,
-              orphanSpanCount: 0,
-              services: [
-                { name: 'order', spanCount: 2, errorSpanCount: 1 },
-                { name: 'gateway', spanCount: 1, errorSpanCount: 0 },
-              ],
-            },
-          ],
-        },
-      });
-      const result = await findJaegerTraceSummaries(baseParams);
-      expect(mockRequest).toHaveBeenCalledWith(
-        '/api/n9e/proxy/1/api/v3/trace-summaries',
-        expect.objectContaining({
-          method: 'Get',
-          silence: true,
-          params: expect.objectContaining({
-            'query.service_name': 'svc-a',
-            'query.search_depth': '50',
-          }),
-        }),
-      );
-      expect(result).toEqual([
-        {
-          traceId: 'aaaa000000000000000000000000aa',
-          rootService: 'gateway',
-          rootOperation: 'GET /orders',
-          rootInterface: 'GET /orders',
-          rootType: 'web',
-          startTimeUs: 1700000000000000,
-          durationUs: 500000,
-          spanCount: 3,
-          errorSpanCount: 1,
-          orphanSpanCount: 0,
-          services: [
-            { name: 'order', spanCount: 2, errorSpanCount: 1 },
-            { name: 'gateway', spanCount: 1, errorSpanCount: 0 },
-          ],
-        },
-      ]);
+    it('propagates the 403 raised when the trace belongs to another team', async () => {
+      mockRequest.mockRejectedValue({ status: 403, message: 'trace does not belong to your team' });
+      await expect(getJaegerTraceById(params)).rejects.toEqual({ status: 403, message: 'trace does not belong to your team' });
     });
 
-    it('infers SQL from SELECT, WEB from bare GET/POST, Internal from generated roots, and leaves opaque names empty', async () => {
-      mockRequest.mockResolvedValue({
-        result: {
-          summaries: [
-            {
-              traceId: 'bb',
-              rootServiceName: 'db',
-              rootOperationName: 'SELECT 1',
-              minStartTimeUnixNano: '1700000000000000000',
-              maxEndTimeUnixNano: '1700000000001000000',
-              spanCount: 1,
-            },
-            {
-              traceId: 'cc',
-              rootServiceName: 'worker',
-              rootOperationName: 'internal-op',
-              minStartTimeUnixNano: '1700000000000000000',
-              maxEndTimeUnixNano: '1700000000002000000',
-              spanCount: 1,
-            },
-            {
-              traceId: 'dd',
-              rootServiceName: 'rome-sec-admin',
-              rootOperationName: 'POST',
-              minStartTimeUnixNano: '1700000000000000000',
-              maxEndTimeUnixNano: '1700000000029540000',
-              spanCount: 1,
-            },
-            {
-              traceId: 'ee',
-              rootServiceName: 'gateway',
-              rootOperationName: 'GET',
-              minStartTimeUnixNano: '1700000000000000000',
-              maxEndTimeUnixNano: '1700000000003000000',
-              spanCount: 1,
-            },
-            {
-              traceId: 'ff',
-              rootServiceName: 'worker',
-              rootOperationName: 'Worker$$Lambda.run',
-              minStartTimeUnixNano: '1700000000000000000',
-              maxEndTimeUnixNano: '1700000000004000000',
-              spanCount: 2,
-            },
-          ],
-        },
-      });
-      const result = await findJaegerTraceSummaries(baseParams);
-      expect(result?.[0]).toMatchObject({ rootType: 'sql', rootInterface: 'SELECT 1' });
-      expect(result?.[1]).toMatchObject({ rootType: '', rootInterface: 'internal-op' });
-      // Summaries have no tags, so Nacos cannot be distinguished; bare POST/GET is WEB.
-      expect(result?.[2]).toMatchObject({ rootType: 'web', rootInterface: 'POST' });
-      expect(result?.[3]).toMatchObject({ rootType: 'web', rootInterface: 'GET' });
-      expect(result?.[4]).toMatchObject({ rootType: 'internal', rootInterface: 'Worker$$Lambda.run' });
-    });
-
-    it('returns [] when the endpoint exists but no traces match', async () => {
-      mockRequest.mockRejectedValue({ status: 404, message: 'No traces found' });
-      expect(await findJaegerTraceSummaries(baseParams)).toEqual([]);
-    });
-
-    it('returns null when the endpoint is missing so callers can fall back', async () => {
-      mockRequest.mockRejectedValue({ status: 404, message: 'Not Found' });
-      expect(await findJaegerTraceSummaries(baseParams)).toBeNull();
+    it('returns [] when the guarded endpoint answers without a payload', async () => {
+      mockRequest.mockResolvedValue({ dat: {} });
+      expect(await getJaegerTraceById(params)).toEqual([]);
     });
   });
 

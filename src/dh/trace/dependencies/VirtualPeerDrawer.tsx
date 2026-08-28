@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { buildTraceDeepLink } from '@/dh/logTrace';
 import type { PharosServiceEdge } from '../contract';
 import type { TracePluginType } from '../types';
-import { adjacentClients } from './hop';
+import { adjacentClients, visibleAdjacentClients } from './hop';
 import type { CuratedPeerFieldId, PeerAttrRow, PeerInstance } from './virtualPeer';
 import { formatPeerInstance } from './virtualPeer';
 import { instanceTypeLabel } from './wellKnownPorts';
@@ -16,6 +16,8 @@ interface Props {
   nodeId?: string;
   displayName?: string;
   edges: PharosServiceEdge[];
+  /** Services the current user may see; both the callers we query and the span emitters we keep. */
+  allowedServices: ReadonlySet<string>;
   dataSourceId?: number;
   pluginType: TracePluginType;
   startMs: number;
@@ -28,7 +30,7 @@ function fieldLabelKey(id: CuratedPeerFieldId): string {
 }
 
 export default function VirtualPeerDrawer(props: Props) {
-  const { nodeId, displayName, edges, dataSourceId, pluginType, startMs, endMs, onClose } = props;
+  const { nodeId, displayName, edges, allowedServices, dataSourceId, pluginType, startMs, endMs, onClose } = props;
   const titleName = displayName || nodeId;
   const { t } = useTranslation('trace');
   const [loading, setLoading] = useState(false);
@@ -36,7 +38,8 @@ export default function VirtualPeerDrawer(props: Props) {
   const [error, setError] = useState<string>();
   const requestSeq = useRef(0);
 
-  const clients = useMemo(() => (nodeId ? adjacentClients(nodeId, edges) : []), [nodeId, edges]);
+  const clientCount = useMemo(() => (nodeId ? adjacentClients(nodeId, edges).length : 0), [nodeId, edges]);
+  const clients = useMemo(() => (nodeId ? visibleAdjacentClients(nodeId, edges, allowedServices) : []), [nodeId, edges, allowedServices]);
   const clientKey = clients.join('\n');
   const siblingKey = useMemo(
     () =>
@@ -71,6 +74,7 @@ export default function VirtualPeerDrawer(props: Props) {
       dataSourceId,
       pluginType,
       clients,
+      allowedServices,
       nodeName: nodeId,
       edges,
       startMs,
@@ -171,7 +175,7 @@ export default function VirtualPeerDrawer(props: Props) {
 
   const emptyDescription = (() => {
     if (dataSourceId == null) return t('graph.virtual.no_jaeger');
-    if (clients.length === 0) return t('graph.virtual.no_client');
+    if (clients.length === 0) return clientCount > 0 ? t('graph.virtual.no_visible_client') : t('graph.virtual.no_client');
     if (error) return error;
     return t('graph.virtual.empty_spans');
   })();

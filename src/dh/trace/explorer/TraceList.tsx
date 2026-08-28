@@ -10,6 +10,7 @@ import EllipsisText from '@/components/EllipsisText';
 import { NS as LOG_TRACE_NS, ViewLogsLink } from '@/dh/logTrace';
 import { searchTraceSummaries } from '../api';
 import type { PharosTraceListResult, PharosTraceSummary } from '../contract';
+import { isTraceForbidden, isTraceServiceRequired } from '../traceError';
 import { durationBarPercent, maxDurationInSet } from './durationBar';
 import { TRACE_LIST_COLUMN_KEYS } from './columnKeys';
 
@@ -23,24 +24,31 @@ interface IProps {
   onOpenTrace: (traceId: string) => void;
 }
 
+function listErrorMessageKey(error: unknown): string {
+  if (isTraceServiceRequired(error)) return 'list.service_required';
+  if (isTraceForbidden(error)) return 'list.service_forbidden';
+  return 'list.load_failed';
+}
+
 export default function TraceList(props: IProps) {
   const { search, loading, onFetching, onOpenTrace } = props;
   const { t } = useTranslation('trace');
   const { t: tLog } = useTranslation(LOG_TRACE_NS);
   const [result, setResult] = useState<PharosTraceListResult>();
-  const [failed, setFailed] = useState(false);
+  /** `undefined` = 没失败；其余是失败原因对应的文案 key。 */
+  const [failedKey, setFailedKey] = useState<string>();
   // Sorting is client-side, so a slow earlier query must not overwrite a newer result.
   const requestSeq = useRef(0);
 
   useEffect(() => {
     if (!search) {
       setResult(undefined);
-      setFailed(false);
+      setFailedKey(undefined);
       return;
     }
     const seq = requestSeq.current + 1;
     requestSeq.current = seq;
-    setFailed(false);
+    setFailedKey(undefined);
     onFetching(true);
     searchTraceSummaries({
       data_source_id: search.data_source_id,
@@ -60,10 +68,10 @@ export default function TraceList(props: IProps) {
         if (requestSeq.current !== seq) return;
         setResult(res);
       })
-      .catch(() => {
+      .catch((e: unknown) => {
         if (requestSeq.current !== seq) return;
         setResult(undefined);
-        setFailed(true);
+        setFailedKey(listErrorMessageKey(e));
       })
       .finally(() => {
         if (requestSeq.current !== seq) return;
@@ -214,7 +222,7 @@ export default function TraceList(props: IProps) {
   ];
 
   const emptyText = (() => {
-    if (failed) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('list.load_failed')} />;
+    if (failedKey) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t(failedKey)} />;
     if (!search) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('list.no_search')} />;
     return (
       <Empty

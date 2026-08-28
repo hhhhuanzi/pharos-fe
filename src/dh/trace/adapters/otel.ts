@@ -21,6 +21,7 @@ export async function searchOtelTraces(_params: TraceSearchParams) {
   return notReady('searchTraces');
 }
 
+/** Not wired into `getTraceByID`: trace detail requires a backend endpoint that does the team check. */
 export async function getOtelTraceById(_params: TraceByIdParams) {
   return notReady('getTraceById');
 }

@@ -5,8 +5,14 @@
  * see https://www.jaegertracing.io/docs/2.20/apis/#query-json-over-http and
  * https://github.com/jaegertracing/jaeger-idl/blob/main/proto/api_v3/query_service.proto),
  * NOT the legacy "Internal (unofficial) JSON API" (`/api/*`) that Jaeger explicitly documents as
- * "intentionally undocumented and subject to change". All calls still go through the existing
- * N9E reverse proxy `/api/n9e/proxy/:dataSourceId/*`.
+ * "intentionally undocumented and subject to change".
+ *
+ * Every *trace read* goes through a Pharos-owned `/api/n9e/dh/trace*` endpoint, never the generic
+ * datasource proxy: the proxy authorizes at datasource level only and does not parse the request,
+ * so any logged-in user could read every span, resource attribute and SQL statement of another
+ * team's traces. `/dh/trace/:trace_id` authorizes by the trace's own services, `/dh/trace-search`
+ * and `/dh/trace-summaries` by their `service` parameter. Only the name lookups that carry no span
+ * content (`/api/v3/services`, `/api/v3/operations`, `/api/dependencies`) still use the proxy.
  *
  * api_v3 responses are OTLP-shaped (`resourceSpans[].scopeSpans[].spans[]`), not the flat Jaeger
  * `TraceResponse` the legacy API returned verbatim. `otlpTracesDataToJaegerResponses` below converts
@@ -37,7 +43,6 @@ import { RequestMethod } from '@/store/common';
 import { N9E_PATHNAME } from '@/utils/constant';
 import { TraceByIdParams, TraceSearchParams, UnifiedServiceOption } from '../types';
 import { PharosTraceSummary } from '../contract';
-import { resolveRootType } from '../listType';
 import { TraceResponse, TraceSpanData, TraceKeyValuePair } from '@/pages/traceCpt/type';
 
 // ---------------------------------------------------------------------------
@@ -299,7 +304,7 @@ function msToRfc3339(ms: number): string {
  * of a rejected promise + a toast (`silence: true` on the request only suppresses the automatic
  * notification; unexpected errors still propagate to the caller).
  */
-async function requestApiV3Traces(url: string, params?: Record<string, unknown>): Promise<ApiV3TracesEnvelope | null> {
+async function requestApiV3Traces<T>(url: string, params?: Record<string, unknown>): Promise<T | null> {
   try {
     return await request(url, { method: RequestMethod.Get, params, silence: true });
   } catch (e: any) {
@@ -326,15 +331,15 @@ export async function getJaegerOperations(dataSourceId: number, service: string)
 
 /**
  * Builds `TraceQueryParameters` query params using api_v3's original (and still universally
- * supported) snake_case naming — see file header.
+ * supported) snake_case naming — see file header. The result-limit field was renamed
+ * `num_traces` -> `search_depth` in the proto, and grpc-gateway rejects unknown query params
+ * outright, so `/api/v3/traces` keeps the historical `num_traces` for widest compatibility.
  *
- * `limitParam` exists because the result-limit field was renamed `num_traces` -> `search_depth` in
- * the proto. grpc-gateway rejects unknown query params outright, so we can't just send both:
- * `/api/v3/traces` keeps the historical `num_traces` (widest compatibility), while
- * `/api/v3/trace-summaries` uses `search_depth` — that endpoint only exists in builds new enough
- * to have the renamed field anyway.
+ * No longer on the production path: both trace searches now go through `/dh/trace*`, and the
+ * upstream query params are built server-side (`pkg/dh/tracefetch/find.go`). Kept as the naming
+ * reference for that port — compare both sides when changing either.
  */
-function buildFindTracesParams(params: TraceSearchParams, limitParam: 'num_traces' | 'search_depth' = 'num_traces'): Record<string, string> {
+function buildFindTracesParams(params: TraceSearchParams): Record<string, string> {
   const q: Record<string, string> = {
     'query.service_name': params.service,
     'query.start_time_min': msToRfc3339(params.start_time_min),
@@ -343,7 +348,7 @@ function buildFindTracesParams(params: TraceSearchParams, limitParam: 'num_trace
   if (params.operation) q['query.operation_name'] = params.operation;
   if (params.duration_min) q['query.duration_min'] = params.duration_min;
   if (params.duration_max) q['query.duration_max'] = params.duration_max;
-  if (params.num_traces) q[`query.${limitParam}`] = String(params.num_traces);
+  if (params.num_traces) q['query.num_traces'] = String(params.num_traces);
   if (params.attributes && !_.isEmpty(params.attributes)) {
     // The HTTP gateway expects a URL-encoded JSON string map here, not a nested query object.
     q['query.attributes'] = JSON.stringify(params.attributes);
@@ -351,121 +356,101 @@ function buildFindTracesParams(params: TraceSearchParams, limitParam: 'num_trace
   return q;
 }
 
+/** Query params shared by `/dh/trace-summaries` and `/dh/trace-search`; names mirror `TraceSearchParams`. */
+function buildDhSearchParams(params: TraceSearchParams): Record<string, string | number> {
+  const q: Record<string, string | number> = {
+    datasource_id: params.data_source_id,
+    plugin_type: params.plugin_type || 'jaeger',
+    service: params.service,
+    start_time_min: params.start_time_min,
+    start_time_max: params.start_time_max,
+  };
+  if (params.operation) q.operation = params.operation;
+  if (params.duration_min) q.duration_min = params.duration_min;
+  if (params.duration_max) q.duration_max = params.duration_max;
+  if (params.num_traces) q.num_traces = params.num_traces;
+  if (params.attributes && !_.isEmpty(params.attributes)) q.attributes = JSON.stringify(params.attributes);
+  return q;
+}
+
+/**
+ * Goes through the Pharos-owned `/dh/trace-search` instead of the generic datasource proxy. The
+ * request carries a `service` parameter, so the backend can authorize it without reading span
+ * content ("is this service visible to you?"); the proxy authorizes at datasource level only, which
+ * let any logged-in user pull every span of another team's traces. The upstream payload is passed
+ * through untouched, so the OTLP -> Jaeger conversion below still applies.
+ */
 export async function searchJaegerTraces(params: TraceSearchParams): Promise<TraceResponse[]> {
-  const envelope = await requestApiV3Traces(`/api/${N9E_PATHNAME}/proxy/${params.data_source_id}/api/v3/traces`, buildFindTracesParams(params));
-  if (!envelope?.result) return [];
-  return otlpTracesDataToJaegerResponses(envelope.result);
+  const envelope = await requestApiV3Traces<DhTraceEnvelope>(`/api/${N9E_PATHNAME}/dh/trace-search`, buildDhSearchParams(params));
+  const tracesData = envelope?.dat?.result;
+  if (!tracesData) return [];
+  return otlpTracesDataToJaegerResponses(tracesData);
 }
 
-// ---------------------------------------------------------------------------
-// FindTraceSummaries (`GET /api/v3/trace-summaries`)
-//
-// The lightweight counterpart of FindTraces, added to the api_v3 proto specifically for the search
-// results page: it returns root service/operation, span & error counts and start/end nanos instead
-// of every span of every matched trace. Using it removes the "one screen of results downloads all
-// spans of all traces" problem (P-46) — but it is a recent addition, so `findJaegerTraceSummaries`
-// reports back whether the target Jaeger actually serves it and lets the caller fall back.
-// ---------------------------------------------------------------------------
-
-interface ApiV3ServiceSummary {
-  name?: string;
-  spanCount?: number;
-  errorSpanCount?: number;
-}
-
-interface ApiV3TraceSummary {
-  traceId?: string;
-  rootServiceName?: string;
-  rootOperationName?: string;
-  /** fixed64 — decimal string in proto3 JSON. */
-  minStartTimeUnixNano?: string | number;
-  maxEndTimeUnixNano?: string | number;
-  spanCount?: number;
-  errorSpanCount?: number;
-  orphanSpanCount?: number;
-  services?: ApiV3ServiceSummary[];
-}
-
-/** Server-streaming RPCs are wrapped in `{"result": ...}` by grpc-gateway; unwrapped shape accepted too. */
-interface ApiV3TraceSummariesEnvelope {
-  result?: { summaries?: ApiV3TraceSummary[] };
-  summaries?: ApiV3TraceSummary[];
-}
-
-function apiV3SummaryToPharos(summary: ApiV3TraceSummary): PharosTraceSummary | null {
-  const traceId = (summary.traceId || '').toLowerCase();
-  if (!traceId) return null;
-  const startTimeUs = nanoToMicro(summary.minStartTimeUnixNano);
-  const endTimeUs = nanoToMicro(summary.maxEndTimeUnixNano);
-  const services = (summary.services || [])
-    .filter((service) => Boolean(service.name))
-    .map((service) => ({
-      name: service.name!,
-      spanCount: service.spanCount || 0,
-      errorSpanCount: service.errorSpanCount || 0,
-    }))
-    .sort((a, b) => b.spanCount - a.spanCount);
-  const rootOperation = summary.rootOperationName || '';
-  return {
-    traceId,
-    rootService: summary.rootServiceName || '',
-    rootOperation,
-    // This mapper has no span tags (operation name only). Pharos list does not
-    // use it — `searchTraceSummaries` maps via `traceResponseToSummary` so
-    // `rootType` can come from tags. Do not guess MQ from a bare `process`.
-    rootInterface: rootOperation,
-    rootType: resolveRootType(undefined, rootOperation),
-    startTimeUs,
-    durationUs: Math.max(endTimeUs - startTimeUs, 0),
-    spanCount: summary.spanCount || 0,
-    errorSpanCount: summary.errorSpanCount || 0,
-    orphanSpanCount: summary.orphanSpanCount || 0,
-    services,
+/** `/dh/trace-summaries` returns the list rows the backend already folded down from full spans. */
+interface DhTraceSummariesEnvelope {
+  dat?: {
+    summaries?: PharosTraceSummary[];
+    truncated?: boolean;
   };
 }
 
 /**
- * An empty result is reported as `404 {"error":{"message":"No traces found"}}`, which is
- * indistinguishable by status code from "this build has no such route" — so the body decides.
+ * Trace list rows. The backend calls FindTraces, computes the summaries (including the accurate
+ * 类型 column, which needs span tags Jaeger's lightweight `/api/v3/trace-summaries` does not
+ * return) and answers with summaries only — the browser no longer downloads every span of every
+ * matched trace, and the request is authorized by its `service` parameter.
  */
-function isNoTracesFound(error: any): boolean {
-  const message = typeof error?.message === 'string' ? error.message : '';
-  return /no traces found/i.test(message);
+export async function findDhTraceSummaries(params: TraceSearchParams): Promise<{ summaries: PharosTraceSummary[]; truncated: boolean }> {
+  let envelope: DhTraceSummariesEnvelope | null = null;
+  try {
+    envelope = await request(`/api/${N9E_PATHNAME}/dh/trace-summaries`, {
+      method: RequestMethod.Get,
+      params: buildDhSearchParams(params),
+      silence: true,
+    });
+  } catch (e: any) {
+    // Same "empty result is a 404" contract as the upstream api_v3 endpoints; anything else
+    // (403 in particular) has to reach the caller so the UI can explain it.
+    if (e?.status === 404) return { summaries: [], truncated: false };
+    throw e;
+  }
+  return { summaries: envelope?.dat?.summaries || [], truncated: Boolean(envelope?.dat?.truncated) };
+}
+
+/** `/dh/trace/:trace_id` wraps the upstream api_v3 body verbatim in the n9e `{dat, err}` envelope. */
+interface DhTraceEnvelope {
+  dat?: ApiV3TracesEnvelope;
 }
 
 /**
- * Returns `null` when the target Jaeger does not serve `/api/v3/trace-summaries`, so the caller can
- * fall back to a full-span search. An empty array means "endpoint works, nothing matched".
+ * Goes through the Pharos-owned `/dh/trace/:trace_id` instead of the generic datasource proxy: a
+ * get-by-id request carries no service dimension, so the proxy can only authorize at datasource
+ * level and any logged-in user could read every span, resource attribute and SQL statement of any
+ * trace. The backend fetches the trace, intersects the services it touches with the caller's teams
+ * and answers 403 when there is no overlap; the payload itself is passed through untouched, so the
+ * OTLP -> Jaeger conversion below still applies.
  */
-export async function findJaegerTraceSummaries(params: TraceSearchParams): Promise<PharosTraceSummary[] | null> {
-  const url = `/api/${N9E_PATHNAME}/proxy/${params.data_source_id}/api/v3/trace-summaries`;
+export async function getJaegerTraceById(params: TraceByIdParams): Promise<TraceResponse[]> {
+  let envelope: DhTraceEnvelope | null = null;
   try {
-    const res: ApiV3TraceSummariesEnvelope = await request(url, {
+    envelope = await request(`/api/${N9E_PATHNAME}/dh/trace/${params.traceID}`, {
       method: RequestMethod.Get,
-      params: buildFindTracesParams(params, 'search_depth'),
+      params: {
+        datasource_id: params.data_source_id,
+        plugin_type: params.plugin_type || 'jaeger',
+      },
       silence: true,
     });
-    const list = res?.result?.summaries || res?.summaries;
-    // A 200 without a recognizable body most likely means the request never reached Jaeger's api_v3.
-    if (!list) return null;
-    return list.reduce<PharosTraceSummary[]>((acc, item) => {
-      const summary = apiV3SummaryToPharos(item);
-      if (summary) acc.push(summary);
-      return acc;
-    }, []);
   } catch (e: any) {
-    if (isNoTracesFound(e)) return [];
-    // 404 = no such route, 501 = unimplemented, 400 = the gateway rejected `search_depth` because
-    // this build still calls it `num_traces`. All three mean "unsupported here", not "query failed".
-    if (e?.status === 404 || e?.status === 501 || e?.status === 400) return null;
+    // Same "empty result is a 404" contract as the upstream api_v3 endpoints; anything else
+    // (403 in particular) has to reach the caller so the UI can explain it.
+    if (e?.status === 404) return [];
     throw e;
   }
-}
-
-export async function getJaegerTraceById(params: TraceByIdParams): Promise<TraceResponse[]> {
-  const envelope = await requestApiV3Traces(`/api/${N9E_PATHNAME}/proxy/${params.data_source_id}/api/v3/traces/${params.traceID}`);
-  if (!envelope?.result) return [];
-  return otlpTracesDataToJaegerResponses(envelope.result);
+  const tracesData = envelope?.dat?.result;
+  if (!tracesData) return [];
+  return otlpTracesDataToJaegerResponses(tracesData);
 }
 
 /**

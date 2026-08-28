@@ -50,9 +50,10 @@ export interface PharosTraceSummary {
 
 /**
  * Where the rows came from:
- * - `summaries`: the backend's dedicated lightweight list query (Jaeger `/api/v3/trace-summaries`).
- * - `full-traces`: derived client-side from a full-span search, because the backend has no
- *   summary query. Far more expensive per row, so the list limit is deliberately lower (see P-46).
+ * - `summaries`: computed server-side (`/dh/trace-summaries`), so the browser never sees the spans.
+ * - `full-traces`: derived client-side from a full-span search, because that datasource has no
+ *   server-side summary path yet (SkyWalking). Far more expensive per row, so the list limit is
+ *   deliberately lower (see P-46).
  */
 export type PharosTraceListSource = 'summaries' | 'full-traces';
 
@@ -87,6 +88,8 @@ export interface PharosServiceEdge {
 export interface PharosServiceGraph {
   edges: PharosServiceEdge[];
   source: 'service-graph';
+  /** 后端裁剪后仍可见的真实服务名，供后续富化收口用白名单。 */
+  visibleServices?: string[];
 }
 
 /**
@@ -134,8 +137,11 @@ function findRootSpan(spans: TraceSpanData[]): TraceSpanData | undefined {
 }
 
 /**
- * Derives a list row from a full Jaeger-shaped trace. Used on the fallback path, where the backend
- * has no summary query and the UI already holds every span anyway.
+ * Derives a list row from a full Jaeger-shaped trace.
+ *
+ * 摘要计算已移到后端 `pkg/dh/tracesummary`（列表不能把全量 span 发到浏览器，判权必须发生在
+ * 服务端）。此处保留作为口径基准，两侧改动请互相比对；`searchTracesPaged` 的 SkyWalking 分支
+ * 仍在用它 —— SkyWalking 的 GraphQL 单一 endpoint 还没有对应的后端接口。
  */
 export function traceResponseToSummary(res: TraceResponse): PharosTraceSummary | null {
   const spans = (res.spans || []).filter((span) => Boolean(span.startTime));

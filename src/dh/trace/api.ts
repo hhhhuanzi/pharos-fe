@@ -4,6 +4,7 @@ import type { TraceResponse } from '@/pages/traceCpt/type';
 import * as jaeger from './adapters/jaeger';
 import * as skywalking from './adapters/skywalking';
 import * as otel from './adapters/otel';
+import { TraceDetailUnsupportedError, TraceServiceRequiredError } from './traceError';
 
 export type { TracePluginType, TraceSearchParams, TraceByIdParams, UnifiedServiceOption, TracePageResult };
 
@@ -90,9 +91,13 @@ function toSummaries(responses: TraceResponse[]): PharosTraceSummary[] {
 /**
  * Pharos list API. UI reads `PharosTraceSummary` only (`rootType` is the 类型 column).
  *
- * Jaeger rows are mapped through `traceResponseToSummary` so `rootType` is filled from span
- * tags (`messaging.system` → mq, HTTP → web, SQL → sql). Do not use a tag-less summary
- * mapper here — that left `process` as —. One search, not N get-by-id.
+ * Jaeger rows come from `/dh/trace-summaries`: the backend reads the full spans, folds them into
+ * these rows (so `rootType` is still filled from span tags — `messaging.system` → mq, HTTP → web,
+ * SQL → sql) and answers with summaries only. Mapping them in the browser meant shipping every span
+ * of every matched trace to any logged-in user who picked another team's service.
+ *
+ * SkyWalking keeps its own paged list query: its GraphQL endpoint has no per-path surface to
+ * authorize, so there is no backend endpoint to route it through yet.
  */
 export async function searchTraceSummaries(params: TraceSearchParams): Promise<PharosTraceListResult> {
   if (params.plugin_type === 'skywalking') {
@@ -102,18 +107,29 @@ export async function searchTraceSummaries(params: TraceSearchParams): Promise<P
     const page = await skywalking.searchSkyWalkingTracesPaged({ ...params, page_num: 1, page_size: limit });
     return { summaries: toSummaries(page.traces), source: 'full-traces', truncated: page.hasMore };
   }
+  // The list query is authorized by its `service` parameter, so an "all services" search cannot be
+  // authorized at all. Fail closed here instead of spending a request the backend will reject.
+  if (!params.service) {
+    throw new TraceServiceRequiredError();
+  }
   const limit = params.num_traces || TRACE_LIST_SUMMARY_LIMIT;
-  const traces = await searchTraces({ ...params, num_traces: limit });
-  return { summaries: toSummaries(traces), source: 'full-traces', truncated: traces.length >= limit };
+  const result = await jaeger.findDhTraceSummaries({ ...params, num_traces: limit });
+  return { summaries: result.summaries, source: 'summaries', truncated: result.truncated };
 }
 
-/** Pharos API this round: get-by-id only (`/api/v3/traces/{id}` / SW `queryTrace`). No extra endpoints. */
+/**
+ * Trace detail is the only trace read that exposes every span, resource attribute and SQL
+ * statement of a request, so it must go through the backend endpoint that intersects the trace's
+ * services with the caller's teams. Only Jaeger has that endpoint today; the other adapters would
+ * have to read the datasource through the generic `/proxy`, which cannot authorize per trace — so
+ * those branches fail closed instead of serving unauthorized data.
+ *
+ * Only the detail path is closed. Service options and the trace list stay on their existing
+ * adapters (see `getTraceServices` / `searchTraceSummaries`).
+ */
 export async function getTraceByID(params: TraceByIdParams) {
-  if (params.plugin_type === 'skywalking') {
-    return skywalking.getSkyWalkingTraceById(params);
-  }
-  if (params.plugin_type === 'otel') {
-    return otel.getOtelTraceById(params);
+  if (params.plugin_type === 'skywalking' || params.plugin_type === 'otel') {
+    throw new TraceDetailUnsupportedError(params.plugin_type);
   }
   return jaeger.getJaegerTraceById(params);
 }

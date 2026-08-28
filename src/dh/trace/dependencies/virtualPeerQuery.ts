@@ -2,7 +2,7 @@ import { searchTraces } from '../api';
 import type { TraceResponse } from '@/pages/traceCpt/type';
 import type { PharosServiceEdge } from '../contract';
 import type { TracePluginType } from '../types';
-import { adjacentClients, databaseNodeNames } from './hop';
+import { databaseNodeNames, visibleAdjacentClients } from './hop';
 import { classifyNodeKind } from './layout';
 import { isGenericVirtualName } from './peerType';
 import { aggregateVirtualPeerSpans, attributeHintForNode, spanMatchesVirtualNode, type MatchVirtualNodeOptions, type VirtualPeerAggregate } from './virtualPeer';
@@ -19,6 +19,11 @@ export interface VirtualPeerQueryInput {
   startMs: number;
   endMs: number;
   edges?: PharosServiceEdge[];
+  /**
+   * Services the current user may see. Callers of a shared middleware node outside this set are
+   * neither queried nor aggregated. Required so an empty set (unknown visibility) means "nothing".
+   */
+  allowedServices: ReadonlySet<string>;
 }
 
 export interface VirtualPeerQueryResult extends VirtualPeerAggregate {
@@ -42,9 +47,14 @@ function matchOptions(nodeName: string, edges: PharosServiceEdge[] | undefined):
   return { siblingDbNames: siblings };
 }
 
-function tracesHaveMatch(traces: TraceResponse[], nodeName: string, options?: MatchVirtualNodeOptions): boolean {
+/** Mirrors what `aggregateVirtualPeerSpans` will keep, so an invisible emitter cannot pass a hint off as a hit. */
+function tracesHaveMatch(traces: TraceResponse[], nodeName: string, allowedServices: ReadonlySet<string>, options?: MatchVirtualNodeOptions): boolean {
   return traces.some((trace) =>
-    (trace.spans || []).some((span) => spanMatchesVirtualNode(span.tags, nodeName, { ...options, operationName: span.operationName })),
+    (trace.spans || []).some(
+      (span) =>
+        allowedServices.has(trace.processes?.[span.processID]?.serviceName || '') &&
+        spanMatchesVirtualNode(span.tags, nodeName, { ...options, operationName: span.operationName }),
+    ),
   );
 }
 
@@ -59,17 +69,20 @@ async function searchClientTraces(input: VirtualPeerQueryInput, client: string, 
   };
   const hint = attributeHintForNode(input.nodeName);
   const hinted = await searchTraces({ ...base, attributes: hint || null });
-  if (!hint || tracesHaveMatch(hinted, input.nodeName, options)) return hinted;
+  if (!hint || tracesHaveMatch(hinted, input.nodeName, input.allowedServices, options)) return hinted;
   return searchTraces({ ...base, attributes: null });
 }
 
 /**
- * Pull traces for each caller of a virtual node, then keep client spans that match
+ * Pull traces for each visible caller of a virtual node, then keep client spans that match
  * `db.system` / `peer.service` / node name. Curates key attributes; does not invent values.
  */
 export async function fetchVirtualPeerMeta(input: VirtualPeerQueryInput): Promise<VirtualPeerQueryResult> {
-  const queriedClients = input.clients.slice(0, PEER_CLIENT_LIMIT);
-  const skippedClients = input.clients.slice(PEER_CLIENT_LIMIT);
+  // Narrow before capping: otherwise invisible callers eat the budget and the user's own
+  // services fall outside `PEER_CLIENT_LIMIT` without ever being queried.
+  const visibleClients = input.clients.filter((client) => input.allowedServices.has(client));
+  const queriedClients = visibleClients.slice(0, PEER_CLIENT_LIMIT);
+  const skippedClients = visibleClients.slice(PEER_CLIENT_LIMIT);
   const clientErrors: VirtualPeerQueryResult['clientErrors'] = [];
   const traces: TraceResponse[] = [];
   let anyTruncated = false;
@@ -86,7 +99,7 @@ export async function fetchVirtualPeerMeta(input: VirtualPeerQueryInput): Promis
     if (result.value.length >= PEER_TRACE_LIMIT) anyTruncated = true;
   });
 
-  const aggregate = aggregateVirtualPeerSpans(traces, input.nodeName, anyTruncated, options);
+  const aggregate = aggregateVirtualPeerSpans(traces, input.nodeName, anyTruncated, { ...options, allowedServices: input.allowedServices });
   return { ...aggregate, queriedClients, skippedClients, fetchedTraceCount: traces.length, clientErrors };
 }
 
@@ -100,6 +113,8 @@ export async function fetchPeerMetasForGraph(input: {
   edges: PharosServiceEdge[];
   startMs: number;
   endMs: number;
+  /** Services the current user may see; nodes with no visible caller are not queried at all. */
+  allowedServices: ReadonlySet<string>;
 }): Promise<Map<string, VirtualPeerQueryResult>> {
   const virtualIds: string[] = [];
   const seen = new Set<string>();
@@ -122,11 +137,12 @@ export async function fetchPeerMetasForGraph(input: {
       fetchVirtualPeerMeta({
         dataSourceId: input.dataSourceId,
         pluginType: input.pluginType,
-        clients: adjacentClients(nodeName, input.edges),
+        clients: visibleAdjacentClients(nodeName, input.edges, input.allowedServices),
         nodeName,
         startMs: input.startMs,
         endMs: input.endMs,
         edges: input.edges,
+        allowedServices: input.allowedServices,
       }),
     ),
   );

@@ -1,4 +1,4 @@
-import { adjacentClients, neighborRows } from './hop';
+import { adjacentClients, neighborRows, visibleAdjacentClients } from './hop';
 import type { PharosServiceEdge } from '../contract';
 
 function edge(client: string, server: string, requestCount = 1, connectionType = ''): PharosServiceEdge {
@@ -13,6 +13,22 @@ describe('adjacentClients', () => {
 
   it('returns empty when the node is only a client (synthetic user)', () => {
     expect(adjacentClients('user', [edge('user', 'web', 1, 'virtual_node')])).toEqual([]);
+  });
+});
+
+describe('visibleAdjacentClients', () => {
+  const edges = [
+    edge('quote', 'mysql', 50, 'database'),
+    edge('nome-sec-admin', 'mysql', 40, 'database'),
+    edge('kline', 'mysql', 10, 'database'),
+  ];
+
+  it('keeps only whitelisted callers and preserves the volume order', () => {
+    expect(visibleAdjacentClients('mysql', edges, new Set(['quote', 'kline']))).toEqual(['quote', 'kline']);
+  });
+
+  it('returns nothing for an empty whitelist', () => {
+    expect(visibleAdjacentClients('mysql', edges, new Set<string>())).toEqual([]);
   });
 });
 

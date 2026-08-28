@@ -12,6 +12,7 @@ import type { TracePluginType } from '../types';
 import { SpanFlamegraph } from '../spanFlamegraph';
 import TraceList from './TraceList';
 import { isSpanFlamegraphSwitchVisible } from './visibility';
+import { isTraceForbidden, isTraceUnsupported } from '../traceError';
 import '@/pages/traceCpt/index.less';
 
 type DetailView = 'waterfall' | 'span-flame';
@@ -32,6 +33,12 @@ interface IProps {
  * single screen carries far more traces. The detail view reuses the upstream waterfall.
  * Span flamegraph Radio is gated by `isSpanFlamegraphSwitchVisible` (1.2.0 off).
  */
+function traceErrorMessageKey(error: unknown): string {
+  if (isTraceUnsupported(error)) return 'list.trace_detail_unsupported';
+  if (isTraceForbidden(error)) return 'list.trace_forbidden';
+  return 'list.trace_not_found';
+}
+
 export default function TraceExplorer(props: IProps) {
   const { init, initPluginId, initPluginType, initService, initTags, initRange, lockService } = props;
   const { t } = useTranslation('trace');
@@ -57,7 +64,7 @@ export default function TraceExplorer(props: IProps) {
         message.warning(t('list.trace_not_found'));
       }
     } catch (e) {
-      message.warning(t('list.trace_not_found'));
+      message.warning(t(traceErrorMessageKey(e)));
     } finally {
       setDetailLoading(false);
     }

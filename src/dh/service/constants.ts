@@ -25,9 +25,9 @@ export const CLUSTER_LABEL_KEYS = ['k8s_cluster_name', 'k8s_cluster', 'cluster',
 export const NAMESPACE_LABEL_KEYS = ['k8s_namespace_name', 'k8s_namespace', 'namespace', 'k8s.namespace.name'] as const;
 
 /**
- * `deployment.environment.name` is declared as a spanmetrics connector dimension, so only
- * spanmetrics series carry it. `traces_service_graph_*` declares no dimensions, so rows coming
- * from the fallback have no environment and the column stays blank.
+ * `deployment.environment.name` is declared as a spanmetrics connector dimension, so list
+ * RED rows carry it. `traces_service_graph_*` historically had none; 1.2.1 adds client_/
+ * server_ prefixed copies for topology. List fallback still has no unprefixed env label.
  */
 export const ENV_LABEL_KEYS = ['deployment_environment_name', 'deployment_environment', 'deployment.environment.name'] as const;
 

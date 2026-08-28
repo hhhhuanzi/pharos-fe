@@ -336,6 +336,11 @@ export async function searchSkyWalkingTraces(params: TraceSearchParams): Promise
   return results.filter(Boolean) as TraceResponse[];
 }
 
+/**
+ * Not wired into `getTraceByID`: this reads the datasource straight through `/proxy`, which cannot
+ * authorize per trace, so calling it would hand any logged-in user every span of any trace. Kept
+ * for the day SkyWalking gets a backend endpoint that does the team check.
+ */
 export async function getSkyWalkingTraceById(params: TraceByIdParams): Promise<TraceResponse[]> {
   const trace = await queryTraceRaw(params.data_source_id, params.traceID);
   return trace ? [trace] : [];

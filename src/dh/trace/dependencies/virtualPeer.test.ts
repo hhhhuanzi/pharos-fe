@@ -10,6 +10,9 @@ function tags(pairs: Record<string, string | number | boolean>) {
   return Object.entries(pairs).map(([key, value]) => ({ key, value }));
 }
 
+/** Emitters allowed in the fixtures below: `redisTrace` emits as `quote`, the mixed trace as `rome-sec-quote`. */
+const ALLOW_FIXTURE_EMITTERS = { allowedServices: new Set(['quote', 'rome-sec-quote']) };
+
 function redisTrace(spanTags: Record<string, string | number | boolean>, processTags: Record<string, string> = {}, spanId = 's1'): TraceResponse {
   return {
     traceID: 'aaa',
@@ -141,6 +144,7 @@ describe('aggregateVirtualPeerSpans', () => {
       ],
       'redis',
       false,
+      ALLOW_FIXTURE_EMITTERS,
     );
 
     expect(result.matchedSpans).toHaveLength(1);
@@ -190,6 +194,7 @@ describe('aggregateVirtualPeerSpans', () => {
       ],
       'redis',
       false,
+      ALLOW_FIXTURE_EMITTERS,
     );
     expect(result.instances).toHaveLength(1);
     expect(result.instances[0].address).toBe('172.22.65.3');
@@ -203,6 +208,7 @@ describe('aggregateVirtualPeerSpans', () => {
       [redisTrace({ 'net.peer.name': 'redis.ns.svc', 'net.peer.port': 6379 })],
       'redis',
       false,
+      ALLOW_FIXTURE_EMITTERS,
     );
     expect(result.instances[0]).toMatchObject({
       address: 'redis.ns.svc',
@@ -218,7 +224,7 @@ describe('aggregateVirtualPeerSpans', () => {
       redisTrace({ 'network.peer.address': '172.22.65.3', 'network.peer.port': 6379 }, {}, `s${i}`),
     );
     traces.push(redisTrace({ 'network.peer.address': '172.22.65.4', 'network.peer.port': 6379 }, {}, 'other'));
-    const result = aggregateVirtualPeerSpans(traces, 'redis', false);
+    const result = aggregateVirtualPeerSpans(traces, 'redis', false, ALLOW_FIXTURE_EMITTERS);
     expect(result.matchedSpans).toHaveLength(41);
     expect(result.instances.map((item) => ({ id: formatPeerInstance(item), n: item.spanCount }))).toEqual([
       { id: '172.22.65.3:6379', n: 40 },
@@ -227,7 +233,7 @@ describe('aggregateVirtualPeerSpans', () => {
   });
 
   it('does not invent values for keys that never appeared', () => {
-    const result = aggregateVirtualPeerSpans([redisTrace({})], 'redis', false);
+    const result = aggregateVirtualPeerSpans([redisTrace({})], 'redis', false, ALLOW_FIXTURE_EMITTERS);
     expect(result.curated.find((row) => row.id === 'statement')).toBeUndefined();
     expect(result.missing.map((row) => row.id)).toEqual(expect.arrayContaining(['peer_address', 'peer_port', 'statement']));
     expect(result.instances).toEqual([]);
@@ -235,7 +241,7 @@ describe('aggregateVirtualPeerSpans', () => {
 
   it('truncates long db.statement values', () => {
     const long = `GET ${'x'.repeat(250)}`;
-    const result = aggregateVirtualPeerSpans([redisTrace({ 'db.statement': long })], 'redis', false);
+    const result = aggregateVirtualPeerSpans([redisTrace({ 'db.statement': long })], 'redis', false, ALLOW_FIXTURE_EMITTERS);
     const statement = result.curated.find((row) => row.id === 'statement');
     expect(statement?.values[0].endsWith('…')).toBe(true);
     expect(statement?.values[0].length).toBe(201);
@@ -246,6 +252,7 @@ describe('aggregateVirtualPeerSpans', () => {
       [redisTrace({ 'db.namespace': '0', 'db.operation': 'HGET' })],
       'redis',
       false,
+      ALLOW_FIXTURE_EMITTERS,
     );
     const byId = Object.fromEntries(result.curated.map((row) => [row.id, row]));
     expect(byId.db_name).toEqual({ id: 'db_name', values: ['0'], sourceKeys: ['db.namespace'] });
@@ -291,9 +298,91 @@ describe('aggregateVirtualPeerSpans', () => {
         },
       ],
     };
-    const result = aggregateVirtualPeerSpans([mixed], 'rabbitmq', false);
+    const result = aggregateVirtualPeerSpans([mixed], 'rabbitmq', false, ALLOW_FIXTURE_EMITTERS);
     expect(result.matchedSpans.map((span) => span.operation)).toEqual(['basic.ack']);
     expect(result.instances.map((row) => formatPeerInstance(row))).toEqual(['10.72.129.23:5672']);
     expect(result.instances[0].messagingSystem).toBe('rabbitmq');
+  });
+});
+
+/**
+ * A trace fetched for `turms-gateway` also carries what `nome-sec-admin` did downstream. Both hit
+ * the same shared mysql node, so matching on the node alone would leak the other team's statement.
+ */
+const SHARED_MYSQL_TRACE: TraceResponse = {
+  traceID: 'shared',
+  processes: {
+    p0: { serviceName: 'turms-gateway', tags: [] },
+    p1: { serviceName: 'nome-sec-admin', tags: [] },
+  },
+  spans: [
+    {
+      spanID: 'gateway-sql',
+      traceID: 'shared',
+      processID: 'p0',
+      operationName: 'SELECT turms',
+      startTime: 1,
+      duration: 2,
+      logs: [],
+      flags: 0,
+      tags: tags({
+        'span.kind': 'client',
+        'db.system': 'mysql',
+        'db.statement': 'SELECT * FROM turms_user',
+        'network.peer.address': '10.0.0.9',
+        'network.peer.port': 3306,
+      }),
+    },
+    {
+      spanID: 'admin-sql',
+      traceID: 'shared',
+      processID: 'p1',
+      operationName: 'SELECT sec',
+      startTime: 3,
+      duration: 4,
+      logs: [],
+      flags: 0,
+      tags: tags({
+        'span.kind': 'client',
+        'db.system': 'mysql',
+        'db.statement': 'SELECT * FROM sec_secret',
+        'network.peer.address': '10.0.0.9',
+        'network.peer.port': 3306,
+      }),
+    },
+  ],
+};
+
+describe('aggregateVirtualPeerSpans emitter whitelist', () => {
+  it('drops spans emitted by a service outside the whitelist, even inside an allowed caller’s trace', () => {
+    const result = aggregateVirtualPeerSpans([SHARED_MYSQL_TRACE], 'mysql', false, {
+      allowedServices: new Set(['turms-gateway']),
+    });
+
+    expect(result.matchedSpans.map((span) => span.service)).toEqual(['turms-gateway']);
+    expect(result.matchedSpans.map((span) => span.spanId)).toEqual(['gateway-sql']);
+
+    const statement = result.curated.find((row) => row.id === 'statement');
+    expect(statement?.values).toEqual(['SELECT * FROM turms_user']);
+    expect(result.extraRows.some((row) => row.values.includes('SELECT * FROM sec_secret'))).toBe(false);
+    expect(result.instances.map((row) => row.spanCount)).toEqual([1]);
+  });
+
+  it('keeps both emitters for a viewAll whitelist', () => {
+    const result = aggregateVirtualPeerSpans([SHARED_MYSQL_TRACE], 'mysql', false, {
+      allowedServices: new Set(['turms-gateway', 'nome-sec-admin']),
+    });
+    expect(result.matchedSpans.map((span) => span.service)).toEqual(['turms-gateway', 'nome-sec-admin']);
+    expect(result.curated.find((row) => row.id === 'statement')?.values).toEqual([
+      'SELECT * FROM sec_secret',
+      'SELECT * FROM turms_user',
+    ]);
+  });
+
+  it('fails closed on an empty whitelist instead of aggregating everything', () => {
+    const result = aggregateVirtualPeerSpans([SHARED_MYSQL_TRACE], 'mysql', false, { allowedServices: new Set<string>() });
+    expect(result.matchedSpans).toEqual([]);
+    expect(result.instances).toEqual([]);
+    expect(result.curated).toEqual([]);
   });
 });

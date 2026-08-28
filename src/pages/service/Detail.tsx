@@ -185,7 +185,15 @@ export default function ServiceDetailPage() {
           </Tabs.TabPane>
           <Tabs.TabPane tab={t('tab.topology')} key='topology'>
             {/* antd 4 keeps visited panes at display:none; Graph must not measure at 0×0. */}
-            {tab === 'topology' ? <Topology key={service} focusService={service} /> : null}
+            {tab === 'topology' ? (
+              <Topology
+                key={`${service}-${identity.env ?? ''}`}
+                focusService={service}
+                env={identity.env}
+                cluster={identity.cluster || (association.clusters.length === 1 ? association.clusters[0] : undefined)}
+                namespace={identity.namespace || (association.namespaces.length === 1 ? association.namespaces[0] : undefined)}
+              />
+            ) : null}
           </Tabs.TabPane>
           {isVisibleDetailTab('events') ? (
             <Tabs.TabPane tab={t('tab.events')} key='events'>

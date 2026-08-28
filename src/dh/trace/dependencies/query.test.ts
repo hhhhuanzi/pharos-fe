@@ -19,10 +19,31 @@ describe('toPromRange', () => {
 describe('buildServiceGraphQueries', () => {
   it('uses service_graph metric names and the supplied range', () => {
     const q = buildServiceGraphQueries('1h');
-    expect(q.total).toContain('traces_service_graph_request_total[1h]');
+    expect(q.total).toBe('sum by (client, server, connection_type) (increase(traces_service_graph_request_total[1h]))');
     expect(q.failed).toContain('traces_service_graph_request_failed_total[1h]');
     expect(q.p95).toContain('traces_service_graph_request_server_seconds_bucket[1h]');
     expect(q.p95).toContain('histogram_quantile(0.95');
+  });
+
+  it('scopes detail queries to the focus service and client_/server_ env labels, not scrape env', () => {
+    const q = buildServiceGraphQueries('1h', { service: 'turms-business-service', env: 'pre' });
+    expect(q.total).toContain('client="turms-business-service", client_deployment_environment_name="pre"');
+    expect(q.total).toContain('server="turms-business-service", server_deployment_environment_name="pre"');
+    expect(q.total).not.toContain('env="pre"');
+    expect(q.total).toContain(' or ');
+  });
+
+  it('adds cluster and namespace on the same client_/server_ prefix', () => {
+    const q = buildServiceGraphQueries('1h', {
+      service: 'turms-business-service',
+      env: 'pre',
+      cluster: 'k8s-trade-prod',
+      namespace: 'pre-turms',
+    });
+    expect(q.failed).toContain('client_k8s_cluster_name="k8s-trade-prod"');
+    expect(q.failed).toContain('client_k8s_namespace_name="pre-turms"');
+    expect(q.p95).toContain('server_k8s_cluster_name="k8s-trade-prod"');
+    expect(q.p95).not.toContain('cluster="k8s-trade-prod"');
   });
 });
 

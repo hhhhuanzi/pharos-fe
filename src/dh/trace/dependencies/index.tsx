@@ -40,10 +40,15 @@ function pickDatasourceId(list: Array<{ id: number }>, preferred?: number): numb
  * Official `/trace/dependencies` is a thin mount; this file owns the page body.
  *
  * `focusService` from the parent means detail topology: render a 1-hop subgraph only.
- * The global `/service` page omits it and keeps the full graph.
+ * Pass `env` (and cluster/ns when known) so same-named services in other environments
+ * do not share edges. The global `/service` page omits all of these and keeps the full graph.
  */
 interface Props {
   focusService?: string;
+  /** Detail identity: isolate 1-hop edges to this environment. Global graph omits these. */
+  env?: string;
+  cluster?: string;
+  namespace?: string;
 }
 
 interface SelectedNode {
@@ -52,7 +57,7 @@ interface SelectedNode {
 }
 
 export default function ServiceGraphPage(props: Props) {
-  const { focusService: oneHopService } = props;
+  const { focusService: oneHopService, env, cluster, namespace } = props;
   const { t } = useTranslation('trace');
   const { groupedDatasourceList } = useContext(CommonStateContext);
   const prometheusList = groupedDatasourceList.prometheus || [];
@@ -69,6 +74,7 @@ export default function ServiceGraphPage(props: Props) {
   const tracingId = pickDatasourceId(tracingList, tracingPlugin === 'jaeger' ? readStoredId(JAEGER_LS) : undefined);
   const [range, setRange] = useState<IRawTimeRange>(() => getDefaultValue(RANGE_LS, { start: 'now-1h', end: 'now' }) || { start: 'now-1h', end: 'now' });
   const [edges, setEdges] = useState<PharosServiceEdge[]>([]);
+  const [visibleServices, setVisibleServices] = useState<string[]>();
   const [rangeSeconds, setRangeSeconds] = useState(3600);
   const [rangeMs, setRangeMs] = useState(() => {
     const { start, end } = timeRangeUnix({ start: 'now-1h', end: 'now' });
@@ -97,6 +103,7 @@ export default function ServiceGraphPage(props: Props) {
   useEffect(() => {
     if (datasourceId == null) {
       setEdges([]);
+      setVisibleServices(undefined);
       setFailed(false);
       return;
     }
@@ -105,23 +112,36 @@ export default function ServiceGraphPage(props: Props) {
     requestSeq.current = seq;
     setLoading(true);
     setFailed(false);
-    fetchServiceGraph(datasourceId, start, end)
+    fetchServiceGraph(datasourceId, start, end, {
+      service: oneHopService,
+      env,
+      cluster,
+      namespace,
+    })
       .then((res) => {
         if (requestSeq.current !== seq) return;
         setEdges(res.edges);
+        setVisibleServices(res.visibleServices);
         setRangeSeconds(Math.max(1, end - start));
         setRangeMs({ start: start * 1000, end: end * 1000 });
       })
       .catch(() => {
         if (requestSeq.current !== seq) return;
         setEdges([]);
+        setVisibleServices(undefined);
         setFailed(true);
       })
       .finally(() => {
         if (requestSeq.current !== seq) return;
         setLoading(false);
       });
-  }, [datasourceId, range, refreshKey]);
+  }, [datasourceId, range, refreshKey, oneHopService, env, cluster, namespace]);
+
+  /**
+   * Services the backend says this user may see. An absent field (older backend, partial response)
+   * becomes an empty set, which every consumer reads as "query nothing" rather than "query all".
+   */
+  const allowedServices = useMemo<ReadonlySet<string>>(() => new Set(visibleServices || []), [visibleServices]);
 
   const scopedEdges = useMemo(() => (oneHopService ? filterOneHopEdges(edges, oneHopService) : edges), [edges, oneHopService]);
   const scopedKey = useMemo(
@@ -131,7 +151,7 @@ export default function ServiceGraphPage(props: Props) {
   const namedEnrichment = useMemo(() => enrichVirtualGraph(scopedEdges, EMPTY_METAS), [scopedEdges]);
 
   useEffect(() => {
-    if (tracingId == null || scopedEdges.length === 0) return;
+    if (tracingId == null || scopedEdges.length === 0 || allowedServices.size === 0) return;
 
     const seq = enrichSeq.current + 1;
     enrichSeq.current = seq;
@@ -142,6 +162,7 @@ export default function ServiceGraphPage(props: Props) {
       edges: scopedEdges,
       startMs: rangeMs.start,
       endMs: rangeMs.end,
+      allowedServices,
     })
       .then((metas) => {
         if (enrichSeq.current !== seq) return;
@@ -150,7 +171,7 @@ export default function ServiceGraphPage(props: Props) {
       .catch(() => {
         if (enrichSeq.current !== seq) return;
       });
-  }, [scopedEdges, scopedKey, tracingId, tracingPlugin, rangeMs.start, rangeMs.end]);
+  }, [scopedEdges, scopedKey, tracingId, tracingPlugin, rangeMs.start, rangeMs.end, allowedServices]);
 
   const enrichment = traceEnrichment?.key === scopedKey ? traceEnrichment.value : namedEnrichment;
   const displayEdges = enrichment.edges;
@@ -278,6 +299,7 @@ export default function ServiceGraphPage(props: Props) {
             : undefined
         }
         edges={displayEdges}
+        allowedServices={allowedServices}
         dataSourceId={tracingId}
         pluginType={tracingPlugin}
         startMs={rangeMs.start}
@@ -287,6 +309,7 @@ export default function ServiceGraphPage(props: Props) {
       <ServiceNodeDrawer
         nodeId={selectedNode?.kind === 'service' ? selectedNode.id : undefined}
         edges={displayEdges}
+        allowedServices={allowedServices}
         dataSourceId={tracingId}
         pluginType={tracingPlugin}
         startMs={rangeMs.start}
