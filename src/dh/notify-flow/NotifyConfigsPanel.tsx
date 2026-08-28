@@ -286,7 +286,7 @@ export default function NotifyConfigsPanel(props: NotifyConfigsPanelProps) {
 
   return (
     <div className='dh-notify-flow'>
-      <div className={fullscreen ? 'fixed inset-0 z-[1000] flex flex-col bg-[var(--fc-fill-1)] p-4' : undefined}>
+      <div className={fullscreen ? 'fixed inset-0 z-[900] flex flex-col bg-[var(--fc-fill-1)] p-4' : undefined}>
         {viewMode === 'graph' ? (
           graphToolbar
         ) : (
@@ -321,12 +321,12 @@ export default function NotifyConfigsPanel(props: NotifyConfigsPanelProps) {
         </Button>
       ) : null}
 
+      {/* 不要给 Drawer 设 zIndex>1050。antd4 Select/Picker 默认 1050，抬高抽屉会把下拉压到后面。全屏遮罩用 z-[900]，保证仍低于默认抽屉 1000。 */}
       <Drawer
         title={t('flow.drawer_title', { index: (drawerIndex ?? 0) + 1 })}
         visible={Boolean(drawerVisible && drawerField)}
         onClose={closeDrawer}
         width={720}
-        zIndex={1100}
         destroyOnClose={false}
         extra={
           !disabled && drawerIndex != null ? (
