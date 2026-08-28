@@ -17,9 +17,9 @@
 /**
  * 仪表盘列表页面
  */
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Button, Modal, Space, message, Tooltip } from 'antd';
+import { Button, Empty, Modal, Space, message, Tooltip } from 'antd';
 import { FundViewOutlined, EditOutlined, ShareAltOutlined } from '@ant-design/icons';
 import _ from 'lodash';
 import { useTranslation } from 'react-i18next';
@@ -41,6 +41,7 @@ import usePagination from '@/components/usePagination';
 import { getDefaultColumnsConfigs, buildColumnOptions } from '@/components/TableColumnSelect';
 import { getBusiGroups } from '@/components/BusinessGroup';
 import EmptyGuide from '@/components/EmptyGuide';
+import { FavoriteStar, NS as DhDashboardNS, sortBoardsByFavorite, useBoardFavorites } from '@/dh/dashboard';
 
 import { defaultColumnsConfigs, LOCAL_STORAGE_KEY } from './constants';
 import Header from './Header';
@@ -66,6 +67,7 @@ const getDefaultPublicSelectGids = (localKey: string) => {
 
 export default function index() {
   const { t } = useTranslation('dashboard');
+  const { t: tDh } = useTranslation(DhDashboardNS);
   const { businessGroup, perms } = useContext(CommonStateContext);
   const queryParams = queryString.parse(useLocation().search);
   const [gids, setGids] = useState<string | undefined>(() => getDashboardCompatibleGids(getDefaultGidsInDashboard(queryParams, N9E_GIDS_LOCALKEY, businessGroup)));
@@ -83,6 +85,8 @@ export default function index() {
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => getDefaultColumnsConfigs(defaultColumnsConfigs, LOCAL_STORAGE_KEY));
   const columnOptions = buildColumnOptions(defaultColumnsConfigs, t);
   const [importData, setImportData] = useState<{ visible: boolean; busiId?: number; type?: ModalType }>({ visible: false });
+  const [onlyFavorites, setOnlyFavorites] = useState(false);
+  const { favoriteIds, toggleFavorite } = useBoardFavorites();
 
   useUpdateEffect(() => {
     setGids(getDashboardCompatibleGids(businessGroup.ids));
@@ -104,19 +108,25 @@ export default function index() {
     }
   }, [gids, refreshKey]);
 
-  const data = _.filter(list, (item) => {
-    let flag = true;
-    // 公开仪表盘需要对单独的业务组选择器选择的值过滤
-    if (gids === '-1' && !_.isEmpty(selectedBusinessGroup)) {
-      flag = _.includes(selectedBusinessGroup, item.group_id);
-    }
-    if (searchVal && flag) {
-      flag =
-        _.includes(item.name.toLowerCase(), searchVal.toLowerCase()) ||
-        _.includes(_.join(_.sortBy(_.split(item.tags.toLowerCase(), ' ')), ' '), _.join(_.sortBy(_.split(searchVal.toLowerCase(), ' ')), ' '));
-    }
-    return flag;
-  });
+  const data = useMemo(() => {
+    const filtered = _.filter(list, (item) => {
+      let flag = true;
+      // 公开仪表盘需要对单独的业务组选择器选择的值过滤
+      if (gids === '-1' && !_.isEmpty(selectedBusinessGroup)) {
+        flag = _.includes(selectedBusinessGroup, item.group_id);
+      }
+      if (onlyFavorites && flag) {
+        flag = favoriteIds.has(Number(item.id));
+      }
+      if (searchVal && flag) {
+        flag =
+          _.includes(item.name.toLowerCase(), searchVal.toLowerCase()) ||
+          _.includes(_.join(_.sortBy(_.split(item.tags.toLowerCase(), ' ')), ' '), _.join(_.sortBy(_.split(searchVal.toLowerCase(), ' ')), ' '));
+      }
+      return flag;
+    });
+    return sortBoardsByFavorite(filtered, favoriteIds);
+  }, [list, gids, selectedBusinessGroup, searchVal, onlyFavorites, favoriteIds]);
 
   useEffect(() => {
     getBusiGroups({ all: true }).then((res) => {
@@ -163,6 +173,8 @@ export default function index() {
               setSelectedBusinessGroup(val);
               localStorage.setItem(PUBLIC_SELECT_GIDS_LOCALKEY, _.join(val, ','));
             }}
+            onlyFavorites={onlyFavorites}
+            onOnlyFavoritesChange={setOnlyFavorites}
           />
           <EnhancedTable
             className='mt-2'
@@ -178,15 +190,18 @@ export default function index() {
                     const groupName = !hideBusinessGroupColumn ? _.find(busiGroups, { id: record.group_id })?.name : undefined;
                     return (
                       <div className='flex flex-col gap-0.5'>
-                        <Link
-                          className='table-active-text'
-                          to={{
-                            pathname: `/dashboards/${record.ident || record.id}`,
-                            search: gids === '-1' ? '__public__=true' : '', // 加上 __public__ 参数，用于在详情页判断是否为公开仪表盘
-                          }}
-                        >
-                          {text}
-                        </Link>
+                        <div className='flex min-w-0 items-center gap-2'>
+                          <FavoriteStar favorited={favoriteIds.has(Number(record.id))} onToggle={(next) => toggleFavorite(Number(record.id), next)} />
+                          <Link
+                            className='table-active-text min-w-0 truncate'
+                            to={{
+                              pathname: `/dashboards/${record.ident || record.id}`,
+                              search: gids === '-1' ? '__public__=true' : '', // 加上 __public__ 参数，用于在详情页判断是否为公开仪表盘
+                            }}
+                          >
+                            {text}
+                          </Link>
+                        </div>
                         {groupName && <span className='text-soft text-xs'>{groupName}</span>}
                       </div>
                     );
@@ -223,7 +238,7 @@ export default function index() {
                   ellipsis: { showTitle: false },
                   render: (text: string) => <EllipsisText text={text} />,
                 },
-                dateColumn({ title: t('common:table.update_at'), dataIndex: 'update_at', unix: true, sortable: true, defaultSortOrder: 'descend' }),
+                dateColumn({ title: t('common:table.update_at'), dataIndex: 'update_at', unix: true, sortable: true }),
                 updateByColumn({ title: t('common:table.update_by'), dataIndex: 'update_by', nickname: 'update_by_nickname' }),
                 {
                   title: t('public.name'),
@@ -399,7 +414,9 @@ export default function index() {
               },
             }}
             locale={{
-              emptyText: (
+              emptyText: onlyFavorites ? (
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={tDh('favorite.empty')} />
+              ) : (
                 <EmptyGuide
                   title={t('empty_guide.title')}
                   description={t('empty_guide.desc')}

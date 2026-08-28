@@ -15,9 +15,10 @@
  *
  */
 import React, { useContext } from 'react';
-import { Input, Button, Dropdown, Modal, Space, message } from 'antd';
-import { SearchOutlined, DownOutlined } from '@ant-design/icons';
+import { Input, Button, Dropdown, Modal, Space, message, Tooltip } from 'antd';
+import { SearchOutlined, DownOutlined, StarFilled, StarOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
+import { NS as DhDashboardNS } from '@/dh/dashboard';
 import { removeDashboards } from '@/services/dashboardV2';
 import RefreshIcon from '@/components/RefreshIcon';
 import TableColumnSelect, { setDefaultColumnsConfigs, buildColumnOptions } from '@/components/TableColumnSelect';
@@ -39,12 +40,28 @@ interface IProps {
   columnOptions: { label: string; value: string; order?: number }[];
   selectedBusinessGroup?: number[];
   setSelectedBusinessGroup: (val?: number[]) => void;
+  onlyFavorites?: boolean;
+  onOnlyFavoritesChange?: (val: boolean) => void;
 }
 
 export default function Header(props: IProps) {
   const { businessGroup, busiGroups } = useContext(CommonStateContext);
   const { t } = useTranslation('dashboard');
-  const { gids, selectRowKeys, refreshList, searchVal, onSearchChange, visibleColumns, setVisibleColumns, columnOptions, selectedBusinessGroup, setSelectedBusinessGroup } = props;
+  const { t: tDh } = useTranslation(DhDashboardNS);
+  const {
+    gids,
+    selectRowKeys,
+    refreshList,
+    searchVal,
+    onSearchChange,
+    visibleColumns,
+    setVisibleColumns,
+    columnOptions,
+    selectedBusinessGroup,
+    setSelectedBusinessGroup,
+    onlyFavorites,
+    onOnlyFavoritesChange,
+  } = props;
   const [importData, setImportData] = React.useState<{
     visible: boolean;
     busiId?: number;
@@ -77,6 +94,13 @@ export default function Header(props: IProps) {
             placeholder={t('search_placeholder')}
           />
           {gids === '-1' && <BusinessGroupSelectWithAll value={selectedBusinessGroup} onChange={setSelectedBusinessGroup} mode='multiple' />}
+          {onOnlyFavoritesChange && (
+            <Tooltip title={tDh('favorite.only_tip')}>
+              <Button type={onlyFavorites ? 'primary' : 'default'} icon={onlyFavorites ? <StarFilled /> : <StarOutlined />} onClick={() => onOnlyFavoritesChange(!onlyFavorites)}>
+                {tDh('favorite.only')}
+              </Button>
+            </Tooltip>
+          )}
         </Space>
         <Space>
           {businessGroup.isLeaf && gids && gids !== '-1' && gids !== '-2' && (
