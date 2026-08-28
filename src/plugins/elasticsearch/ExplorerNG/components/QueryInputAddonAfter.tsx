@@ -6,6 +6,7 @@ import _ from 'lodash';
 import { useRequest } from 'ahooks';
 
 import ConditionHistoricalRecords from '@/components/HistoricalRecords/ConditionHistoricalRecords';
+import { useLogExplorerLock } from '@/dh/serviceLog/LockContext';
 import { getESIndexPatterns } from '@/pages/log/IndexPatterns/services';
 
 import { NAME_SPACE, QUERY_CACHE_KEY, QUERY_CACHE_PICK_KEYS } from '../../constants';
@@ -22,6 +23,8 @@ export default function QueryInputAddonAfter(props: Props) {
 
   const form = Form.useFormInstance();
   const datasourceValue = Form.useWatch('datasourceValue');
+  // dh: 历史记录缓存里带 mode / index / index_pattern，服务下钻锁定态下必须剔除，见 src/dh/serviceLog/lock.ts
+  const { sanitizeRestoredQuery } = useLogExplorerLock();
   const { data: indexPatterns = [] } = useRequest(() => getESIndexPatterns(datasourceValue), {
     ready: !!datasourceValue,
     refreshDeps: [datasourceValue],
@@ -47,16 +50,16 @@ export default function QueryInputAddonAfter(props: Props) {
             key={JSON.stringify(item)}
             onClick={() => {
               form.setFieldsValue({
-                query: {
+                query: sanitizeRestoredQuery({
                   ...item,
                   query: item.query || '',
-                },
+                }),
               });
               executeQuery();
               setVisible(false);
             }}
           >
-            {_.map(_.pick(item, QUERY_CACHE_PICK_KEYS), (value, key) => {
+            {_.map(_.pick(sanitizeRestoredQuery(item), QUERY_CACHE_PICK_KEYS), (value, key) => {
               // SQL 模式下隐藏 query 字段；非 SQL 模式下隐藏 sql 字段
               if (key === 'sql' && item.syntax !== 'sql') return <span key={key} />;
               if (key === 'query' && item.syntax === 'sql') return <span key={key} />;

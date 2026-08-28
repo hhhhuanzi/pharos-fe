@@ -10,7 +10,9 @@ import { CommonStateContext } from '@/App';
 import OutlinedAutoComplete from '@/components/OutlinedAutoComplete';
 import { OutlinedSelect } from '@/components/OutlinedSelect';
 import { useIsAuthorized } from '@/components/AuthorizationWrapper';
+import { getIndexPatternSelectOptionProps } from '@/dh/logExplorer';
 import { useIndexPatternScope } from '@/dh/logPerm';
+import { useLogExplorerLock } from '@/dh/serviceLog/LockContext';
 import { getESIndexPatterns, standardizeFieldConfig } from '@/pages/log/IndexPatterns/services';
 
 import { NAME_SPACE } from '../../constants';
@@ -44,6 +46,8 @@ export default function indexCpt(props: Props) {
   const { esIndexMode } = useContext(CommonStateContext);
   const { disabled, executeQuery, organizeFields, setOrganizeFields, onIndexDataChange, handleValueFilter, requestParams, isOpenSearch } = props;
   const { filter: filterIndexPatterns } = useIndexPatternScope();
+  // dh: 服务下钻场景把查询目标钉死在「所属业务 + 环境」那一个索引模式上，见 src/dh/serviceLog/lock.ts
+  const { locked: targetLocked, filterIndexPatterns: filterToLockedIndexPattern } = useLogExplorerLock();
 
   const indexPatternsAuthorized = useIsAuthorized(['/log/index-patterns']);
 
@@ -109,7 +113,7 @@ export default function indexCpt(props: Props) {
     },
   );
 
-  const { data: indexPatterns, run: runIndexPatterns } = useRequest(() => getESIndexPatterns(datasourceValue).then(filterIndexPatterns), {
+  const { data: indexPatterns, run: runIndexPatterns } = useRequest(() => getESIndexPatterns(datasourceValue).then(filterIndexPatterns).then(filterToLockedIndexPattern), {
     refreshDeps: [datasourceValue],
     ready: !!datasourceValue && queryValues?.mode === 'index-patterns',
     onSuccess: (data) => {
@@ -190,7 +194,7 @@ export default function indexCpt(props: Props) {
           <Form.Item
             name={['query', 'mode']}
             initialValue={isOpenSearch ? 'indices' : esIndexMode !== 'all' ? esIndexMode : 'index-patterns'}
-            hidden={isOpenSearch || esIndexMode !== 'all'}
+            hidden={isOpenSearch || targetLocked || esIndexMode !== 'all'}
           >
             <OutlinedSelect
               label={t('query.mode')}
@@ -322,31 +326,13 @@ export default function indexCpt(props: Props) {
               >
                 <OutlinedSelect
                   label={t('query.index_pattern')}
-                  options={_.map(indexPatterns, (item) => {
-                    return {
-                      label: (
-                        <Space>
-                          <span>{item.name}</span>
-                          <span
-                            style={{
-                              color: 'var(--fc-text-3)',
-                            }}
-                          >
-                            {item.note}
-                          </span>
-                        </Space>
-                      ),
-                      originLabel: item.name,
-                      searchIndex: `${item.name} ${item.note}`,
-                      value: item.id,
-                    };
-                  })}
+                  {...getIndexPatternSelectOptionProps(indexPatterns)}
                   dropdownMatchSelectWidth={false}
                   showSearch
-                  optionFilterProp='searchIndex'
-                  optionLabelProp='originLabel'
+                  disabled={targetLocked}
                   suffix={
-                    indexPatternsAuthorized && (
+                    indexPatternsAuthorized &&
+                    !targetLocked && (
                       <Tooltip
                         overlayClassName='ant-tooltip-with-link'
                         title={

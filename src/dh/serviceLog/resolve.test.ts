@@ -25,7 +25,7 @@ describe('buildServiceLogFormValues', () => {
         index_pattern: 3,
         index: 'turms-test*',
         date_field: '@timestamp',
-        range: { start: 'now-24h', end: 'now' },
+        range: { start: 'now-15m', end: 'now' },
         filters: [{ key: LOG_SERVICE_FIELD, value: 'turms-business-service', operator: 'AND' }],
         query: '',
       },

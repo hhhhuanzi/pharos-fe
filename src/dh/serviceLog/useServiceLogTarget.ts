@@ -1,29 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { fetchMonitoringScopes } from '@/dh/service/monitoring/api';
-import { timeRangeUnix } from '@/components/TimeRangePicker';
 import { getESIndexPatterns } from '@/pages/log/IndexPatterns/services';
+import { isScopeCovered, toScopeSlug, useIndexPatternScope } from '@/dh/logPerm';
+import { isValidTeamName } from '@/dh/serviceTeam/teamName';
+import type { NamedTeam } from '@/dh/serviceTeam/types';
 
-import {
-  buildServiceLogIndexPatternName,
-  hasAmbiguousNamespaces,
-  matchIndexPattern,
-  pickNamespace,
-  uniqueNamespaces,
-  type IndexPatternCandidate,
-} from './indexPattern';
+import { buildServiceLogIndexPatternName, matchIndexPattern, pickBoundTeam, type IndexPatternCandidate } from './indexPattern';
 import { buildServiceLogFormValues, type ServiceLogFormValues } from './resolve';
 
 export interface UseServiceLogTargetInput {
   service?: string;
   env?: string;
-  namespace?: string;
-  associationNamespaces?: string[];
-  associationReady: boolean;
-  promId?: number;
+  teams?: NamedTeam[];
 }
 
-export type ServiceLogTargetStatus = 'loading' | 'ready' | 'missing_scope' | 'ambiguous_namespace' | 'pattern_missing' | 'error';
+export type ServiceLogTargetStatus =
+  | 'loading'
+  | 'ready'
+  | 'missing_env'
+  | 'unbound'
+  | 'ambiguous_team'
+  | 'invalid_team_name'
+  | 'pattern_missing'
+  | 'pattern_forbidden'
+  | 'error';
 
 export interface ServiceLogTargetState {
   status: ServiceLogTargetStatus;
@@ -31,70 +31,58 @@ export interface ServiceLogTargetState {
   indexPatternName?: string;
 }
 
-async function resolveNamespaceFromMetrics(promId: number, service: string): Promise<string[] | undefined> {
-  try {
-    const { end } = timeRangeUnix({ start: 'now-1h', end: 'now' });
-    const scopes = await fetchMonitoringScopes(promId, service, end);
-    return uniqueNamespaces(scopes.map((item) => item.namespace ?? ''));
-  } catch {
-    return undefined;
-  }
-}
-
 export function useServiceLogTarget(input: UseServiceLogTargetInput): ServiceLogTargetState {
   const [state, setState] = useState<ServiceLogTargetState>({ status: 'loading' });
   const seqRef = useRef(0);
+  // 服务页把索引钉死后仍要判索引域权限：否则没被授权的用户也会拿到已填好 index 的表单，
+  // 下拉被 logPerm 过滤成空但查询照样发得出去。
+  const { unrestricted, grantedScopes } = useIndexPatternScope();
+  const scopeKey = grantedScopes.join('\0');
 
   const service = typeof input.service === 'string' ? input.service.trim() : '';
   const env = typeof input.env === 'string' ? input.env.trim() : '';
-  const urlNamespace = typeof input.namespace === 'string' ? input.namespace.trim() : '';
-  const associationNamespaces = input.associationNamespaces;
-  const associationReady = input.associationReady;
-  const promId = input.promId;
-  const associationKey = Array.isArray(associationNamespaces) ? associationNamespaces.join('\0') : '';
+  const teams = input.teams;
+  const teamKey = Array.isArray(teams) ? teams.map((item) => `${item.id}:${item.name}`).join('\0') : '';
 
   useEffect(() => {
     const seq = seqRef.current + 1;
     seqRef.current = seq;
 
     if (!env) {
-      setState({ status: 'missing_scope' });
+      setState({ status: 'missing_env' });
       return;
     }
 
-    if (!urlNamespace && !associationReady) {
-      setState({ status: 'loading' });
+    const picked = pickBoundTeam(teams);
+    if (picked.status === 'none') {
+      setState({ status: 'unbound' });
+      return;
+    }
+    if (picked.status === 'many') {
+      setState({ status: 'ambiguous_team' });
+      return;
+    }
+    if (!isValidTeamName(picked.name)) {
+      setState({ status: 'invalid_team_name' });
       return;
     }
 
-    if (hasAmbiguousNamespaces(urlNamespace, associationNamespaces)) {
-      setState({ status: 'ambiguous_namespace' });
+    const indexPatternName = buildServiceLogIndexPatternName(picked.name, env);
+    if (!indexPatternName) {
+      setState({ status: 'unbound' });
       return;
     }
 
     const run = async () => {
-      let namespace = pickNamespace(urlNamespace, associationNamespaces);
-      if (!namespace && promId != null && service) {
-        const fromMetrics = await resolveNamespaceFromMetrics(promId, service);
-        if (seqRef.current !== seq) return;
-        if (fromMetrics && fromMetrics.length > 1) {
-          setState({ status: 'ambiguous_namespace' });
-          return;
-        }
-        namespace = fromMetrics?.[0];
-      }
-
-      const indexPatternName = buildServiceLogIndexPatternName(namespace, env);
-      if (!indexPatternName) {
-        setState({ status: 'missing_scope' });
-        return;
-      }
-
       setState({ status: 'loading', indexPatternName });
       try {
         const list = (await getESIndexPatterns()) as IndexPatternCandidate[];
         if (seqRef.current !== seq) return;
         const pattern = matchIndexPattern(Array.isArray(list) ? list : [], indexPatternName);
+        if (pattern && !unrestricted && !isScopeCovered(toScopeSlug(pattern.name ?? ''), grantedScopes)) {
+          setState({ status: 'pattern_forbidden', indexPatternName });
+          return;
+        }
         const formValues = buildServiceLogFormValues(pattern, service);
         if (!formValues) {
           setState({ status: 'pattern_missing', indexPatternName });
@@ -108,7 +96,7 @@ export function useServiceLogTarget(input: UseServiceLogTargetInput): ServiceLog
     };
 
     void run();
-  }, [service, env, urlNamespace, associationReady, promId, associationKey]);
+  }, [service, env, teamKey, unrestricted, scopeKey]);
 
   return state;
 }

@@ -1,13 +1,11 @@
-export {
-  buildServiceLogIndexPatternName,
-  hasAmbiguousNamespaces,
-  matchIndexPattern,
-  pickNamespace,
-  uniqueNamespaces,
-} from './indexPattern';
-export type { IndexPatternCandidate } from './indexPattern';
+export { buildServiceLogIndexPatternName, matchIndexPattern, pickBoundTeam } from './indexPattern';
+export type { BoundTeamInput, BoundTeamPick, IndexPatternCandidate } from './indexPattern';
 export { buildServiceLogFilters, SERVICE_LOG_DEFAULT_RANGE } from './query';
 export type { ServiceLogFilter } from './query';
+export { filterLockedIndexPatterns, LOCKED_QUERY_STRIP_KEYS, stripLockedQueryKeys } from './lock';
+export type { LockableIndexPattern, ServiceLogLock } from './lock';
+export { ServiceLogLockProvider, useLogExplorerLock } from './LockContext';
+export type { LogExplorerLock } from './LockContext';
 export { buildServiceLogFormValues, isUsableIndexPattern } from './resolve';
 export type { ServiceLogFormValues } from './resolve';
 export { useServiceLogTarget } from './useServiceLogTarget';

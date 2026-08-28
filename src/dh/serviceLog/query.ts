@@ -7,7 +7,8 @@ export interface ServiceLogFilter {
   operator: 'AND';
 }
 
-export const SERVICE_LOG_DEFAULT_RANGE = { start: 'now-24h', end: 'now' } as const;
+/** 服务下钻日志 Tab 首次打开默认最近 15 分钟；不影响全局 /log/explorer。 */
+export const SERVICE_LOG_DEFAULT_RANGE = { start: 'now-15m', end: 'now' } as const;
 
 export function buildServiceLogFilters(service?: string): ServiceLogFilter[] {
   const name = typeof service === 'string' ? service.trim() : '';

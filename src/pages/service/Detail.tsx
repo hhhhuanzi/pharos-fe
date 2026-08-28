@@ -211,13 +211,7 @@ export default function ServiceDetailPage() {
             </Tabs.TabPane>
           ) : null}
           <Tabs.TabPane tab={t('tab.logs')} key='logs'>
-            <Logs
-              key={`${service}-${identity.env ?? ''}`}
-              identity={{ service, env: identity.env, cluster: identity.cluster, namespace: identity.namespace }}
-              association={association}
-              associationReady={associationReady}
-              promId={promId}
-            />
+            <Logs key={`${service}-${identity.env ?? ''}`} service={service} env={identity.env} teams={teamBindings} />
           </Tabs.TabPane>
           <Tabs.TabPane tab={t('tab.traces')} key='traces'>
             <Traces

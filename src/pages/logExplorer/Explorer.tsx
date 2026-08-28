@@ -11,6 +11,7 @@ import { DatasourceCateEnum } from '@/utils/constant';
 import { allCates, getGraphProByCate, getPrimaryTypeByCate } from '@/components/AdvancedWrap/utils';
 import ViewSelect, { ModalState } from '@/components/ViewSelect';
 import { DatasourceSelectV3 } from '@/components/DatasourceSelect';
+import { useLogExplorerLock } from '@/dh/serviceLog/LockContext';
 import omitUndefinedDeep from '@/pages/logExplorer/utils/omitUndefinedDeep';
 import { filterLogExplorerDatasourceList, isLogExplorerDatasourceCateSupported } from '@/pages/logExplorer/utils/datasourceAvailability';
 
@@ -42,6 +43,8 @@ function Explorer(props: Props) {
   const { datasourceList, datasourceCateOptions, groupedDatasourceList, logsDefaultRange } = useContext(CommonStateContext);
   const location = useLocation();
   const { active, tabKey, defaultFormValuesControl } = props;
+  // dh: 服务下钻场景锁定查询目标，同时要挡掉数据源切换与「日志视图」回填，见 src/dh/serviceLog/lock.ts
+  const { locked: targetLocked } = useLogExplorerLock();
 
   const [form] = Form.useForm();
   const datasourceCate = Form.useWatch('datasourceCate', form);
@@ -116,7 +119,7 @@ function Explorer(props: Props) {
     getDefaultQueryValuesRef.current = getDefaultQueryValues;
     return (
       <div className={'flex-shrink-0' + (layout === 'horizontal' ? ' flex gap-2' : '')}>
-        <Form.Item>
+        <Form.Item hidden={targetLocked}>
           <ViewSelect<{
             datasourceCate: string;
             datasourceValue: number;
@@ -162,6 +165,7 @@ function Explorer(props: Props) {
               );
             }}
             onSelect={(filterValues) => {
+              if (targetLocked) return; // dh: 锁定态下视图会整体覆盖数据源与索引，直接不受理
               const datasourceCate = form.getFieldValue('datasourceCate');
 
               filterValues.datasourceCate = filterValues.datasourceCate || datasourceCate;
@@ -225,6 +229,7 @@ function Explorer(props: Props) {
         >
           <DatasourceSelectV3
             className='w-full'
+            disabled={targetLocked}
             type={primaryType}
             datasourceCateList={datasourceCateOptions}
             ajustDatasourceList={(list) => {

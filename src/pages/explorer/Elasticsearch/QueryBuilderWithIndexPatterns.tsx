@@ -3,13 +3,14 @@ import _ from 'lodash';
 import { useDebounceFn } from 'ahooks';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
-import { Form, Select, Button, Space, Row, Col } from 'antd';
+import { Form, Select, Button, Row, Col } from 'antd';
 import { QuestionCircleOutlined } from '@ant-design/icons';
 
 import TimeRangePicker from '@/components/TimeRangePicker';
 import { getESIndexPatterns, standardizeFieldConfig } from '@/pages/log/IndexPatterns/services';
 import InputGroupWithFormItem from '@/components/InputGroupWithFormItem';
 import { useIsAuthorized } from '@/components/AuthorizationWrapper';
+import { getIndexPatternSelectOptionProps } from '@/dh/logExplorer';
 import { useIndexPatternScope } from '@/dh/logPerm';
 import KQLInput from '@/components/KQLInput';
 import IndexPatternSettingsBtn from '@/pages/explorer/Elasticsearch/components/IndexPatternSettingsBtn';
@@ -155,29 +156,9 @@ export default function QueryBuilder(props: Props) {
                 validateTrigger='onBlur'
               >
                 <Select
-                  options={_.map(indexPatterns, (item) => {
-                    return {
-                      label: (
-                        <Space>
-                          <span>{item.name}</span>
-                          <span
-                            style={{
-                              color: 'var(--fc-text-3)',
-                            }}
-                          >
-                            {item.note}
-                          </span>
-                        </Space>
-                      ),
-                      originLabel: item.name,
-                      searchIndex: `${item.name} ${item.note}`,
-                      value: item.id,
-                    };
-                  })}
+                  {...getIndexPatternSelectOptionProps(indexPatterns)}
                   dropdownMatchSelectWidth={false}
                   showSearch
-                  optionFilterProp='searchIndex'
-                  optionLabelProp='originLabel'
                 />
               </Form.Item>
             </InputGroupWithFormItem>
