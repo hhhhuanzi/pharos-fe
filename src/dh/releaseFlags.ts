@@ -13,4 +13,10 @@ export const RELEASE_FLAGS = {
    * 完成真正火焰图后再改为 true。不要和服务详情「性能火焰图」tab 混用。
    */
   spanFlamegraph: false,
+  /**
+   * 上游 Nightingale 的新手引导：机器列表「接下来」引导条、三个引导动作弹窗、引导进度探测。
+   * 我们自己的接入路径与它不一致，先整体隐藏，实现代码保留在
+   * `src/components/OnboardingActions/**` 与 `src/components/OnboardingProgress/**`。
+   */
+  upstreamOnboarding: false,
 } as const;

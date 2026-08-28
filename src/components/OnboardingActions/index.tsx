@@ -8,6 +8,7 @@ import { IS_PLUS } from '@/utils/constant';
 import { useIsAuthorized } from '@/components/AuthorizationWrapper';
 import QuickCreateModal from '@/pages/notificationRules/components/RuleDropdownSelect/QuickCreateModal';
 import useOnboardingProgress, { refreshOnboardingProgress } from '@/components/OnboardingProgress/useOnboardingProgress';
+import { isUpstreamOnboardingVisible } from '@/dh/onboarding/visibility';
 
 import SendTestAlertModal from './SendTestAlert';
 import HostMonitorPackModal from './HostMonitorPack';
@@ -61,7 +62,7 @@ export function useOnboardingActions() {
  */
 export function OnboardingActionsProvider({ children }: { children: React.ReactNode }) {
   const [current, setCurrent] = React.useState<OnboardingActionState | undefined>(undefined);
-  const enabled = !IS_PLUS;
+  const enabled = !IS_PLUS && isUpstreamOnboardingVisible();
 
   const packPermitted = useIsAuthorized(ACTION_PERMS.pack);
   const notifyPermitted = useIsAuthorized(ACTION_PERMS.notify);

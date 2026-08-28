@@ -9,6 +9,7 @@ import { getBusiGroupsAlertRules } from '@/services/warning';
 import { getItems as getNotifyRules } from '@/pages/notificationRules/services';
 import { getList as getLlmConfigs } from '@/pages/aiConfig/llmConfigs/services';
 import { getNotifyUsed } from '@/pages/event/EventNotifyRecords/services';
+import { isUpstreamOnboardingVisible } from '@/dh/onboarding/visibility';
 
 import { hasEnabledHostRule, hasNotifyBoundHostRule, isHostBoard, readOnboardingMarker } from './detect';
 import { CACHEABLE_KEYS, DetectCache, isProbeThrottled, readDetectCache, writeDetectCache } from './detectCache';
@@ -271,6 +272,8 @@ function probeOnboarding(): Promise<DetectState> {
 
 /** 共享同一轮探测：并发挂载只发一组请求，结果广播给所有实例 */
 function probeOnboardingShared(): Promise<DetectState> {
+  // 引导整体隐藏时不探测：NextStepsCard 在返回 null 之前已经调过本 hook，不在这里挡住就白拉一轮
+  if (!isUpstreamOnboardingVisible()) return Promise.resolve(lastDetect);
   if (!pendingProbe) {
     pendingProbe = probeOnboarding()
       .then((next) => {
