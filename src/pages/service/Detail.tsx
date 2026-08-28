@@ -45,6 +45,7 @@ export default function ServiceDetailPage() {
   const tracesStartUnix = Number(parsed.start);
   const tracesEndUnix = Number(parsed.end);
   const tracesRangeOk = Number.isFinite(tracesStartUnix) && Number.isFinite(tracesEndUnix) && tracesStartUnix > 0 && tracesEndUnix > tracesStartUnix;
+  const initTraceId = typeof parsed.traceId === 'string' ? parsed.traceId.trim() || undefined : undefined;
 
   const jaegerId = pickDatasourceId(jaegerList, identity.ds ?? readStoredId(JAEGER_LS));
   const promId = pickDatasourceId(prometheusList, readStoredId(PROM_LS));
@@ -118,7 +119,7 @@ export default function ServiceDetailPage() {
   }, [parsed.tab, location.pathname, history, identity.ds, jaegerId]);
 
   const replaceTab = (key: string) => {
-    const { tab: _tab, ...rest } = parsed;
+    const { tab: _tab, traceId: _traceId, ...rest } = parsed;
     history.replace({
       pathname: location.pathname,
       search: queryString.stringify({
@@ -215,9 +216,10 @@ export default function ServiceDetailPage() {
           </Tabs.TabPane>
           <Tabs.TabPane tab={t('tab.traces')} key='traces'>
             <Traces
-              key={`${service}-${tracesRangeOk ? `${tracesStartUnix}-${tracesEndUnix}` : ''}`}
+              key={`${service}-${initTraceId ?? ''}-${tracesRangeOk ? `${tracesStartUnix}-${tracesEndUnix}` : ''}`}
               service={service}
               jaegerId={jaegerId}
+              initTraceId={initTraceId}
               initStartUnix={tracesRangeOk ? tracesStartUnix : undefined}
               initEndUnix={tracesRangeOk ? tracesEndUnix : undefined}
             />

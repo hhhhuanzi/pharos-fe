@@ -1,7 +1,9 @@
+import { buildTraceDeepLink } from '@/dh/logTrace/deepLink';
 import { getLogExplorerTarget, getLogTraceConfig } from '@/dh/logTrace/config';
+import type { TracePluginType } from '@/dh/trace';
 
 import { LOG_CLUSTER_FIELD, LOG_EXPLORER_PATH, LOG_NAMESPACE_FIELD, LOG_SERVICE_FIELD, TRACE_CLUSTER_TAG, TRACE_EXPLORER_PATH, TRACE_NAMESPACE_TAG } from './constants';
-import type { ServiceIdentity } from './url';
+import { buildServiceDetailPath, type ServiceIdentity } from './url';
 
 export function escapeEsQueryValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -33,6 +35,36 @@ export function buildServiceTraceDeepLink(identity: ServiceIdentity): string | n
   const tags = buildServiceTraceTags(identity);
   if (tags) search.set('tags', tags);
   return `${TRACE_EXPLORER_PATH}?${search.toString()}`;
+}
+
+/** 服务下钻日志 → 该服务详情的链路 Tab，按 traceId 打开整条瀑布。 */
+export function buildServiceTraceByIdDeepLink(identity: ServiceIdentity, params: { traceId: string; datasourceId: number }): string | null {
+  const traceId = params.traceId.trim();
+  if (!identity.service || !traceId) return null;
+  return buildServiceDetailPath(identity.service, {
+    tab: 'traces',
+    ds: identity.ds ?? params.datasourceId,
+    env: identity.env,
+    cluster: identity.cluster,
+    namespace: identity.namespace,
+    traceId,
+  });
+}
+
+/** 服务页内跳服务链路；全局日志探索仍去全局 /trace/explorer。 */
+export function pickLogToTraceUrl(
+  identity: ServiceIdentity | undefined,
+  params: { traceId: string; datasourceId: number; pluginType: TracePluginType },
+): string {
+  if (identity?.service) {
+    const serviceUrl = buildServiceTraceByIdDeepLink(identity, { traceId: params.traceId, datasourceId: params.datasourceId });
+    if (serviceUrl) return serviceUrl;
+  }
+  return buildTraceDeepLink({
+    traceId: params.traceId,
+    datasourceId: params.datasourceId,
+    pluginType: params.pluginType,
+  });
 }
 
 export function buildServiceLogDeepLink(identity: Pick<ServiceIdentity, 'service' | 'cluster' | 'namespace'>, target: { datasourceId: number; indexPattern?: number; index?: string }): string {

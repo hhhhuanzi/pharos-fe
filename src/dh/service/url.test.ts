@@ -6,6 +6,7 @@ import {
   decodeServiceParam,
   identityToQuery,
   mergeIdentity,
+  parseServiceDetailLocation,
   parseServiceIdentity,
 } from './url';
 
@@ -58,6 +59,7 @@ describe('buildServiceDetailPath / buildServiceListPath', () => {
       '/service/order?tab=traces&ds=5&start=1700000000&end=1700003600',
     );
     expect(buildServiceDetailPath('quote', { ds: 5, env: 'prod' })).toBe('/service/quote?ds=5&env=prod');
+    expect(buildServiceDetailPath('order', { tab: 'traces', ds: 5, traceId: 'abc' })).toBe('/service/order?tab=traces&ds=5&traceId=abc');
     expect(decodeServiceParam('order%2Fapi')).toBe('order/api');
     expect(buildServiceListPath({ tab: 'topology' })).toBe('/service?tab=topology');
     expect(buildServiceListPath()).toBe('/service');
@@ -69,6 +71,27 @@ describe('buildEventCenterPath / buildEventCenterK8sPath', () => {
     expect(buildEventCenterPath()).toBe('/event-center');
     expect(buildEventCenterPath({ service: 'order', cluster: 'prod' })).toBe('/event-center?service=order&cluster=prod');
     expect(buildEventCenterK8sPath({ service: 'order' })).toBe('/event-center/k8s?service=order');
+  });
+});
+
+describe('parseServiceDetailLocation', () => {
+  it('reads identity from a service detail path and query', () => {
+    expect(parseServiceDetailLocation('/service/turms-business-service', '?tab=logs&env=test&cluster=k8s-trade-test&namespace=turms&ds=5')).toEqual({
+      service: 'turms-business-service',
+      env: 'test',
+      cluster: 'k8s-trade-test',
+      namespace: 'turms',
+      ds: 5,
+    });
+  });
+
+  it('ignores the service list and the global log explorer', () => {
+    expect(parseServiceDetailLocation('/service', '?tab=overview')).toBeUndefined();
+    expect(parseServiceDetailLocation('/log/explorer', '?tab=logs')).toBeUndefined();
+  });
+
+  it('decodes a service name that contains a slash', () => {
+    expect(parseServiceDetailLocation('/service/order%2Fapi', '')).toMatchObject({ service: 'order/api' });
   });
 });
 

@@ -11,12 +11,13 @@ import TabEmpty from './TabEmpty';
 interface Props {
   service: string;
   jaegerId?: number;
+  initTraceId?: string;
   /** Unix seconds; topology passes the same window as the graph. */
   initStartUnix?: number;
   initEndUnix?: number;
 }
 
-export default function Traces({ service, jaegerId, initStartUnix, initEndUnix }: Props) {
+export default function Traces({ service, jaegerId, initTraceId, initStartUnix, initEndUnix }: Props) {
   const { t } = useTranslation(NS);
   const initRange: IRawTimeRange | undefined = useMemo(() => {
     if (initStartUnix == null || initEndUnix == null || initEndUnix <= initStartUnix) return undefined;
@@ -25,6 +26,6 @@ export default function Traces({ service, jaegerId, initStartUnix, initEndUnix }
 
   if (jaegerId == null) return <TabEmpty description={t('overview.no_jaeger')} />;
   return (
-    <TraceExplorer lockService initService={service} initPluginId={jaegerId} initPluginType='jaeger' initRange={initRange} />
+    <TraceExplorer lockService init={initTraceId} initService={service} initPluginId={jaegerId} initPluginType='jaeger' initRange={initRange} />
   );
 }

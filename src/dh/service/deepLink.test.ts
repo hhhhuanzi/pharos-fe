@@ -2,7 +2,7 @@ import '../fieldsSidebar/test/localStorageMock';
 import { CONFIG_STORAGE_KEY } from '@/dh/logTrace/constants';
 
 import { LOG_CLUSTER_FIELD, LOG_NAMESPACE_FIELD, LOG_SERVICE_FIELD } from './constants';
-import { buildServiceLogDeepLink, buildServiceLogQuery, buildServiceTraceDeepLink, buildServiceTraceTags, escapeEsQueryValue, resolveServiceLogDeepLink } from './deepLink';
+import { buildServiceLogDeepLink, buildServiceLogQuery, buildServiceTraceByIdDeepLink, buildServiceTraceDeepLink, buildServiceTraceTags, escapeEsQueryValue, pickLogToTraceUrl, resolveServiceLogDeepLink } from './deepLink';
 
 describe('escapeEsQueryValue', () => {
   it('escapes quotes and backslashes', () => {
@@ -41,6 +41,40 @@ describe('buildServiceTraceDeepLink', () => {
     expect(parsed.searchParams.get('pluginType')).toBe('jaeger');
     expect(parsed.searchParams.get('tags')).toBe('k8s.cluster.name=prod k8s.namespace.name=pay');
     expect(parsed.searchParams.get('traceId')).toBeNull();
+  });
+});
+
+describe('buildServiceTraceByIdDeepLink / pickLogToTraceUrl', () => {
+  it('opens the service traces tab with the same identity', () => {
+    const url = buildServiceTraceByIdDeepLink(
+      { service: 'turms-business-service', env: 'test', cluster: 'k8s-trade-test', namespace: 'turms', ds: 5 },
+      { traceId: 'f5b0d3aa', datasourceId: 9 },
+    );
+    const parsed = new URL(url!, 'http://local.test');
+    expect(parsed.pathname).toBe('/service/turms-business-service');
+    expect(parsed.searchParams.get('tab')).toBe('traces');
+    expect(parsed.searchParams.get('traceId')).toBe('f5b0d3aa');
+    expect(parsed.searchParams.get('ds')).toBe('5');
+    expect(parsed.searchParams.get('env')).toBe('test');
+    expect(parsed.searchParams.get('cluster')).toBe('k8s-trade-test');
+    expect(parsed.searchParams.get('namespace')).toBe('turms');
+  });
+
+  it('falls back to the jump target datasource when identity has no ds', () => {
+    const url = buildServiceTraceByIdDeepLink({ service: 'order' }, { traceId: 'abc', datasourceId: 9 });
+    expect(url).toContain('ds=9');
+  });
+
+  it('keeps global log explorer on /trace/explorer', () => {
+    expect(pickLogToTraceUrl(undefined, { traceId: 'abc', datasourceId: 9, pluginType: 'jaeger' })).toBe(
+      '/trace/explorer?traceId=abc&datasourceValue=9&pluginType=jaeger',
+    );
+  });
+
+  it('routes a service-page identity to the service traces tab', () => {
+    const url = pickLogToTraceUrl({ service: 'order', ds: 5 }, { traceId: 'abc', datasourceId: 9, pluginType: 'jaeger' });
+    expect(url).toBe('/service/order?tab=traces&ds=5&traceId=abc');
+    expect(url).not.toContain('/trace/explorer');
   });
 });
 

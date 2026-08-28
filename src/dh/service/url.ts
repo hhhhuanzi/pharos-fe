@@ -1,3 +1,5 @@
+import { SERVICE_PAGE_PATH } from './constants';
+
 export interface ServiceIdentity {
   service?: string;
   /** Deployment environment; same service name can exist in several of them. */
@@ -92,7 +94,7 @@ export function buildServiceListPath(query: { tab?: string } = {}): string {
 
 export function buildServiceDetailPath(
   service: string,
-  query: { tab?: string; ds?: number; env?: string; cluster?: string; namespace?: string; start?: number; end?: number } = {},
+  query: { tab?: string; ds?: number; env?: string; cluster?: string; namespace?: string; start?: number; end?: number; traceId?: string } = {},
 ): string {
   const path = `/service/${encodeServiceParam(service)}`;
   const params = new URLSearchParams();
@@ -103,8 +105,27 @@ export function buildServiceDetailPath(
   if (query.namespace) params.set('namespace', query.namespace);
   if (query.start != null) params.set('start', String(query.start));
   if (query.end != null) params.set('end', String(query.end));
+  if (query.traceId) params.set('traceId', query.traceId);
   const qs = params.toString();
   return qs ? `${path}?${qs}` : path;
+}
+
+/** Router 已去掉 basename。`/service` 列表不匹配；`/service/:name` 才是下钻。 */
+export function parseServiceDetailLocation(pathname: string, search: string): ServiceIdentity | undefined {
+  const prefix = `${SERVICE_PAGE_PATH}/`;
+  if (!pathname.startsWith(prefix)) return undefined;
+  const segment = pathname.slice(prefix.length).split('/')[0];
+  const service = decodeServiceParam(segment);
+  if (!service) return undefined;
+  const qs = search.startsWith('?') ? search.slice(1) : search;
+  const params = new URLSearchParams(qs);
+  return parseServiceIdentity({
+    service,
+    env: params.get('env') ?? undefined,
+    cluster: params.get('cluster') ?? undefined,
+    namespace: params.get('namespace') ?? undefined,
+    ds: params.get('ds') ?? undefined,
+  });
 }
 
 export function buildEventCenterPath(query: { service?: string; cluster?: string; namespace?: string } = {}): string {

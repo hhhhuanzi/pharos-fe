@@ -1,12 +1,13 @@
 import { useContext, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router-dom';
 
 import { CommonStateContext } from '@/App';
+import { parseServiceDetailLocation, pickLogToTraceUrl } from '@/dh/service';
 import type { FieldConfigVersion2 } from '@/pages/log/IndexPatterns/types';
 
 import { NS } from './constants';
 import { getLogTraceConfig } from './config';
-import { buildTraceDeepLink } from './deepLink';
 import { getTraceDatasourceTargets } from './traceDatasource';
 import { isTraceIdField, normalizeTraceIdValue } from './traceId';
 
@@ -29,6 +30,7 @@ interface Params {
 export default function useTraceLinkFieldConfig(fieldConfig: FieldConfigVersion2 | undefined, params: Params): FieldConfigVersion2 | undefined {
   const { t } = useTranslation(NS);
   const { groupedDatasourceList } = useContext(CommonStateContext);
+  const location = useLocation();
   const { name, parentKey, fieldValue } = params;
 
   return useMemo(() => {
@@ -43,9 +45,10 @@ export default function useTraceLinkFieldConfig(fieldConfig: FieldConfigVersion2
     const targets = getTraceDatasourceTargets(groupedDatasourceList, config.traceDatasourceId);
     if (targets.length === 0) return fieldConfig;
 
+    const identity = parseServiceDetailLocation(location.pathname, location.search);
     const traceLinks = targets.map((target) => ({
       name: targets.length > 1 ? t('view_trace_in', { datasource: target.name }) : t('view_trace'),
-      urlTemplate: buildTraceDeepLink({ traceId, datasourceId: target.id, pluginType: target.pluginType }),
+      urlTemplate: pickLogToTraceUrl(identity, { traceId, datasourceId: target.id, pluginType: target.pluginType }),
       field: name,
     }));
 
@@ -55,5 +58,5 @@ export default function useTraceLinkFieldConfig(fieldConfig: FieldConfigVersion2
       ...(fieldConfig || {}),
       linkArr: [...(fieldConfig?.linkArr || []), ...traceLinks],
     };
-  }, [fieldConfig, name, parentKey, fieldValue, groupedDatasourceList, t]);
+  }, [fieldConfig, name, parentKey, fieldValue, groupedDatasourceList, location.pathname, location.search, t]);
 }
