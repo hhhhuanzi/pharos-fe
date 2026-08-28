@@ -45,6 +45,7 @@ function index(props: Props & ModalWrapProps) {
         form.setFieldsValue({
           graphTooltip: configs.graphTooltip,
           graphZoom: configs.graphZoom,
+          iframe_url: configs.iframe_url,
         });
       });
     }

@@ -41,7 +41,7 @@ import usePagination from '@/components/usePagination';
 import { getDefaultColumnsConfigs, buildColumnOptions } from '@/components/TableColumnSelect';
 import { getBusiGroups } from '@/components/BusinessGroup';
 import EmptyGuide from '@/components/EmptyGuide';
-import { FavoriteStar, NS as DhDashboardNS, sortBoardsByFavorite, useBoardFavorites } from '@/dh/dashboard';
+import { FavoriteStar, NS as DhDashboardNS, openDashboardEdit, sortBoardsByFavorite, useBoardFavorites, useCanEditBoard } from '@/dh/dashboard';
 
 import { defaultColumnsConfigs, LOCAL_STORAGE_KEY } from './constants';
 import Header from './Header';
@@ -87,6 +87,7 @@ export default function index() {
   const [importData, setImportData] = useState<{ visible: boolean; busiId?: number; type?: ModalType }>({ visible: false });
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const { favoriteIds, toggleFavorite } = useBoardFavorites();
+  const canEditBoard = useCanEditBoard();
 
   useUpdateEffect(() => {
     setGids(getDashboardCompatibleGids(businessGroup.ids));
@@ -329,16 +330,15 @@ export default function index() {
             })()}
             rowActions={(record) => ({
               inline: _.compact([
-                gids !== '-1'
+                canEditBoard(record)
                   ? {
                       key: 'edit',
                       icon: 'edit',
                       text: t('common:btn.edit'),
                       onClick: () => {
-                        FormModal({
-                          action: 'edit',
-                          initialValues: record,
-                          busiId: businessGroup.id,
+                        openDashboardEdit({
+                          record,
+                          busiId: record.group_id || businessGroup.id,
                           onOk: () => {
                             setRefreshKey(_.uniqueId('refreshKey_'));
                           },
