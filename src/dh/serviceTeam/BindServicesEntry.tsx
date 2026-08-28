@@ -8,10 +8,13 @@ import { fetchServiceCatalog } from '@/dh/service';
 import { JAEGER_LS, PROM_LS, pickDatasourceId, readStoredId } from '@/pages/service/storage';
 
 import { fetchGroupServices, fetchServiceTeamVisibility, putGroupServices } from './api';
-import { localCanManage } from './visibility';
+import { isValidTeamName } from './teamName';
+import type { NamedTeam, ServiceTeamItem } from './types';
+import { localCanManage, otherTeamByService } from './visibility';
 
 interface Props {
   teamId?: string | number;
+  teamName?: string;
 }
 
 function uniqueSortedNames(names: string[]): string[] {
@@ -27,12 +30,21 @@ function uniqueSortedNames(names: string[]): string[] {
   return out;
 }
 
+function requestErrorMessage(err: unknown): string {
+  if (err && typeof err === 'object' && 'message' in err && typeof (err as { message: unknown }).message === 'string') {
+    return (err as { message: string }).message.trim();
+  }
+  return '';
+}
+
 export default function BindServicesEntry(props: Props) {
   const teamId = Number(props.teamId);
   const { t } = useTranslation('user');
   const { groupedDatasourceList, profile, perms } = useContext(CommonStateContext);
   const [canManage, setCanManage] = useState(() => localCanManage(profile, perms));
   const [boundNames, setBoundNames] = useState<string[]>([]);
+  const [bindings, setBindings] = useState<ServiceTeamItem[]>([]);
+  const [teams, setTeams] = useState<NamedTeam[]>([]);
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -44,7 +56,10 @@ export default function BindServicesEntry(props: Props) {
     let cancelled = false;
     fetchServiceTeamVisibility()
       .then((res) => {
-        if (!cancelled) setCanManage(res.can_manage === true);
+        if (cancelled) return;
+        setCanManage(res.can_manage === true);
+        setBindings(Array.isArray(res.bindings) ? res.bindings : []);
+        setTeams(Array.isArray(res.teams) ? res.teams : []);
       })
       .catch(() => {
         if (!cancelled) setCanManage(localCanManage(profile, perms));
@@ -73,6 +88,10 @@ export default function BindServicesEntry(props: Props) {
       cancelled = true;
     };
   }, [teamId]);
+
+  const resolvedTeamName = (typeof props.teamName === 'string' ? props.teamName.trim() : '') || teams.find((item) => item.id === teamId)?.name || '';
+  const nameInvalid = resolvedTeamName !== '' && !isValidTeamName(resolvedTeamName);
+  const otherBound = useMemo(() => otherTeamByService(bindings, teamId), [bindings, teamId]);
 
   const resetModal = () => {
     setVisible(false);
@@ -116,8 +135,27 @@ export default function BindServicesEntry(props: Props) {
     return options.filter((name) => name.toLowerCase().includes(q));
   }, [options, search]);
 
+  const onToggle = (name: string, checked: boolean) => {
+    if (checked) {
+      if (otherBound[name] || (nameInvalid && !selected.includes(name))) return;
+      setSelected((prev) => (prev.includes(name) ? prev : [...prev, name]));
+      return;
+    }
+    setSelected((prev) => prev.filter((item) => item !== name));
+  };
+
   const onOk = () => {
     if (!Number.isFinite(teamId) || teamId <= 0) return;
+    const blocked = selected.find((name) => otherBound[name] && !boundNames.includes(name));
+    if (blocked) {
+      message.error(t('team.bind_services_one_team'));
+      return;
+    }
+    const adding = selected.filter((name) => !boundNames.includes(name));
+    if (nameInvalid && adding.length > 0) {
+      message.error(t('team.bind_services_name_invalid'));
+      return;
+    }
     setSaving(true);
     putGroupServices(teamId, selected)
       .then((res) => {
@@ -125,8 +163,8 @@ export default function BindServicesEntry(props: Props) {
         message.success(t('team.bind_services_save_success'));
         resetModal();
       })
-      .catch(() => {
-        message.error(t('team.bind_services_save_failed'));
+      .catch((err) => {
+        message.error(requestErrorMessage(err) || t('team.bind_services_save_failed'));
       })
       .finally(() => {
         setSaving(false);
@@ -150,6 +188,7 @@ export default function BindServicesEntry(props: Props) {
         width={520}
       >
         <div className='flex flex-col gap-3'>
+          {nameInvalid ? <div className='text-base text-error'>{t('team.bind_services_name_invalid')}</div> : null}
           <Input
             allowClear
             prefix={<SearchOutlined />}
@@ -166,15 +205,21 @@ export default function BindServicesEntry(props: Props) {
             ) : filtered.length === 0 ? (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('team.bind_services_empty')} />
             ) : (
-              <Checkbox.Group className='flex w-full flex-col gap-2' value={selected} onChange={(vals) => setSelected(vals.map(String))}>
-                {filtered.map((name) => (
-                  <Checkbox key={name} value={name} className='w-full'>
-                    <span className='text-base text-main' title={name}>
-                      {name}
-                    </span>
-                  </Checkbox>
-                ))}
-              </Checkbox.Group>
+              <div className='flex w-full flex-col gap-2'>
+                {filtered.map((name) => {
+                  const other = otherBound[name];
+                  const checked = selected.includes(name);
+                  const disabled = Boolean((other && !checked) || (nameInvalid && !checked));
+                  return (
+                    <Checkbox key={name} value={name} className='w-full' checked={checked} disabled={disabled} onChange={(e) => onToggle(name, e.target.checked)}>
+                      <span className='text-base text-main' title={name}>
+                        {name}
+                      </span>
+                      {other && !checked ? <span className='ml-2 text-base text-hint'>{t('team.bind_services_already_bound', { team: other.name })}</span> : null}
+                    </Checkbox>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>

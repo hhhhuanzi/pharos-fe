@@ -98,6 +98,21 @@ export function teamsByNameFromItems(items: ServiceTeamItem[]): Record<string, N
   return map;
 }
 
+/** 服务 → 非当前所属业务（一对一；脏数据多条时只用来禁用勾选，不猜日志索引）。 */
+export function otherTeamByService(items: ServiceTeamItem[], currentTeamId: number): Record<string, NamedTeam> {
+  const map: Record<string, NamedTeam> = {};
+  if (!Array.isArray(items) || !Number.isFinite(currentTeamId) || currentTeamId <= 0) return map;
+  items.forEach((item) => {
+    const service = typeof item.name === 'string' ? item.name.trim() : '';
+    if (!service) return;
+    teamsFromItem(item).forEach((team) => {
+      if (team.id === currentTeamId) return;
+      if (!map[service]) map[service] = team;
+    });
+  });
+  return map;
+}
+
 /** 用列表/详情 filter API 的返回收窄目录行。view_all 时保留全量并挂上团队名。 */
 export function applyServiceTeamFilter(rows: ServiceRow[], result: ServiceTeamFilterResult): { rows: ServiceRow[]; meta: ServiceTeamMeta } {
   const items = Array.isArray(result.items) ? result.items : [];

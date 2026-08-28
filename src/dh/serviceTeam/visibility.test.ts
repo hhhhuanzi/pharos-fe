@@ -1,7 +1,7 @@
 import type { ServiceRow } from '@/dh/service';
 
 import { businessToneClass } from './BusinessTags';
-import { applyServiceTeamFilter, isServiceTeamApiUnavailable, localCanManage, localCanViewAll, parseNamedTeams, teamsByNameFromItems } from './visibility';
+import { applyServiceTeamFilter, isServiceTeamApiUnavailable, localCanManage, localCanViewAll, otherTeamByService, parseNamedTeams, teamsByNameFromItems } from './visibility';
 
 const emptyAssoc = { clusters: [] as string[], namespaces: [] as string[] };
 
@@ -63,6 +63,24 @@ describe('teamsByNameFromItems', () => {
   it('falls back to env-specific when no service-level row', () => {
     const map = teamsByNameFromItems([{ name: 'trade-api', env: 'prod', user_group_id: 3, user_group_name: 'trade-bk' }]);
     expect(map['trade-api']).toEqual([{ id: 3, name: 'trade-bk' }]);
+  });
+});
+
+describe('otherTeamByService', () => {
+  it('maps services bound to a different team and ignores the current one', () => {
+    expect(
+      otherTeamByService(
+        [
+          { name: 'turms-gateway', user_group_id: 1, user_group_name: 'turms' },
+          { name: 'trade-api', user_groups: [{ id: 2, name: 'rome-sec' }] },
+          { name: 'shared-svc', user_groups: [{ id: 1, name: 'turms' }, { id: 3, name: 'other' }] },
+        ],
+        1,
+      ),
+    ).toEqual({
+      'trade-api': { id: 2, name: 'rome-sec' },
+      'shared-svc': { id: 3, name: 'other' },
+    });
   });
 });
 

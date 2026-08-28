@@ -15,6 +15,7 @@
  *
  */
 import React, { useEffect, useState, useImperativeHandle, ReactNode, useContext } from 'react';
+import { TEAM_NAME_PATTERN } from '@/dh/serviceTeam';
 import { Form, Input } from 'antd';
 import { getTeamInfo } from '@/services/manage';
 import { TeamProps, Team, TeamInfo } from '@/store/manageInterface';
@@ -54,6 +55,10 @@ const TeamForm = React.forwardRef<any, TeamProps>((props, ref) => {
         rules={[
           {
             required: true,
+          },
+          {
+            pattern: TEAM_NAME_PATTERN,
+            message: t('team.name_pattern'),
           },
         ]}
         tooltip={

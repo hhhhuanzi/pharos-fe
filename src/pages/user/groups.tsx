@@ -253,8 +253,19 @@ const Resource: React.FC = () => {
                   dataSource={teamList}
                   size='small'
                   renderItem={(item) => (
-                    <List.Item key={item.id} className={_.toNumber(teamId) === _.toNumber(item.id) ? 'is-active' : ''} onClick={() => setTeamId(item.id)}>
-                      {item.name}
+                    <List.Item
+                      key={item.id}
+                      className={`${_.toNumber(teamId) === _.toNumber(item.id) ? 'is-active' : ''} min-w-0 overflow-hidden`}
+                      onClick={() => setTeamId(item.id)}
+                    >
+                      <div className='flex w-full min-w-0 items-baseline gap-2 overflow-hidden'>
+                        <span className='shrink-0'>{item.name}</span>
+                        {item.note ? (
+                          <span className='min-w-0 truncate text-hint' title={item.note}>
+                            {item.note}
+                          </span>
+                        ) : null}
+                      </div>
                     </List.Item>
                   )}
                 />
@@ -358,7 +369,7 @@ const Resource: React.FC = () => {
                   />
                 </Col>
                 <Space>
-                  <BindServicesEntry teamId={teamId} />
+                  <BindServicesEntry teamId={teamId} teamName={teamInfo?.name} />
                   <Button
                     type='primary'
                     onClick={() => {
