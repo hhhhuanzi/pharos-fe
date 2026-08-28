@@ -27,6 +27,7 @@ const ru_RU = {
   share_tip: 'Нажмите, чтобы скопировать ссылку',
   log_viewer_drawer_trigger_tip: 'Нажмите для просмотра деталей лога',
   log_viewer_drawer_title: 'Детали лога',
+  log_cell_view_all: 'Показать всё',
   copy_to_clipboard: 'Скопировать в буфер обмена',
   topn_no_data: 'Нет данных',
   unindexable: 'Статистика поля не включена, невозможно выполнить статистический анализ',

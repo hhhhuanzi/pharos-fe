@@ -26,6 +26,7 @@ const zh_HK = {
   share_tip: '點擊複製分享連結',
   log_viewer_drawer_trigger_tip: '點擊查看日誌詳情',
   log_viewer_drawer_title: '日誌詳情',
+  log_cell_view_all: '查看全部',
   copy_to_clipboard: '複製到剪貼板',
   unindexable: '字段未開啟統計，無法進行統計分析',
   topn_no_data: '無數據',

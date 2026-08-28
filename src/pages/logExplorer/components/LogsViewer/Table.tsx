@@ -7,6 +7,7 @@ import { useClickAway } from 'ahooks';
 import moment from 'moment';
 
 import NavigableDrawer from '@/components/NavigableDrawer';
+import { estimateClampedRowHeight } from '@/dh/logExplorer';
 
 import { NAME_SPACE } from '../../constants';
 import { Field } from '../../types';
@@ -192,6 +193,7 @@ function Table(props: Props) {
           }
           setSortColumns(ajustedSortColumns);
         }}
+        getRowHeight={(row) => estimateClampedRowHeight(row as Record<string, unknown>, fields)}
         expandable={{
           type: 'drawer',
           onExpandIconClick: (row) => {

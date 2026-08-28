@@ -26,6 +26,7 @@ const zh_CN = {
   share_tip: '点击复制分享链接',
   log_viewer_drawer_trigger_tip: '点击查看日志详情',
   log_viewer_drawer_title: '日志详情',
+  log_cell_view_all: '查看全部',
   copy_to_clipboard: '复制到剪贴板',
   unindexable: '字段未开启统计，无法进行统计分析',
   topn_no_data: '无数据',

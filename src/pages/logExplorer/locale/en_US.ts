@@ -26,6 +26,7 @@ const en_US = {
   share_tip: 'Click to copy share link',
   log_viewer_drawer_trigger_tip: 'Click to view log details',
   log_viewer_drawer_title: 'Log details',
+  log_cell_view_all: 'View all',
   copy_to_clipboard: 'Copy to clipboard',
   topn_no_data: 'No data',
   unindexable: 'Field statistics not enabled, unable to perform statistical analysis',

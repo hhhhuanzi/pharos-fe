@@ -27,6 +27,7 @@ const ja_JP = {
   share_tip: 'クリックして共有リンクをコピー',
   log_viewer_drawer_trigger_tip: 'クリックしてログ詳細を表示',
   log_viewer_drawer_title: 'ログ詳細',
+  log_cell_view_all: 'すべて表示',
   copy_to_clipboard: 'クリップボードにコピー',
   topn_no_data: 'データなし',
   unindexable: 'フィールド統計が有効になっていないため、統計分析を実行できません',

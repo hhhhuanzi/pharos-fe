@@ -5,6 +5,8 @@ import i18next from 'i18next';
 import { Space, Tooltip } from 'antd';
 import { PlusCircleOutlined } from '@ant-design/icons';
 
+import { ClampedFieldCell, fieldValueToText, shouldShowViewAll } from '@/dh/logExplorer';
+
 import { Field } from '../../../types';
 import LogFieldValue from '../components/LogFieldValue';
 import { OptionsType, OnValueFilterParams, FieldValueType } from '../types';
@@ -75,12 +77,15 @@ export default function getColumnsFromFields(params: {
     const width = tableColumnsWidthCacheValue[item];
     const baseWidth = iconsWidth + 20;
     const minWidth = 60;
+    const isLastField = item === fields[fields.length - 1];
 
     return {
       minWidth,
-      width: (width ? width : colWidths?.[item] || minWidth) + baseWidth,
+      // 最后一列交给 RDG 吃满剩余视口；过长内容在单元格内换行，而不是把列宽锁死在 600px
+      ...(isLastField ? {} : { width: (width ? width : colWidths?.[item] || minWidth) + baseWidth }),
       key: item,
       headerCellClass: 'group',
+      cellClass: 'n9e-log-field-cell whitespace-pre-wrap break-all text-clip',
       name: (
         <Space>
           {item}
@@ -105,11 +110,23 @@ export default function getColumnsFromFields(params: {
           fieldValue = JSON.stringify(fieldValue);
         }
 
+        const overflow = shouldShowViewAll(fieldValueToText(fieldValue));
+
         return (
-          <div className='max-h-[140px]'>
+          <ClampedFieldCell
+            estimatedOverflow={overflow}
+            onViewAll={
+              setLogViewerDrawerState
+                ? () => {
+                    setLogViewerDrawerState({ visible: true, currentIndex: idx });
+                  }
+                : undefined
+            }
+          >
             {/* 即使当前数据源不支持添加筛选条件，也需保留字段值组件提供的下钻链接和操作菜单。 */}
             <LogFieldValue
-              enableTooltip
+              enableTooltip={!overflow}
+              fieldValueClassName='whitespace-pre-wrap break-all max-w-full'
               name={item}
               value={fieldValue}
               onTokenClick={onValueFilter}
@@ -118,7 +135,7 @@ export default function getColumnsFromFields(params: {
               adjustFieldValue={adjustFieldValue}
               showExistsAction={showExistsAction}
             />
-          </div>
+          </ClampedFieldCell>
         );
       },
     };
