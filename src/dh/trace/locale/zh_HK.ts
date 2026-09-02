@@ -30,6 +30,9 @@ const zh_HK = {
     truncated: '結果已達查詢上限，可能被截斷',
     empty: '沒有查詢到鏈路',
     empty_hint: '鏈路資料經過取樣，查不到不代表呼叫沒有發生；可放寬時間範圍或篩選條件後重試',
+    empty_env: '{{env}} 環境沒有查詢到鏈路',
+    empty_env_hint: '這是「該環境暫無資料」而不是查詢失敗：預發與生產的鏈路量本來就少，且鏈路資料經過取樣。可放寬時間範圍後重試，或到其它環境查看同一個服務',
+    env_scope_hint: '僅查詢 {{env}} 環境',
     env_mixed: '此 trace 跨 {{num}} 個環境：{{envs}}',
     no_search: '設定查詢條件後點擊「查詢」',
     load_failed: '查詢失敗，請檢查資料來源與查詢條件',
@@ -136,6 +139,8 @@ const zh_HK = {
     num_traces_max: '最大 2000',
     service_locked: '請在全域鏈路追蹤或切換服務後查看',
     datasource_locked: '請在全域鏈路追蹤中切換資料源',
+    env: '環境',
+    env_locked: '環境來自目前服務詳情頁，查詢已收窄到該環境；切換環境請回服務列表',
   },
   span_flame: {
     title: 'Span 火焰圖',

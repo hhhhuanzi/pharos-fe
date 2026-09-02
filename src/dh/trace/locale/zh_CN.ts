@@ -30,6 +30,9 @@ const zh_CN = {
     truncated: '结果已达查询上限，可能被截断',
     empty: '没有查询到链路',
     empty_hint: '链路数据经过采样，查不到不代表调用没有发生；可放宽时间范围或筛选条件后重试',
+    empty_env: '{{env}} 环境没有查询到链路',
+    empty_env_hint: '这是「该环境暂无数据」而不是查询失败：预发与生产的链路量本来就少，且链路数据经过采样。可放宽时间范围后重试，或到其它环境查看同一个服务',
+    env_scope_hint: '仅查询 {{env}} 环境',
     env_mixed: '此 trace 跨 {{num}} 个环境：{{envs}}',
     no_search: '设置查询条件后点击「查询」',
     load_failed: '查询失败，请检查数据源与查询条件',
@@ -136,6 +139,8 @@ const zh_CN = {
     num_traces_max: '最大 2000',
     service_locked: '请在全局链路追踪或切换服务后查看',
     datasource_locked: '请在全局链路追踪中切换数据源',
+    env: '环境',
+    env_locked: '环境来自当前服务详情页，查询已收窄到该环境；切换环境请回服务列表',
   },
   span_flame: {
     title: 'Span 火焰图',

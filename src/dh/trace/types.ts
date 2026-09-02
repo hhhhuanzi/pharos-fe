@@ -2,9 +2,20 @@
  * Shared trace query types. Adapters (skywalking / otel / jaeger) map backend
  * responses directly into the Jaeger `TraceResponse` consumed by traceCpt UI.
  */
-import type { TraceResponse } from '@/pages/traceCpt/type';
+import type { SearchTraceType, TraceResponse } from '@/pages/traceCpt/type';
 
 export type TracePluginType = 'jaeger' | 'skywalking' | 'otel';
+
+/**
+ * 链路探索页内部的查询态。
+ *
+ * 在上游 `SearchTraceType` 上补 dh 独有的维度，而不是改上游类型：这个形状只在
+ * `src/dh/trace/explorer/**` 之间流转（Search -> TraceExplorer -> TraceList），上游代码不消费它。
+ */
+export type TraceSearchState = SearchTraceType & {
+  /** 环境维度收窄，口径见 `./env.ts`；空值表示不过滤。 */
+  env?: string;
+};
 
 export interface UnifiedKeyValue {
   key: string;
@@ -27,6 +38,11 @@ export interface TraceSearchParams {
   operation?: string;
   start_time_min: number;
   start_time_max: number;
+  /**
+   * 环境维度收窄（`deployment.environment.name`）。后端把它折成 `query.attributes`，前端不自己拼
+   * 属性名 —— 口径见 `./env.ts`。空值表示不过滤（软降级），不是「过滤空环境」。
+   */
+  env?: string;
   attributes?: Record<string, string> | null;
   duration_max?: string;
   duration_min?: string;

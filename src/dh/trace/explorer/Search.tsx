@@ -7,10 +7,12 @@ import InputGroupWithFormItem from '@/components/InputGroupWithFormItem';
 import EmptyDatasourcePopover from '@/components/DatasourceSelect/EmptyDatasourcePopover';
 import { CommonStateContext } from '@/App';
 import { getTraceInstances, getTraceServices } from '@/pages/traceCpt/services';
-import type { SearchTraceIDType, SearchTraceType } from '@/pages/traceCpt/type';
+import type { SearchTraceIDType } from '@/pages/traceCpt/type';
 import { TRACING_PLUGIN_TYPES } from '@/dh/trace';
-import type { TracePluginType } from '@/dh/trace';
+import type { TracePluginType, TraceSearchState } from '@/dh/trace';
+import { EnvTag } from '@/dh/env';
 import { isValidDurationSeconds, secondsToDurationMin } from '../duration';
+import { normalizeTraceEnv } from '../env';
 import { TRACE_SEARCH_DEFAULT_LIMIT, TRACE_SEARCH_DEFAULT_RANGE, TRACE_SEARCH_MAX_LIMIT, TRACE_SEARCH_RANGE_LS, resolveNumTraces } from './searchDefaults';
 
 interface IProps {
@@ -21,11 +23,13 @@ interface IProps {
   initService?: string;
   /** Prefill the time window (e.g. topology → traces with the same range). */
   initRange?: IRawTimeRange;
-  /** Kept for deep-link compat; tags filter was removed from the compact bar. */
-  initTags?: string;
+  /** Environment to narrow the query to (`deployment.environment.name`); empty → no filter. */
+  initEnv?: string;
   /** Service-detail embed: pin investigation context (type + datasource + service). */
   lockService?: boolean;
-  onSearch: (item: SearchTraceType | SearchTraceIDType) => void;
+  /** Service-detail embed: the environment comes from the page URL, so render it read-only. */
+  lockEnv?: boolean;
+  onSearch: (item: TraceSearchState | SearchTraceIDType) => void;
   resultLoading: boolean;
 }
 
@@ -47,9 +51,18 @@ const traceIdFieldClass = 'mb-0 w-[400px] max-w-full';
 export default function Search(props: IProps) {
   const { t } = useTranslation('trace');
   const { groupedDatasourceList } = useContext(CommonStateContext);
-  const { onSearch, resultLoading, init, initPluginId, initPluginType, initService, initRange, lockService } = props;
+  const { onSearch, resultLoading, init, initPluginId, initPluginType, initService, initEnv, initRange, lockService, lockEnv } = props;
   /** Same flag as lockService: embed locks type + datasource + service together. */
   const contextLocked = Boolean(lockService && initService);
+  /**
+   * Environment narrowing, resolved once so the read-only chip and the query cannot disagree.
+   *
+   * Only the embed narrows by environment: the global explorer has no environment context to read,
+   * and inventing a picker there would need its own value list. An embed opened without `env` in
+   * the URL keeps querying across environments on purpose — the list's 环境 column then shows what
+   * got mixed in, which beats blanking the main troubleshooting tab.
+   */
+  const lockedEnv = lockEnv ? normalizeTraceEnv(initEnv) : '';
   const [cate, setCate] = useState<TracePluginType>(initPluginType || 'jaeger');
   const datasourceList = groupedDatasourceList[cate] || [];
   const [curPlugin, setCurPlugin] = useState<number>();
@@ -69,7 +82,7 @@ export default function Search(props: IProps) {
   );
   const parsedRange = parseRange(range);
 
-  const [search, setSearch] = useState<SearchTraceType>({
+  const [search, setSearch] = useState<TraceSearchState>({
     data_source_id: 0,
     service: lockService && initService ? initService : '',
     operation: '',
@@ -227,13 +240,14 @@ export default function Search(props: IProps) {
     onSearch({
       ...search,
       service: queryService,
+      // Empty string = no narrowing, which is what the backend treats as "do not filter".
+      env: lockedEnv,
       start_time_min: moment(parsedRange.start).valueOf(),
       start_time_max: moment(parsedRange.end).valueOf(),
       data_source_id: curPlugin,
       operation: '',
       duration_min: secondsToDurationMin(duration_min_s),
       duration_max: undefined,
-      attributes: undefined,
       num_traces: resolveNumTraces(num_traces),
       service_name: services.find((item) => item.value === queryService)?.label || (contextLocked ? initService : undefined),
       plugin_type: cate,
@@ -345,6 +359,15 @@ export default function Search(props: IProps) {
                   </Select>
                 </span>
               </InputGroupWithFormItem>
+              {lockedEnv && (
+                <InputGroupWithFormItem className={inlineGroupClass} label={t('search.env')}>
+                  {/* Read-only: the environment belongs to the page URL, so a picker here would let
+                      the toolbar and the page header disagree about what is being investigated. */}
+                  <span className='inline-flex h-8 items-center px-2' title={t('search.env_locked')}>
+                    <EnvTag value={lockedEnv} />
+                  </span>
+                </InputGroupWithFormItem>
+              )}
               {hasInstanceCol && (
                 <InputGroupWithFormItem className={inlineGroupClass} label={t('instance')}>
                   <Select

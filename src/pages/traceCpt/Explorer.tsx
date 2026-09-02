@@ -21,7 +21,6 @@ export default function index() {
           initPluginId={deepLink.datasourceId}
           initPluginType={deepLink.pluginType}
           initService={deepLink.service}
-          initTags={deepLink.tags}
         />
       </div>
     </PageLayout>

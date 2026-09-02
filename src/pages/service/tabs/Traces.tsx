@@ -10,6 +10,12 @@ import TabEmpty from './TabEmpty';
 
 interface Props {
   service: string;
+  /**
+   * Environment from the page URL (`deployment.environment.name`). Undefined → no filter, and the
+   * list's 环境 column shows which environments the results actually mixed. Unlike the 日志 tab, an
+   * unknown env must not blank the tab: traces are the main troubleshooting path.
+   */
+  env?: string;
   jaegerId?: number;
   initTraceId?: string;
   /** Unix seconds; topology passes the same window as the graph. */
@@ -17,7 +23,7 @@ interface Props {
   initEndUnix?: number;
 }
 
-export default function Traces({ service, jaegerId, initTraceId, initStartUnix, initEndUnix }: Props) {
+export default function Traces({ service, env, jaegerId, initTraceId, initStartUnix, initEndUnix }: Props) {
   const { t } = useTranslation(NS);
   const initRange: IRawTimeRange | undefined = useMemo(() => {
     if (initStartUnix == null || initEndUnix == null || initEndUnix <= initStartUnix) return undefined;
@@ -26,6 +32,15 @@ export default function Traces({ service, jaegerId, initTraceId, initStartUnix, 
 
   if (jaegerId == null) return <TabEmpty description={t('overview.no_jaeger')} />;
   return (
-    <TraceExplorer lockService init={initTraceId} initService={service} initPluginId={jaegerId} initPluginType='jaeger' initRange={initRange} />
+    <TraceExplorer
+      lockService
+      lockEnv
+      init={initTraceId}
+      initService={service}
+      initEnv={env}
+      initPluginId={jaegerId}
+      initPluginType='jaeger'
+      initRange={initRange}
+    />
   );
 }

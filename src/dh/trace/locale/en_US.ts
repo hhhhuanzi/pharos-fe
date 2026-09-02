@@ -30,6 +30,10 @@ const en_US = {
     truncated: 'Result limit reached, the list is likely truncated',
     empty: 'No traces found',
     empty_hint: 'Traces are sampled, so a miss does not mean the call never happened. Try a wider time range or looser filters.',
+    empty_env: 'No traces found in the {{env}} environment',
+    empty_env_hint:
+      'This means "no data in this environment yet", not a failed query: pre-production and production carry far fewer traces, and traces are sampled. Try a wider time range, or look at the same service in another environment.',
+    env_scope_hint: 'Limited to the {{env}} environment',
     env_mixed: 'This trace spans {{num}} environments: {{envs}}',
     no_search: 'Set the query conditions and hit Query',
     load_failed: 'Query failed, check the datasource and the query conditions',
@@ -137,6 +141,8 @@ const en_US = {
     num_traces_max: 'Max 2000',
     service_locked: 'Switch service from the global Trace Explorer, or leave this page and open another service',
     datasource_locked: 'Switch datasource from the global Trace Explorer',
+    env: 'Environment',
+    env_locked: 'The environment comes from this service page, and the query is narrowed to it. Go back to the service list to pick another environment.',
   },
   span_flame: {
     title: 'Span flamegraph',

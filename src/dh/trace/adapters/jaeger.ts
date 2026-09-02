@@ -43,6 +43,7 @@ import { RequestMethod } from '@/store/common';
 import { N9E_PATHNAME } from '@/utils/constant';
 import { TraceByIdParams, TraceSearchParams, UnifiedServiceOption } from '../types';
 import { PharosTraceSummary } from '../contract';
+import { normalizeTraceEnv } from '../env';
 import { TraceResponse, TraceSpanData, TraceKeyValuePair } from '@/pages/traceCpt/type';
 
 // ---------------------------------------------------------------------------
@@ -369,6 +370,10 @@ function buildDhSearchParams(params: TraceSearchParams): Record<string, string |
   if (params.duration_min) q.duration_min = params.duration_min;
   if (params.duration_max) q.duration_max = params.duration_max;
   if (params.num_traces) q.num_traces = params.num_traces;
+  // env 单独发一个参数、由后端折进 query.attributes，前端不拼属性名（`../env.ts`）。空值不发，
+  // 后端就走「不加过滤条件」的软降级。
+  const env = normalizeTraceEnv(params.env);
+  if (env) q.env = env;
   if (params.attributes && !_.isEmpty(params.attributes)) q.attributes = JSON.stringify(params.attributes);
   return q;
 }

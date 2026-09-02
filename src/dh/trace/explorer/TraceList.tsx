@@ -5,12 +5,13 @@ import { ExclamationCircleOutlined } from '@ant-design/icons';
 import moment from 'moment-timezone';
 import { useTranslation } from 'react-i18next';
 import { formatDuration } from '@/pages/traceCpt/utils/date';
-import type { SearchTraceType } from '@/pages/traceCpt/type';
+import type { TraceSearchState } from '../types';
 import EllipsisText from '@/components/EllipsisText';
 import { EnvTag, formatEnv } from '@/dh/env';
 import { NS as LOG_TRACE_NS, ViewLogsLink } from '@/dh/logTrace';
 import { searchTraceSummaries } from '../api';
 import type { PharosTraceListResult, PharosTraceSummary } from '../contract';
+import { hasTraceEnvFilter } from '../env';
 import { isTraceForbidden, isTraceServiceRequired } from '../traceError';
 import { durationBarPercent, maxDurationInSet } from './durationBar';
 import { TRACE_LIST_COLUMN_KEYS } from './columnKeys';
@@ -19,7 +20,7 @@ import { TRACE_LIST_COLUMN_KEYS } from './columnKeys';
 const TRACE_TIME_ZONE = 'Asia/Shanghai';
 
 interface IProps {
-  search?: SearchTraceType;
+  search?: TraceSearchState;
   loading: boolean;
   onFetching: (v: boolean) => void;
   onOpenTrace: (traceId: string) => void;
@@ -60,6 +61,7 @@ export default function TraceList(props: IProps) {
       instance: search.instance,
       start_time_min: search.start_time_min,
       start_time_max: search.start_time_max,
+      env: search.env,
       attributes: (search.attributes as unknown as Record<string, string>) || null,
       duration_max: search.duration_max,
       duration_min: search.duration_min,
@@ -243,16 +245,23 @@ export default function TraceList(props: IProps) {
     },
   ];
 
+  /**
+   * 「该环境暂无数据」与「查询失败」必须分开说。
+   *
+   * 上游用 HTTP 404 表达空结果（后端已映射成空信封，不是错误），而 pre / prod 的链路数据现在很少
+   * ——不区分的话，一个正常的空结果上线后极易被当成 bug 报上来。失败仍然走 failedKey。
+   */
   const emptyText = (() => {
     if (failedKey) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t(failedKey)} />;
     if (!search) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('list.no_search')} />;
+    const envFiltered = hasTraceEnvFilter(search.env);
     return (
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
         description={
           <div>
-            <div className='text-main'>{t('list.empty')}</div>
-            <div className='mt-2 text-base text-hint'>{t('list.empty_hint')}</div>
+            <div className='text-main'>{envFiltered ? t('list.empty_env', { env: search.env }) : t('list.empty')}</div>
+            <div className='mt-2 text-base text-hint'>{envFiltered ? t('list.empty_env_hint') : t('list.empty_hint')}</div>
           </div>
         }
       />
@@ -263,6 +272,7 @@ export default function TraceList(props: IProps) {
     <div>
       <div className='mb-3 flex flex-wrap items-center gap-2 text-base text-hint'>
         <span className='text-title'>{t('list.total', { num: summaries.length })}</span>
+        {hasTraceEnvFilter(search?.env) && <span>{t('list.env_scope_hint', { env: search?.env })}</span>}
         {summaries.length > 0 && <span>{t('list.scope_hint', { num: summaries.length })}</span>}
         {result?.truncated && <span className='text-warning'>{t('list.truncated')}</span>}
       </div>

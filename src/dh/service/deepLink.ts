@@ -24,7 +24,15 @@ export function buildServiceTraceTags(identity: Pick<ServiceIdentity, 'cluster' 
   return parts.join(' ');
 }
 
-/** Open the existing trace explorer with this service (and tags when we have them). */
+/**
+ * Open the existing trace explorer with this service (and tags when we have them).
+ *
+ * The `tags` param is currently *not* read by the explorer: the compact search bar has no tag
+ * filter, and the `initTags` prop that used to carry it was never wired into the query. Kept in the
+ * URL so existing links stay valid; wiring it up means deciding what a cluster/namespace filter
+ * should do when the values do not match the resource attributes (silently zero results), which is
+ * its own change.
+ */
 export function buildServiceTraceDeepLink(identity: ServiceIdentity): string | null {
   if (!identity.service || identity.ds == null) return null;
   const search = new URLSearchParams({

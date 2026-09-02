@@ -216,8 +216,9 @@ export default function ServiceDetailPage() {
           </Tabs.TabPane>
           <Tabs.TabPane tab={t('tab.traces')} key='traces'>
             <Traces
-              key={`${service}-${initTraceId ?? ''}-${tracesRangeOk ? `${tracesStartUnix}-${tracesEndUnix}` : ''}`}
+              key={`${service}-${identity.env ?? ''}-${initTraceId ?? ''}-${tracesRangeOk ? `${tracesStartUnix}-${tracesEndUnix}` : ''}`}
               service={service}
+              env={identity.env}
               jaegerId={jaegerId}
               initTraceId={initTraceId}
               initStartUnix={tracesRangeOk ? tracesStartUnix : undefined}

@@ -5,10 +5,10 @@ import Search from './Search';
 import Detail from '@/pages/traceCpt/Detail';
 import { getTraceByID } from '@/pages/traceCpt/services';
 import { transformTraceData } from '@/pages/traceCpt/utils';
-import type { SearchTraceIDType, SearchTraceType, Trace } from '@/pages/traceCpt/type';
+import type { SearchTraceIDType, Trace } from '@/pages/traceCpt/type';
 import { ViewLogsLink } from '@/dh/logTrace';
 import type { IRawTimeRange } from '@/components/TimeRangePicker';
-import type { TracePluginType } from '../types';
+import type { TracePluginType, TraceSearchState } from '../types';
 import { SpanFlamegraph } from '../spanFlamegraph';
 import TraceList from './TraceList';
 import { isSpanFlamegraphSwitchVisible } from './visibility';
@@ -22,10 +22,13 @@ interface IProps {
   initPluginId?: number;
   initPluginType?: TracePluginType;
   initService?: string;
-  initTags?: string;
+  /** Environment to narrow the query to (`deployment.environment.name`); empty → no filter. */
+  initEnv?: string;
   initRange?: IRawTimeRange;
   /** Service-detail embed: pin type + datasource + service (do not hide the selects). */
   lockService?: boolean;
+  /** Service-detail embed: the page already owns the environment, so show it read-only. */
+  lockEnv?: boolean;
 }
 
 /**
@@ -40,9 +43,9 @@ function traceErrorMessageKey(error: unknown): string {
 }
 
 export default function TraceExplorer(props: IProps) {
-  const { init, initPluginId, initPluginType, initService, initTags, initRange, lockService } = props;
+  const { init, initPluginId, initPluginType, initService, initEnv, initRange, lockService, lockEnv } = props;
   const { t } = useTranslation('trace');
-  const [search, setSearch] = useState<SearchTraceType>();
+  const [search, setSearch] = useState<TraceSearchState>();
   const [curTrace, setCurTrace] = useState<Trace>();
   const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -70,7 +73,7 @@ export default function TraceExplorer(props: IProps) {
     }
   };
 
-  const handleSearch = (value: SearchTraceType | SearchTraceIDType) => {
+  const handleSearch = (value: TraceSearchState | SearchTraceIDType) => {
     if ('traceID' in value) {
       setCurTrace(undefined);
       openTrace(value);
@@ -89,9 +92,10 @@ export default function TraceExplorer(props: IProps) {
           initPluginId={initPluginId}
           initPluginType={initPluginType}
           initService={initService}
-          initTags={initTags}
+          initEnv={initEnv}
           initRange={initRange}
           lockService={lockService}
+          lockEnv={lockEnv}
           onSearch={handleSearch}
           resultLoading={listLoading || detailLoading}
         />
