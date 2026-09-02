@@ -12,6 +12,7 @@
  */
 
 import type { Trace, TraceResponse, TraceSpanData } from '@/pages/traceCpt/type';
+import { TRACE_ENV_ATTRIBUTE_KEY } from './env';
 import { resolveTraceKind } from './listType';
 import { resolveRootInterface } from './summaryFields';
 
@@ -46,6 +47,19 @@ export interface PharosTraceSummary {
   orphanSpanCount: number;
   /** Per-service breakdown, sorted by span count desc. */
   services: PharosServiceSummary[];
+  /**
+   * Environments this trace touched (`deployment.environment.name`), deduplicated in first-seen
+   * order. Empty when none of the spans carry the attribute.
+   *
+   * An array rather than a single value: a trace normally sits in exactly one environment (calls
+   * do not cross environments, and a shared MySQL cannot merge two of them because the DB emits no
+   * spans of its own), but the array is a cheap fallback so a genuinely cross-environment trace can
+   * be labelled truthfully without a protocol change.
+   *
+   * Optional because older backends answer without the field; treat missing as unknown, not empty.
+   * Backend: `TraceSummary.Envs` in `pkg/dh/tracesummary/otlp.go`.
+   */
+  envs?: string[];
 }
 
 /**
@@ -149,14 +163,27 @@ export function traceResponseToSummary(res: TraceResponse): PharosTraceSummary |
 
   const ids = new Set(spans.map((span) => span.spanID));
   const serviceOf = (span: TraceSpanData) => res.processes?.[span.processID]?.serviceName || 'unknown';
+  /**
+   * Resource attributes land on `processes[pid].tags` (see `otlpTracesDataToJaegerResponses`), so
+   * env comes off the process rather than the span. Read it per process, not per span, because the
+   * value is resource-level.
+   */
+  const envOf = (span: TraceSpanData) => {
+    const raw = (res.processes?.[span.processID]?.tags || []).find((tag) => tag.key === TRACE_ENV_ATTRIBUTE_KEY)?.value;
+    return typeof raw === 'string' ? raw.trim() : '';
+  };
 
   let startTimeUs = Number.MAX_SAFE_INTEGER;
   let endTimeUs = 0;
   let errorSpanCount = 0;
   let orphanSpanCount = 0;
   const byService = new Map<string, PharosServiceSummary>();
+  const envs: string[] = [];
 
   spans.forEach((span) => {
+    const env = envOf(span);
+    if (env && !envs.includes(env)) envs.push(env);
+
     if (span.startTime < startTimeUs) startTimeUs = span.startTime;
     if (span.startTime + span.duration > endTimeUs) endTimeUs = span.startTime + span.duration;
 
@@ -186,6 +213,7 @@ export function traceResponseToSummary(res: TraceResponse): PharosTraceSummary |
     errorSpanCount,
     orphanSpanCount,
     services: Array.from(byService.values()).sort((a, b) => b.spanCount - a.spanCount),
+    envs,
   };
 }
 

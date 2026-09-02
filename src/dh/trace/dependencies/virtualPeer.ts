@@ -1,4 +1,5 @@
 import type { TraceKeyValuePair, TraceResponse, TraceSpanData } from '@/pages/traceCpt/type';
+import { TRACE_ENV_ATTRIBUTE_KEY } from '../env';
 import { isMessagingSpan } from '../spanSemantics';
 import { DB_SYSTEM_KEYS, HTTP_METHOD_KEYS, MESSAGING_SYSTEM_KEYS, tagValue } from '../summaryFields';
 import { isMessagingSystemName, isSqlFamilySystem } from './peerType';
@@ -12,7 +13,7 @@ export const PEER_DB_NAME_KEYS = ['db.name', 'db.namespace'] as const;
 export const PEER_SERVICE_KEYS = ['peer.service'] as const;
 /** Full statement first; Redis often only has operation / command-style keys. */
 export const PEER_STATEMENT_KEYS = ['db.statement', 'db.query.text', 'db.query.summary', 'db.operation.name', 'db.operation', 'sql'] as const;
-export const PEER_ENV_KEYS = ['deployment.environment.name'] as const;
+export const PEER_ENV_KEYS = [TRACE_ENV_ATTRIBUTE_KEY] as const;
 
 export type CuratedPeerFieldId = 'peer_address' | 'peer_port' | 'db_system' | 'db_name' | 'peer_service' | 'statement' | 'environment';
 

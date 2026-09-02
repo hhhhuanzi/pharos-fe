@@ -83,6 +83,58 @@ describe('traceResponseToSummary', () => {
     expect(summary?.rootOperation).toBe('earliest');
   });
 
+  // env is a *resource* attribute, so it rides on `processes[pid].tags`, not on the span tags.
+  // Reading it off the span would silently leave the list's 环境 column empty.
+  it('collects environments from process tags, deduplicated', () => {
+    const envProcesses = {
+      p0: { serviceName: 'gateway', tags: [{ key: 'deployment.environment.name', value: 'test' }] },
+      p1: { serviceName: 'order', tags: [{ key: 'deployment.environment.name', value: 'test' }] },
+    } satisfies TraceResponse['processes'];
+
+    const summary = traceResponseToSummary({
+      traceID: 'abc',
+      processes: envProcesses,
+      spans: [
+        span({ spanID: 'root', startTime: 1_000, duration: 100 }),
+        span({ spanID: 'child', startTime: 1_010, duration: 10, processID: 'p1', references: [{ refType: 'CHILD_OF', spanID: 'root', traceID: 'abc' }] }),
+      ],
+    });
+
+    expect(summary?.envs).toEqual(['test']);
+  });
+
+  // Fallback branch: calls do not cross environments and the DB emits no spans of its own, so this
+  // should not occur in practice — but when it does the list must be able to say so.
+  it('keeps every environment in first-seen order when a trace spans more than one', () => {
+    const envProcesses = {
+      p0: { serviceName: 'gateway', tags: [{ key: 'deployment.environment.name', value: 'test' }] },
+      p1: { serviceName: 'order', tags: [{ key: 'deployment.environment.name', value: 'pre' }] },
+    } satisfies TraceResponse['processes'];
+
+    const summary = traceResponseToSummary({
+      traceID: 'abc',
+      processes: envProcesses,
+      spans: [
+        span({ spanID: 'root', startTime: 1_000, duration: 100 }),
+        span({ spanID: 'child', startTime: 1_010, duration: 10, processID: 'p1', references: [{ refType: 'CHILD_OF', spanID: 'root', traceID: 'abc' }] }),
+      ],
+    });
+
+    expect(summary?.envs).toEqual(['test', 'pre']);
+  });
+
+  // Most services have not been injected with the attribute yet; that must read as "no environment
+  // information", not as an environment named "".
+  it('reports an empty list when no process carries the environment attribute', () => {
+    const summary = traceResponseToSummary({
+      traceID: 'abc',
+      processes,
+      spans: [span({ spanID: 'root', startTime: 1_000, duration: 100 })],
+    });
+
+    expect(summary?.envs).toEqual([]);
+  });
+
   it('returns null when the response carries no usable spans', () => {
     expect(traceResponseToSummary({ traceID: 'abc', processes, spans: [] })).toBeNull();
     expect(traceResponseToSummary({ traceID: 'abc', processes, spans: [span({ spanID: 'a', startTime: 0, duration: 10 })] })).toBeNull();

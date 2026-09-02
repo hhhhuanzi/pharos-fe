@@ -5,10 +5,10 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
 import usePagination from '@/components/usePagination';
+import { EnvTag } from '@/dh/env';
 import { buildServiceDetailPath, serviceKey, type ServiceRow } from '@/dh/service';
 import { BusinessTags, type ServiceTeamMeta } from '@/dh/serviceTeam';
 
-import EnvTag from '../components/EnvTag';
 import { NS } from '../constants';
 import { errorRateClass, formatCount, formatErrorRate, formatLanguage, formatLatency, formatQps } from '../format';
 import { TABLE_PAGESIZE_LS } from '../storage';

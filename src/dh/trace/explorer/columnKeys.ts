@@ -11,6 +11,8 @@ export const TRACE_LIST_COLUMN_KEYS = [
   'durationUs',
   'spanCount',
   'rootService',
+  // 紧挨「服务」：环境是服务的限定语，两列分开看容易把不同环境的同名服务当成同一个。
+  'envs',
   'logs',
 ] as const;
 

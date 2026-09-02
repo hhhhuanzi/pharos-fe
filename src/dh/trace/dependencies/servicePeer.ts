@@ -1,4 +1,5 @@
 import type { TraceKeyValuePair, TraceResponse, TraceSpanData } from '@/pages/traceCpt/type';
+import { TRACE_ENV_ATTRIBUTE_KEY } from '../env';
 
 export type ServiceResourceFieldId = 'service_instance' | 'environment' | 'namespace' | 'host' | 'pod';
 
@@ -10,7 +11,8 @@ export interface ServiceResourceField {
 
 export const SERVICE_RESOURCE_FIELDS: ReadonlyArray<{ id: ServiceResourceFieldId; keys: readonly string[] }> = [
   { id: 'service_instance', keys: ['service.instance.id', 'service.instance'] },
-  { id: 'environment', keys: ['deployment.environment.name', 'deployment.environment'] },
+  // Display accepts the deprecated spelling too; querying only ever uses the current one.
+  { id: 'environment', keys: [TRACE_ENV_ATTRIBUTE_KEY, 'deployment.environment'] },
   { id: 'namespace', keys: ['service.namespace', 'k8s.namespace.name'] },
   { id: 'host', keys: ['host.name', 'k8s.node.name'] },
   { id: 'pod', keys: ['k8s.pod.name'] },

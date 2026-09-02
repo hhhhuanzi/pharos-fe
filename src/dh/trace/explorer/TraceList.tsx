@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { formatDuration } from '@/pages/traceCpt/utils/date';
 import type { SearchTraceType } from '@/pages/traceCpt/type';
 import EllipsisText from '@/components/EllipsisText';
+import { EnvTag, formatEnv } from '@/dh/env';
 import { NS as LOG_TRACE_NS, ViewLogsLink } from '@/dh/logTrace';
 import { searchTraceSummaries } from '../api';
 import type { PharosTraceListResult, PharosTraceSummary } from '../contract';
@@ -211,8 +212,29 @@ export default function TraceList(props: IProps) {
       render: (value: string) => <EllipsisText text={value || '-'} title={value || undefined} className='text-main' />,
     },
     {
-      title: tLog('view_logs_col'),
       key: TRACE_LIST_COLUMN_KEYS[8],
+      title: t('list.columns.env'),
+      dataIndex: 'envs',
+      width: 96,
+      render: (value: unknown) => {
+        const envs = Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim() !== '') : [];
+        if (envs.length === 0) return <span className='text-soft'>{formatEnv()}</span>;
+        if (envs.length === 1) return <EnvTag value={envs[0]} />;
+        // 兜底分支：服务间调用不跨环境，DB 不上报 span，所以正常查不到这种 trace。真出现时如实
+        // 标注而不是只显示第一个，否则会把一条跨环境链路误读成单环境。
+        return (
+          <Tooltip title={t('list.env_mixed', { num: envs.length, envs: envs.join(' / ') })}>
+            <span className='flex items-center gap-1'>
+              <EnvTag value={envs[0]} />
+              <span className='text-warning'>+{envs.length - 1}</span>
+            </span>
+          </Tooltip>
+        );
+      },
+    },
+    {
+      title: tLog('view_logs_col'),
+      key: TRACE_LIST_COLUMN_KEYS[9],
       width: 72,
       fixed: 'right',
       render: (_value, record) => (
@@ -251,7 +273,7 @@ export default function TraceList(props: IProps) {
         columns={columns}
         dataSource={summaries}
         showSorterTooltip={false}
-        scroll={{ x: 1300 }}
+        scroll={{ x: 1400 }}
         locale={{ emptyText }}
         onRow={(record) => ({
           className: 'cursor-pointer',

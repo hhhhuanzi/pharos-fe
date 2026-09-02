@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { formatEnv } from '../format';
+import { formatEnv } from './format';
 
 type EnvTone = 'prod' | 'pre' | 'test' | 'dev';
 

@@ -7,6 +7,7 @@ import { Redirect, useHistory, useLocation, useParams } from 'react-router-dom';
 import { CommonStateContext } from '@/App';
 import PageLayout from '@/components/pageLayout';
 import { timeRangeUnix } from '@/components/TimeRangePicker';
+import { EnvTag } from '@/dh/env';
 import {
   buildServiceListPath,
   decodeServiceParam,
@@ -16,7 +17,6 @@ import {
 } from '@/dh/service';
 import { BusinessTags, checkResultTeams, checkServiceTeamAccess, localCanViewAll, type NamedTeam } from '@/dh/serviceTeam';
 
-import EnvTag from './components/EnvTag';
 import { DEFAULT_DETAIL_TAB, isDeferredDetailTab, isVisibleDetailTab, NS, PATH } from './constants';
 import { JAEGER_LS, PROM_LS, pickDatasourceId, readStoredId } from './storage';
 import TabEmpty from './tabs/TabEmpty';

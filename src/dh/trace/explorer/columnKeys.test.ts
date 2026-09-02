@@ -11,6 +11,8 @@ describe('TRACE_LIST_COLUMN_KEYS', () => {
       'durationUs',
       'spanCount',
       'rootService',
+      // 环境紧跟服务：环境是服务的限定语，隔开会让不同环境的同名服务看起来是同一个。
+      'envs',
       'logs',
     ]);
   });
