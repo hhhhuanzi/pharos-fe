@@ -39,7 +39,7 @@ const en_US = {
     load_failed: 'Query failed, check the datasource and the query conditions',
     service_required: 'Pick a service first: the trace list is authorized per selected service, so an all-services search is not supported',
     service_forbidden: 'The selected service is outside your teams, so you cannot query its traces. Ask the owning team to help investigate.',
-    trace_not_found: 'This trace does not exist or has expired',
+    trace_not_found: 'This trace was not sampled.',
     trace_forbidden: 'This trace does not belong to your team. Send the traceId to the owning team so they can help investigate.',
     trace_detail_unsupported:
       'Trace detail for this datasource type is still being wired up to team-based access control and is not available yet. Use a Jaeger datasource to open trace detail.',
@@ -155,6 +155,12 @@ const en_US = {
     focus_subtree: 'This subtree only',
     reset: 'Back to whole trace',
     empty: 'This trace has no spans to show',
+  },
+  span_value: {
+    expand_lines: 'Show all {{num}} lines',
+    expand_chars: 'Show all {{num}} characters',
+    lines: '{{num}} lines',
+    copy: 'Copy raw',
   },
 };
 export default en_US;

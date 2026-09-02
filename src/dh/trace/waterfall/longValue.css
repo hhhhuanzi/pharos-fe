@@ -1,0 +1,61 @@
+/*
+长文本值（异常堆栈 / SQL / 大 JSON）在 span 详情里的可读性修正。
+
+vendored 的 jaeger-ui 没有带上 .json-markup 系列样式，white-space 取默认的 normal，
+值里的换行会被折叠成空格：一段 157 行的 Java 堆栈会变成一整段连续文本，
+断行位置与真实行完全错位，读不出调用层级。
+*/
+.KeyValueTable .json-markup-string {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.KeyValueTable--copyColumn {
+  white-space: nowrap;
+}
+
+/* 常驻的展开入口：一整条带边框的按钮，位于摘要上方，避免在滚动中被划过。 */
+.LongValueCell--more {
+  display: block;
+  margin-bottom: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--fc-primary-color);
+  border-radius: 4px;
+  background: var(--fc-primary-bg);
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.LongValueCell--preview {
+  margin: 0;
+  padding: 4px 8px;
+  background: var(--fc-fill-2);
+  border: 1px solid var(--fc-border-color);
+  border-radius: 4px;
+  color: var(--fc-text-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 堆栈行不折行、超宽横向滚动，与在 IDE 里读堆栈的习惯一致。 */
+.LongValueCell--full {
+  height: 70vh;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  background: var(--fc-fill-2);
+  border: 1px solid var(--fc-border-color);
+  border-radius: 4px;
+  white-space: pre;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}

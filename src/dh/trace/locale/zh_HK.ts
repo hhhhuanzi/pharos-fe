@@ -38,7 +38,7 @@ const zh_HK = {
     load_failed: '查詢失敗，請檢查資料來源與查詢條件',
     service_required: '請先選擇一個服務：鏈路列表按所選服務判權，不支援一次查全部服務',
     service_forbidden: '所選服務不在你所在團隊的範圍內，無權查詢它的鏈路；可聯絡對應團隊協助排查',
-    trace_not_found: '該 Trace 不存在或已過期',
+    trace_not_found: '該鏈路未被取樣保留',
     trace_forbidden: '該鏈路不屬於你所在團隊，無權查看；可把 traceId 發給對應團隊協助排查',
     trace_detail_unsupported: '該類型資料來源的鏈路詳情正在接入團隊權限校驗，暫未開放；如需查看詳情，請使用 Jaeger 資料來源',
     services_breakdown: '各服務 Span 數',
@@ -153,6 +153,12 @@ const zh_HK = {
     focus_subtree: '只看此子樹',
     reset: '回到整條',
     empty: '這條鏈路沒有可展示的 Span',
+  },
+  span_value: {
+    expand_lines: '展開查看全部 {{num}} 行',
+    expand_chars: '展開查看全部 {{num}} 個字元',
+    lines: '共 {{num}} 行',
+    copy: '複製原文',
   },
 };
 export default zh_HK;

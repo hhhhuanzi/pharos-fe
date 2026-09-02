@@ -35,7 +35,6 @@ type AccordianLogsProps = {
 
 export default function AccordianLogs(props: AccordianLogsProps) {
   const { interactive, isOpen, linksGetter, logs, openedItems, onItemToggle, onToggle, timestamp } = props;
-  const [openedLogTimestamps, setOpenedLogTimestamps] = React.useState<number[]>([]);
   let arrow: React.ReactNode | null = null;
   let HeaderComponent: 'span' | 'a' = 'span';
   let headerProps: Object | null = null;
@@ -49,16 +48,6 @@ export default function AccordianLogs(props: AccordianLogsProps) {
     };
   }
 
-  const handleCollapse = (log: Log) => {
-    const i = openedLogTimestamps.indexOf(log.timestamp);
-    if (i === -1) {
-      setOpenedLogTimestamps([...openedLogTimestamps, log.timestamp]);
-    } else {
-      const newLogTimestamps = [...openedLogTimestamps];
-      newLogTimestamps.splice(i, 1);
-      setOpenedLogTimestamps(newLogTimestamps);
-    }
-  };
   return (
     <div className='AccordianLogs'>
       <HeaderComponent className={cx('AccordianLogs--header', { 'is-open': isOpen })} {...headerProps}>
@@ -75,10 +64,10 @@ export default function AccordianLogs(props: AccordianLogsProps) {
               data={log.fields || []}
               highContrast
               interactive={interactive}
-              isOpen={openedLogTimestamps.includes(log.timestamp)}
+              isOpen={openedItems ? openedItems.has(log) : false}
               label={`${formatDuration(log.timestamp - timestamp)}`}
               linksGetter={linksGetter}
-              onToggle={interactive ? () => handleCollapse(log) : null}
+              onToggle={interactive && onItemToggle ? () => onItemToggle(log) : null}
             />
           ))}
           <small className='AccordianLogs--footer'>Log timestamps are relative to the start time of the full trace.</small>

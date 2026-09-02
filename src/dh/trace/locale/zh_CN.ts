@@ -38,7 +38,7 @@ const zh_CN = {
     load_failed: '查询失败，请检查数据源与查询条件',
     service_required: '请先选择一个服务：链路列表按所选服务判权，不支持一次查全部服务',
     service_forbidden: '所选服务不在你所在团队的范围内，无权查询它的链路；可联系对应团队协助排查',
-    trace_not_found: '该 Trace 不存在或已过期',
+    trace_not_found: '该链路未被采样保留',
     trace_forbidden: '该链路不属于你所在团队，无权查看；可把 traceId 发给对应团队协助排查',
     trace_detail_unsupported: '该类型数据源的链路详情正在接入团队权限校验，暂未开放；如需查看详情，请使用 Jaeger 数据源',
     services_breakdown: '各服务 Span 数',
@@ -153,6 +153,12 @@ const zh_CN = {
     focus_subtree: '只看此子树',
     reset: '回到整条',
     empty: '这条链路没有可展示的 Span',
+  },
+  span_value: {
+    expand_lines: '展开查看全部 {{num}} 行',
+    expand_chars: '展开查看全部 {{num}} 个字符',
+    lines: '共 {{num}} 行',
+    copy: '复制原文',
   },
 };
 export default zh_CN;

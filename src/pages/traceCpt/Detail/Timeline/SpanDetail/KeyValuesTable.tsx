@@ -17,10 +17,12 @@ import { Dropdown, Menu } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
 import { copy2ClipBoard } from '@/utils';
 import purify from 'dompurify';
+import LongValueCell, { isLongValue } from '@/dh/trace/waterfall/LongValueCell';
 import { TNil } from '../../../type';
 import { KeyValuePair, Link } from '../../../type';
 
 import './KeyValuesTable.css';
+import '@/dh/trace/waterfall/longValue.css';
 
 const jsonObjectOrArrayStartRegex = /^(\[|\{)/;
 
@@ -102,9 +104,9 @@ export default function KeyValuesTable(props: KeyValuesTableProps) {
               // eslint-disable-next-line react/no-array-index-key
               <tr className='KeyValueTable--row' key={`${row.key}-${i}`}>
                 <td className='KeyValueTable--keyColumn'>{row.key}</td>
-                <td>{valueMarkup}</td>
+                <td>{isLongValue(row.value) ? <LongValueCell title={row.key} value={row.value} /> : valueMarkup}</td>
                 <td className='KeyValueTable--copyColumn'>
-                  <CopyOutlined style={{ cursor: 'pointer' }} onClick={() => copy2ClipBoard(JSON.stringify(row, null, 2))} />
+                  <CopyOutlined style={{ cursor: 'pointer' }} onClick={() => copy2ClipBoard(typeof row.value === 'string' ? row.value : JSON.stringify(row, null, 2))} />
                 </td>
               </tr>
             );

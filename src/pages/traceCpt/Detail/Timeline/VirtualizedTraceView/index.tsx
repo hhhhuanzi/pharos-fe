@@ -123,7 +123,7 @@ export default function VirtualizedTraceView(props: VirtualizedTraceViewProps) {
     if (!isDetail) {
       return DEFAULT_HEIGHTS.bar;
     }
-    return DEFAULT_HEIGHTS.detail;
+    return Array.isArray(span.logs) && span.logs.length ? DEFAULT_HEIGHTS.detailWithLogs : DEFAULT_HEIGHTS.detail;
   };
 
   const getKeyFromIndex = (index: number) => {

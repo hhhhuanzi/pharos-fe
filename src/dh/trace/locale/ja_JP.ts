@@ -39,7 +39,7 @@ const ja_JP = {
     load_failed: 'クエリに失敗しました。データソースと検索条件を確認してください',
     service_required: 'まずサービスを選択してください。トレース一覧は選択したサービス単位で権限を判定するため、全サービスの一括検索には対応していません',
     service_forbidden: '選択したサービスは所属チームの範囲外のため、そのトレースを検索できません。担当チームに調査を依頼してください。',
-    trace_not_found: 'このトレースは存在しないか、期限切れです',
+    trace_not_found: 'このトレースはサンプリングで保持されていません',
     trace_forbidden: 'このトレースは所属チームのものではないため閲覧できません。traceId を担当チームに共有して調査を依頼してください。',
     trace_detail_unsupported: 'この種別のデータソースのトレース詳細はチーム権限チェックに対応中のため、まだ利用できません。詳細を見るには Jaeger データソースをご利用ください。',
     services_breakdown: 'サービス別 Span 数',
@@ -154,6 +154,12 @@ const ja_JP = {
     focus_subtree: 'このサブツリーだけ',
     reset: '全体に戻る',
     empty: '表示できる Span がありません',
+  },
+  span_value: {
+    expand_lines: '全 {{num}} 行を表示',
+    expand_chars: '全 {{num}} 文字を表示',
+    lines: '全 {{num}} 行',
+    copy: '原文をコピー',
   },
 };
 export default ja_JP;
