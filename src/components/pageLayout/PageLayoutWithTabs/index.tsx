@@ -99,7 +99,7 @@ const PageLayout: React.FC<IPageLayoutProps> = ({
                   display: query.viewMode === 'fullscreen' ? 'none' : 'flex',
                 }}
               >
-                <div className='flex items-center min-w-0 flex-1'>
+                <div className='flex items-center flex-1'>
                   {!currentMenu?.parentItem?.label && (
                     <div className='page-header-title min-w-0'>
                       {showBack && window.history.state && (
@@ -123,7 +123,7 @@ const PageLayout: React.FC<IPageLayoutProps> = ({
                   {shouldShowPageDocLink(doc) && <PageDocLink link={doc} buttonText={docButtonText} />}
                 </div>
 
-                {headerCenter}
+                {headerCenter && <div className='overflow-hidden whitespace-nowrap'>{headerCenter}</div>}
 
                 <div className={'page-header-right-area flex-shrink-0'} style={{ display: sessionStorage.getItem('menuHide') === '1' ? 'none' : undefined }}>
                   <span className='page-layout-intro-container'>{introIcon}</span>

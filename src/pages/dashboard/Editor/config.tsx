@@ -18,6 +18,7 @@ import _ from 'lodash';
 
 import { colors } from '../Components/ColorRangeMenu/config';
 import getDefaultQuery from '../utils/getDefaultTargets';
+import { IThresholds } from '../types';
 
 export const visualizations = [
   {
@@ -84,13 +85,13 @@ export const calcsOptions = {
   count: {},
 };
 
-export const defaultThreshold = {
+export const defaultThreshold: IThresholds['steps'][number] = {
   color: 'rgb(44, 157, 61)',
   value: null,
   type: 'base',
 };
 
-export const gaugeDefaultThresholds = [
+export const gaugeDefaultThresholds: IThresholds['steps'] = [
   {
     color: '#3FC453',
     value: null,
@@ -146,6 +147,8 @@ export const defaultCustomValuesMap = {
     },
     showPoints: 'none',
     pointSize: 5,
+    barAlignment: 0,
+    barWidthFactor: 0.6,
   },
   stat: {
     textMode: 'valueAndName',
@@ -172,6 +175,13 @@ export const defaultCustomValuesMap = {
     displayMode: 'seriesToRows',
     tableLayout: 'auto',
     nowrap: true,
+  },
+  tableNG: {
+    showHeader: true,
+    filterable: false,
+    cellOptions: {
+      type: 'none',
+    },
   },
   hexbin: {
     textMode: 'valueAndName',
@@ -221,6 +231,7 @@ export const defaultOptionsValuesMap = {
   stat: defaultOptionsValues,
   pie: defaultOptionsValues,
   table: defaultOptionsValues,
+  tableNG: defaultOptionsValues,
   hexbin: defaultOptionsValues,
   barGauge: defaultOptionsValues,
   text: defaultOptionsValues,

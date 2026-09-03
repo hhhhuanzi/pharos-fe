@@ -29,6 +29,13 @@ interface Props {
   footerExtraRef: React.RefObject<HTMLDivElement>;
 }
 
+interface DatasourceOption {
+  id: number | string;
+  name: string;
+  plugin_type: string;
+  is_default: boolean;
+}
+
 export default function Query(props: Props) {
   const { t, i18n } = useTranslation('dashboard');
   const [range] = useGlobalState('range');
@@ -48,17 +55,15 @@ export default function Query(props: Props) {
 
   const service = () => {
     if (item) {
-      const builtInVariables = getBuiltInVariables({
-        range,
-      });
+      const builtInVariables = getBuiltInVariables(range);
       const data = adjustData(_.concat(variablesWithOptions, builtInVariables), {
         datasourceList: datasourceList,
         isPlaceholderQuoted: isPlaceholderQuoted(item.definition, item.name),
         isEscapeJsonString: true,
       });
-      const formatedDefinition = formatString(item.definition, data);
-      const formatedQuery = item.query?.query ? formatString(item.query.query, data) : undefined;
-      const datasourceValue = formatDatasource(item.datasource.value as any, data);
+      const formatedDefinition = formatString(item.definition as string, data);
+      const formatedQuery = item.query?.query ? formatString(item.query.query as string, data) : undefined;
+      const datasourceValue = formatDatasource(item.datasource.value, data);
 
       if (!item.datasource) {
         const errMsg = 'Variable ' + item.name + ' datasource not found';
@@ -98,6 +103,13 @@ export default function Query(props: Props) {
   const { run, loading } = useRequest(service, {
     manual: true,
   });
+  const variableDatasourceOptions: DatasourceOption[] = _.map(datasourceVars, (variable) => ({
+    id: `\${${variable.name}}`,
+    name: `\${${variable.name}}`,
+    plugin_type: variable.definition,
+    is_default: false,
+  }));
+  const selectableDatasourceList: DatasourceOption[] = datasourceList;
 
   return (
     <>
@@ -117,40 +129,16 @@ export default function Query(props: Props) {
         <DatasourceSelectV3
           datasourceCateList={datasourceCateOptions}
           ajustDatasourceList={(list) => {
-            return _.filter(
-              _.concat(
-                _.map(datasourceVars, (item) => {
-                  return {
-                    id: `\${${item.name}}`,
-                    name: `\${${item.name}}`,
-                    plugin_type: item.definition,
-                  };
-                }),
-                list as any,
-              ),
-              (item) => {
-                const cateData = _.find(datasourceCateOptions, { value: item.plugin_type });
-                if (item.plugin_type === DatasourceCateEnum.elasticsearch && !allowRawIndex) {
-                  return false;
-                }
-                return cateData?.dashboard === true && cateData.dashboardVariable === true && (cateData.graphPro ? IS_PLUS : true);
-              },
-            );
+            return _.filter(_.concat(variableDatasourceOptions, list), (item) => {
+              const cateData = _.find(datasourceCateOptions, { value: item.plugin_type });
+              if (item.plugin_type === DatasourceCateEnum.elasticsearch && !allowRawIndex) {
+                return false;
+              }
+              return cateData?.dashboard === true && cateData.dashboardVariable === true && (cateData.graphPro ? IS_PLUS : true);
+            });
           }}
           onChange={(val) => {
-            const cate = _.find(
-              _.concat(
-                _.map(datasourceVars, (item) => {
-                  return {
-                    id: `\${${item.name}}`,
-                    name: `\${${item.name}}`,
-                    plugin_type: item.definition,
-                  };
-                }),
-                datasourceList as any,
-              ),
-              { id: val },
-            )?.plugin_type;
+            const cate = _.find(_.concat(variableDatasourceOptions, selectableDatasourceList), { id: val })?.plugin_type;
             form.setFieldsValue({
               datasource: {
                 cate: cate,

@@ -46,10 +46,15 @@ const i18nMap: Record<string, string> = {
   en_US: 'English',
   ja_JP: '日本語',
   ru_RU: 'Русский',
+  id_ID: 'Bahasa Indonesia',
+  es_ES: 'Español',
+  pt_BR: 'Português',
+  ko_KR: '한국어',
+  fr_FR: 'Français',
 };
 
 /** 侧栏语言菜单展示顺序（不依赖 Object.keys 插入顺序） */
-const SIDE_MENU_I18N_ORDER = ['zh_CN', 'zh_HK', 'en_US', 'ja_JP', 'ru_RU'] as const;
+const SIDE_MENU_I18N_ORDER = ['zh_CN', 'zh_HK', 'en_US', 'ja_JP', 'ru_RU', 'pt_BR', 'es_ES', 'id_ID', 'ko_KR', 'fr_FR'] as const;
 
 function clampSideMenuWidth(px: number): number {
   return Math.min(SIDE_MENU_MAX_WIDTH, Math.max(SIDE_MENU_MIN_WIDTH, Math.round(px)));
@@ -196,6 +201,7 @@ const SideMenu = (props: SideMenuProps) => {
         // Top-level leaf (no children): keep by its own key so MenuItem is clickable
         // (e.g. FlashAI). Do not treat it as an empty group to drop.
         if (!menu.children || menu.children.length === 0) {
+          if (menu.key === '/nightingale-ai') return menu;
           return perms?.includes(calcUrlPath(menu.key)) ? menu : null;
         }
         const filteredChildren = menu.children
@@ -477,13 +483,7 @@ const SideMenu = (props: SideMenuProps) => {
                 isCustomBg={isCustomBg}
                 quickMenuRef={quickMenuRef}
                 topExtra={topExtra}
-                onClick={(key, opts) => {
-                  if (collapsed && !opts?.keepCollapsed) {
-                    setCollapsed(false);
-                    localStorage.setItem('menuCollapsed', '0');
-                  }
-                  onMenuClick?.(key);
-                }}
+                onClick={onMenuClick}
                 isGoldTheme={isGoldTheme}
               />
             </ScrollArea>

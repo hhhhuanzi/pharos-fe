@@ -18,12 +18,13 @@
  * 仪表盘列表页面
  */
 import React, { useState, useEffect, useContext, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useHistory } from 'react-router-dom';
 import { Button, Empty, Modal, Space, message, Tooltip } from 'antd';
 import { FundViewOutlined, EditOutlined, ShareAltOutlined } from '@ant-design/icons';
 import _ from 'lodash';
 import { useTranslation } from 'react-i18next';
 import { useUpdateEffect } from 'ahooks';
+import { getPageFromSearch, setPageInSearch, removePageFromSearch } from '@/utils/urlPage';
 import { useLocation } from 'react-router-dom';
 import queryString from 'query-string';
 
@@ -34,6 +35,7 @@ import { CommonStateContext } from '@/App';
 import BusinessGroupSideBarWithAll, { getDefaultGidsInDashboard } from '@/components/BusinessGroup/BusinessGroupSideBarWithAll';
 import { getDashboardCompatibleGids } from '@/components/BusinessGroup/presetFilters';
 import EnhancedTable from '@/components/EnhancedTable';
+import type { RowAction } from '@/components/EnhancedTable/types';
 import { dateColumn, updateByColumn } from '@/components/EnhancedTable/columns';
 import Tags from '@/components/TableTags/Tags';
 import EllipsisText from '@/components/EllipsisText';
@@ -57,7 +59,6 @@ import './style.less';
 
 const N9E_GIDS_LOCALKEY = 'N9E_BOARD_NODE_ID';
 const SEARCH_SESSION_STORAGE_KEY = 'n9e_dashboard_search';
-const DASHBOARD_PAGE_SESSION_KEY = 'n9e_dashboard_page';
 const PUBLIC_SELECT_GIDS_LOCALKEY = 'N9E_PUBLIC_SELECT_GIDS';
 const getDefaultPublicSelectGids = (localKey: string) => {
   const valueStr = localStorage.getItem(localKey);
@@ -69,18 +70,17 @@ export default function index() {
   const { t } = useTranslation('dashboard');
   const { t: tDh } = useTranslation(DhDashboardNS);
   const { businessGroup, perms } = useContext(CommonStateContext);
-  const queryParams = queryString.parse(useLocation().search);
+  const history = useHistory();
+  const location = useLocation();
+  const queryParams = queryString.parse(location.search);
   const [gids, setGids] = useState<string | undefined>(() => getDashboardCompatibleGids(getDefaultGidsInDashboard(queryParams, N9E_GIDS_LOCALKEY, businessGroup)));
-  const [list, setList] = useState<any[]>([]);
+  const [list, setList] = useState<DashboardType[]>([]);
   const [selectRowKeys, setSelectRowKeys] = useState<number[]>([]);
   const [refreshKey, setRefreshKey] = useState(_.uniqueId('refreshKey_'));
   const [searchVal, setsearchVal] = useState<string>(sessionStorage.getItem(SEARCH_SESSION_STORAGE_KEY) || '');
-  const [current, setCurrent] = useState<number>(() => {
-    const saved = sessionStorage.getItem(DASHBOARD_PAGE_SESSION_KEY);
-    return saved ? Number(saved) : 1;
-  });
+  const [current, setCurrent] = useState<number>(() => getPageFromSearch(location.search));
   const [selectedBusinessGroup, setSelectedBusinessGroup] = useState<number[] | undefined>(getDefaultPublicSelectGids(PUBLIC_SELECT_GIDS_LOCALKEY)); // 目前只有公开仪表盘会用到
-  const [busiGroups, setBusiGroups] = useState<any[]>([]);
+  const [busiGroups, setBusiGroups] = useState<Array<{ id: number; name: string }>>([]);
   const pagination = usePagination({ PAGESIZE_KEY: 'dashboard-pagesize' });
   const [visibleColumns, setVisibleColumns] = useState<string[]>(() => getDefaultColumnsConfigs(defaultColumnsConfigs, LOCAL_STORAGE_KEY));
   const columnOptions = buildColumnOptions(defaultColumnsConfigs, t);
@@ -94,8 +94,15 @@ export default function index() {
     setsearchVal('');
     setCurrent(1);
     sessionStorage.removeItem(SEARCH_SESSION_STORAGE_KEY);
-    sessionStorage.removeItem(DASHBOARD_PAGE_SESSION_KEY);
+    history.replace({ pathname: location.pathname, search: removePageFromSearch(location.search) });
   }, [businessGroup.ids]);
+  // 侧边栏切换业务组只更新本地 gids（不更新全局 businessGroup.ids），这里在业务组选择源头重置页码到第一页
+  const handleSelectGids = (ids: string) => {
+    setGids(ids);
+    setCurrent(1);
+    setSelectRowKeys([]);
+    history.replace({ pathname: location.pathname, search: removePageFromSearch(location.search) });
+  };
 
   useEffect(() => {
     if (gids === '-1') {
@@ -143,7 +150,7 @@ export default function index() {
       <div style={{ display: 'flex' }}>
         <BusinessGroupSideBarWithAll
           gids={gids}
-          setGids={setGids}
+          setGids={handleSelectGids}
           localeKey={N9E_GIDS_LOCALKEY}
           showPublicOption={_.includes(perms, '/public-dashboards')}
           publicOptionLabel={t('default_filter.public')}
@@ -156,6 +163,7 @@ export default function index() {
           <Header
             gids={gids}
             selectRowKeys={selectRowKeys}
+            setSelectRowKeys={setSelectRowKeys}
             refreshList={() => {
               setRefreshKey(_.uniqueId('refreshKey_'));
             }}
@@ -164,7 +172,7 @@ export default function index() {
               setsearchVal(val);
               setCurrent(1);
               sessionStorage.setItem(SEARCH_SESSION_STORAGE_KEY, val);
-              sessionStorage.setItem(DASHBOARD_PAGE_SESSION_KEY, '1');
+              history.replace({ pathname: location.pathname, search: setPageInSearch(location.search, 1) });
             }}
             visibleColumns={visibleColumns}
             setVisibleColumns={setVisibleColumns}
@@ -197,7 +205,7 @@ export default function index() {
                             className='table-active-text min-w-0 truncate'
                             to={{
                               pathname: `/dashboards/${record.ident || record.id}`,
-                              search: gids === '-1' ? '__public__=true' : '', // 加上 __public__ 参数，用于在详情页判断是否为公开仪表盘
+                              search: gids === '-1' ? `__public__=true&page=${current}` : `?page=${current}`, // __public__ 用于详情页判断公开仪表盘
                             }}
                           >
                             {text}
@@ -394,7 +402,7 @@ export default function index() {
                       },
                     }
                   : undefined,
-              ]) as any,
+              ]) as RowAction[],
             })}
             actionColumn={{ title: t('common:table.operations'), width: 130 }}
             rowKey='id'
@@ -410,7 +418,7 @@ export default function index() {
               current,
               onChange: (page: number) => {
                 setCurrent(page);
-                sessionStorage.setItem(DASHBOARD_PAGE_SESSION_KEY, String(page));
+                history.replace({ pathname: location.pathname, search: setPageInSearch(location.search, page) });
               },
             }}
             locale={{

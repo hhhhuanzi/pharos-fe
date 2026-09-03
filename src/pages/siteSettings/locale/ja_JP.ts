@@ -15,8 +15,8 @@ const ja_JP = {
   site_url_tip: 'Pharos に外部からアクセスするためのアドレスです。バックエンドはこれを使用して、Pharos インスタンスにアクセスできるリンクを生成できます',
   page_title: 'サイトのタイトル',
   page_title_tip: 'デフォルトのタイトル (Pharos) をオーバーライドします',
-  home_page_url: 'ホームページのURL',
-  home_page_url_tip: 'ホームページのURLをオーバーライドします (/metric/explorer)',
+  home_page_url: 'デフォルトアクセスURL',
+  home_page_url_tip: 'ルートパス / へのアクセス時に設定したURLへリダイレクトします。デフォルト値：/landing',
   displayMode: {
     tree: 'ツリービュー',
     list: 'リストビュー',

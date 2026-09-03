@@ -26,7 +26,7 @@ export default function LogExplore({
     form.setFields([
       {
         name: ['logExplore', 'query_string'],
-        value: value + '$' + v,
+        value: `${value}\${${v}}`,
       },
     ]);
   };
@@ -68,6 +68,7 @@ export default function LogExplore({
           }}
           footer={null}
           width={'80%'}
+          className='n9e-antd-drawer'
         >
           <iframe
             src={url}
