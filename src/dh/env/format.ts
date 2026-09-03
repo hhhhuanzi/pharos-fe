@@ -1,4 +1,4 @@
-/** Blank for services whose RED comes from service_graph, which has no environment dimension. */
+/** Blank for services whose spanmetrics series carry no `deployment.environment.name` dimension. */
 export function formatEnv(value?: string): string {
   return value?.trim() || '—';
 }

@@ -20,6 +20,16 @@
 export const TRACE_ENV_ATTRIBUTE_KEY = 'deployment.environment.name';
 
 /**
+ * 全局探索页环境下拉的固定三档，与采集侧 `deployment.environment.name` 取值一致。
+ * 不从服务目录动态枚举：那条路失败时下拉会只剩「全部」，而产品也不支持跨环境一次查。
+ */
+export const TRACE_ENV_OPTIONS = ['test', 'pre', 'prod'] as const;
+export type TraceEnvOption = (typeof TRACE_ENV_OPTIONS)[number];
+
+/** 现网主数据在 test；URL / initEnv 对不上三档时用这个，不要默认为空再查全环境。 */
+export const TRACE_DEFAULT_ENV: TraceEnvOption = 'test';
+
+/**
  * 归一化环境取值：上报侧写的是小写（`test` / `pre` / `prod`），而 URL 参数里可能带空白或大小写
  * 差异，收窄查询前先对齐，避免「值看着对但查不到」。
  *
@@ -32,4 +42,17 @@ export function normalizeTraceEnv(env?: string): string {
 /** 环境过滤是否生效。空值走软降级：不加过滤条件，跨环境结果照常返回。 */
 export function hasTraceEnvFilter(env?: string): boolean {
   return normalizeTraceEnv(env) !== '';
+}
+
+export function isTraceEnvOption(env: string): env is TraceEnvOption {
+  return (TRACE_ENV_OPTIONS as readonly string[]).includes(env);
+}
+
+/**
+ * 全局探索页必须带一个环境。优先用 URL / `initEnv` 里能对上三档的值，否则 `test`。
+ * 详情页锁定态不走这里，仍只读 `identity.env`。
+ */
+export function resolveExplorerEnv(env?: string): TraceEnvOption {
+  const normalized = normalizeTraceEnv(env);
+  return isTraceEnvOption(normalized) ? normalized : TRACE_DEFAULT_ENV;
 }

@@ -19,12 +19,25 @@ const TONE_BY_VALUE: Record<string, EnvTone> = {
   development: 'dev',
 };
 
-/** Tints 1–8 are alpha overlays; 4 reads as a filled block in both themes, 11 is the text step. */
+/**
+ * Two channels carry the environment, so neither has to work alone:
+ *
+ * - hue, walking red → amber → indigo → green as the blast radius of a mistake shrinks;
+ * - fill weight, which also encodes that ranking (prod is the darkest chip in light theme and
+ *   the brightest in dark theme, dev the faintest).
+ *
+ * The weight ramp is what makes `prod` and `pre` safe. Red and amber stay adjacent hues that
+ * collapse into each other for red-green colour blindness, but the tint steps put ~14 L* between
+ * them, so the pair survives deuteranopia and protanopia on lightness alone.
+ *
+ * Tints 1–8 are alpha overlays over the page fill; 11 and 12 are the text steps, both of which
+ * invert between themes. 12 is used here because the heavier fills need the higher-contrast one.
+ */
 const CLASS_BY_TONE: Record<EnvTone, string> = {
-  prod: 'bg-[var(--fc-red-4)] text-[var(--fc-red-11)]',
-  pre: 'bg-[var(--fc-orange-4)] text-[var(--fc-orange-11)]',
-  test: 'bg-[var(--fc-indigo-4)] text-[var(--fc-indigo-11)]',
-  dev: 'bg-[var(--fc-green-4)] text-[var(--fc-green-11)]',
+  prod: 'bg-[var(--fc-red-7)] text-[var(--fc-red-12)]',
+  pre: 'bg-[var(--fc-yellow-5)] text-[var(--fc-yellow-12)]',
+  test: 'bg-[var(--fc-indigo-4)] text-[var(--fc-indigo-12)]',
+  dev: 'bg-[var(--fc-green-3)] text-[var(--fc-green-12)]',
 };
 
 const UNKNOWN_CLASS = 'bg-fc-200 text-main';

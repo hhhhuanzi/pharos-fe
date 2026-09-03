@@ -1,4 +1,4 @@
-import { hasTraceEnvFilter, normalizeTraceEnv, TRACE_ENV_ATTRIBUTE_KEY } from './env';
+import { hasTraceEnvFilter, isTraceEnvOption, normalizeTraceEnv, resolveExplorerEnv, TRACE_DEFAULT_ENV, TRACE_ENV_ATTRIBUTE_KEY, TRACE_ENV_OPTIONS } from './env';
 
 describe('TRACE_ENV_ATTRIBUTE_KEY', () => {
   // 属性名写飘的后果是「静默返回 0 条」而不是报错（上游对未知参数和对不上的值都不报错），所以
@@ -10,6 +10,13 @@ describe('TRACE_ENV_ATTRIBUTE_KEY', () => {
   // ES 没开 --es.tags-as-fields，tag key 原样落库，转义写法查不到。
   it('keeps literal dots', () => {
     expect(TRACE_ENV_ATTRIBUTE_KEY).not.toContain('@');
+  });
+});
+
+describe('TRACE_ENV_OPTIONS', () => {
+  it('is the three collected values, lowercase, with no all-environments sentinel', () => {
+    expect(TRACE_ENV_OPTIONS).toEqual(['test', 'pre', 'prod']);
+    expect(TRACE_DEFAULT_ENV).toBe('test');
   });
 });
 
@@ -46,5 +53,31 @@ describe('hasTraceEnvFilter', () => {
   it('is true once a real environment is given', () => {
     expect(hasTraceEnvFilter('test')).toBe(true);
     expect(hasTraceEnvFilter('  PROD ')).toBe(true);
+  });
+});
+
+describe('isTraceEnvOption', () => {
+  it('accepts only the three collected values', () => {
+    expect(isTraceEnvOption('test')).toBe(true);
+    expect(isTraceEnvOption('pre')).toBe(true);
+    expect(isTraceEnvOption('prod')).toBe(true);
+    expect(isTraceEnvOption('dev')).toBe(false);
+    expect(isTraceEnvOption('')).toBe(false);
+  });
+});
+
+describe('resolveExplorerEnv', () => {
+  it('keeps a known option after normalize', () => {
+    expect(resolveExplorerEnv('pre')).toBe('pre');
+    expect(resolveExplorerEnv('  PROD ')).toBe('prod');
+    expect(resolveExplorerEnv('Test')).toBe('test');
+  });
+
+  it('falls back to test when missing or unknown, never to empty / all-environments', () => {
+    expect(resolveExplorerEnv()).toBe('test');
+    expect(resolveExplorerEnv('')).toBe('test');
+    expect(resolveExplorerEnv('   ')).toBe('test');
+    expect(resolveExplorerEnv('staging')).toBe('test');
+    expect(resolveExplorerEnv('dev')).toBe('test');
   });
 });

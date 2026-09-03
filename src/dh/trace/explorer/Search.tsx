@@ -10,9 +10,8 @@ import { getTraceInstances, getTraceServices } from '@/pages/traceCpt/services';
 import type { SearchTraceIDType } from '@/pages/traceCpt/type';
 import { TRACING_PLUGIN_TYPES } from '@/dh/trace';
 import type { TracePluginType, TraceSearchState } from '@/dh/trace';
-import { EnvTag } from '@/dh/env';
 import { isValidDurationSeconds, secondsToDurationMin } from '../duration';
-import { normalizeTraceEnv } from '../env';
+import { normalizeTraceEnv, resolveExplorerEnv, TRACE_ENV_OPTIONS } from '../env';
 import { TRACE_SEARCH_DEFAULT_LIMIT, TRACE_SEARCH_DEFAULT_RANGE, TRACE_SEARCH_MAX_LIMIT, TRACE_SEARCH_RANGE_LS, resolveNumTraces } from './searchDefaults';
 
 interface IProps {
@@ -23,7 +22,7 @@ interface IProps {
   initService?: string;
   /** Prefill the time window (e.g. topology → traces with the same range). */
   initRange?: IRawTimeRange;
-  /** Environment to narrow the query to (`deployment.environment.name`); empty → no filter. */
+  /** Environment to narrow the query to (`deployment.environment.name`). */
   initEnv?: string;
   /** Service-detail embed: pin investigation context (type + datasource + service). */
   lockService?: boolean;
@@ -41,12 +40,20 @@ function getGroupOptions(services: { label: string; value: string; group?: strin
 /** Input.Group defaults to width 100%; keep clusters content-sized so 27"/55" screens do not stretch fields. */
 const inlineGroupClass =
   'w-auto shrink-0 [&_.ant-form-item]:mb-0 [&_.input-group-with-form-item-label]:max-w-none [&_.input-group-with-form-item-content]:w-auto';
+/** Keep the env Select wide enough for `prod` plus the 「环境」 addon; do not let the group shrink. */
+const envSelectGroupClass =
+  'w-auto shrink-0 [&_.ant-form-item]:mb-0 [&_.input-group-with-form-item-label]:max-w-none [&_.input-group-with-form-item-content]:w-auto [&_.input-group-with-form-item-content]:min-w-[120px] [&_.input-group-with-form-item-content]:shrink-0';
 const toolbarClass = 'flex max-w-full flex-col gap-2';
 const toolbarRowClass = 'inline-flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto';
 /** Hug picker text (e.g. 「最近 15 分钟」). Empty look is the control's own padding, not a missing column. */
 const timeRangeGroupClass =
   'inline-flex w-max shrink-0 [&_.ant-form-item]:mb-0 [&_.input-group-with-form-item-label]:max-w-none [&_.input-group-with-form-item-content]:w-auto [&_.input-group-with-form-item-content]:shrink-0 [&_.flashcat-timeRangePicker-target]:inline-flex [&_.flashcat-timeRangePicker-target]:w-max [&_.flashcat-timeRangePicker-target]:text-left';
 const traceIdFieldClass = 'mb-0 w-[400px] max-w-full';
+
+function urlEnvParam(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return new URLSearchParams(window.location.search).get('env') || undefined;
+}
 
 export default function Search(props: IProps) {
   const { t } = useTranslation('trace');
@@ -55,12 +62,11 @@ export default function Search(props: IProps) {
   /** Same flag as lockService: embed locks type + datasource + service together. */
   const contextLocked = Boolean(lockService && initService);
   /**
-   * Environment narrowing, resolved once so the read-only chip and the query cannot disagree.
+   * Environment narrowing for the service-detail embed. The chip and the query share this value so
+   * they cannot disagree. An embed without `?env=` stays unfiltered on purpose.
    *
-   * Only the embed narrows by environment: the global explorer has no environment context to read,
-   * and inventing a picker there would need its own value list. An embed opened without `env` in
-   * the URL keeps querying across environments on purpose — the list's 环境 column then shows what
-   * got mixed in, which beats blanking the main troubleshooting tab.
+   * The global explorer uses a separate editable picker (`search.env`); that path must not reuse
+   * this lock, or the toolbar would look writable while still sending an empty env.
    */
   const lockedEnv = lockEnv ? normalizeTraceEnv(initEnv) : '';
   const [cate, setCate] = useState<TracePluginType>(initPluginType || 'jaeger');
@@ -90,11 +96,13 @@ export default function Search(props: IProps) {
     start_time_max: moment().valueOf(),
     plugin_type: 'jaeger',
     num_traces: TRACE_SEARCH_DEFAULT_LIMIT,
+    env: lockEnv ? undefined : resolveExplorerEnv(initEnv || urlEnvParam()),
   });
   const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
   const didApplyInitService = useRef(false);
   const didAutoSearchService = useRef(false);
+  const selectedEnv = lockEnv ? lockedEnv : resolveExplorerEnv(search.env);
 
   useEffect(() => {
     if (initPluginType) return;
@@ -226,6 +234,11 @@ export default function Search(props: IProps) {
     setSearch((prev) => ({ ...prev, instance: nextInstance || undefined }));
   };
 
+  const handleEnvChange = (nextEnv?: string) => {
+    if (lockEnv) return;
+    setSearch((prev) => ({ ...prev, env: resolveExplorerEnv(nextEnv) }));
+  };
+
   const handleSearch = async (byTraceId: boolean) => {
     if (!curPlugin) return;
     if (byTraceId) {
@@ -240,8 +253,8 @@ export default function Search(props: IProps) {
     onSearch({
       ...search,
       service: queryService,
-      // Empty string = no narrowing, which is what the backend treats as "do not filter".
-      env: lockedEnv,
+      // Embed uses the URL lock (may be empty). Global page always sends one of test/pre/prod.
+      env: selectedEnv,
       start_time_min: moment(parsedRange.start).valueOf(),
       start_time_max: moment(parsedRange.end).valueOf(),
       data_source_id: curPlugin,
@@ -359,12 +372,22 @@ export default function Search(props: IProps) {
                   </Select>
                 </span>
               </InputGroupWithFormItem>
-              {lockedEnv && (
-                <InputGroupWithFormItem className={inlineGroupClass} label={t('search.env')}>
-                  {/* Read-only: the environment belongs to the page URL, so a picker here would let
-                      the toolbar and the page header disagree about what is being investigated. */}
-                  <span className='inline-flex h-8 items-center px-2' title={t('search.env_locked')}>
-                    <EnvTag value={lockedEnv} />
+              {lockEnv && !lockedEnv ? null : (
+                <InputGroupWithFormItem className={envSelectGroupClass} label={t('search.env')}>
+                  <span title={lockEnv ? t('search.env_locked') : undefined}>
+                    <Select
+                      dropdownMatchSelectWidth={false}
+                      className='min-w-[120px]'
+                      value={selectedEnv}
+                      onChange={handleEnvChange}
+                      disabled={lockEnv}
+                    >
+                      {(lockEnv ? [lockedEnv] : TRACE_ENV_OPTIONS).map((env) => (
+                        <Select.Option value={env} key={env}>
+                          {env}
+                        </Select.Option>
+                      ))}
+                    </Select>
                   </span>
                 </InputGroupWithFormItem>
               )}

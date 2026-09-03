@@ -264,6 +264,7 @@ describe('jaeger adapter (api_v3)', () => {
         { name: 'order', spanCount: 2, errorSpanCount: 1 },
         { name: 'gateway', spanCount: 1, errorSpanCount: 0 },
       ],
+      envs: ['test'],
     } as const;
 
     it('hits /dh/trace-summaries and returns the backend rows unchanged', async () => {
@@ -291,6 +292,18 @@ describe('jaeger adapter (api_v3)', () => {
     it('degrades to an empty list when the envelope carries no summaries', async () => {
       mockRequest.mockResolvedValue({ dat: {} });
       expect(await findDhTraceSummaries(baseParams)).toEqual({ summaries: [], truncated: false });
+    });
+
+    it('forwards env so the backend can narrow, and keeps envs on each row', async () => {
+      mockRequest.mockResolvedValue({ dat: { summaries: [{ ...row }], truncated: false } });
+      const result = await findDhTraceSummaries({ ...baseParams, env: 'test' });
+      expect(mockRequest).toHaveBeenCalledWith(
+        '/api/n9e/dh/trace-summaries',
+        expect.objectContaining({
+          params: expect.objectContaining({ env: 'test' }),
+        }),
+      );
+      expect(result.summaries[0]?.envs).toEqual(['test']);
     });
   });
 

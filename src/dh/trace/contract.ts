@@ -169,8 +169,10 @@ export function traceResponseToSummary(res: TraceResponse): PharosTraceSummary |
    * value is resource-level.
    */
   const envOf = (span: TraceSpanData) => {
-    const raw = (res.processes?.[span.processID]?.tags || []).find((tag) => tag.key === TRACE_ENV_ATTRIBUTE_KEY)?.value;
-    return typeof raw === 'string' ? raw.trim() : '';
+    const processRaw = (res.processes?.[span.processID]?.tags || []).find((tag) => tag.key === TRACE_ENV_ATTRIBUTE_KEY)?.value;
+    if (typeof processRaw === 'string' && processRaw.trim()) return processRaw.trim();
+    const spanRaw = (span.tags || []).find((tag) => tag.key === TRACE_ENV_ATTRIBUTE_KEY)?.value;
+    return typeof spanRaw === 'string' ? spanRaw.trim() : '';
   };
 
   let startTimeUs = Number.MAX_SAFE_INTEGER;

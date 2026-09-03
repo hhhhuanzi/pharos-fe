@@ -22,7 +22,7 @@ interface IProps {
   initPluginId?: number;
   initPluginType?: TracePluginType;
   initService?: string;
-  /** Environment to narrow the query to (`deployment.environment.name`); empty → no filter. */
+  /** Environment to narrow the query to (`deployment.environment.name`). */
   initEnv?: string;
   initRange?: IRawTimeRange;
   /** Service-detail embed: pin type + datasource + service (do not hide the selects). */

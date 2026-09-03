@@ -123,6 +123,23 @@ describe('traceResponseToSummary', () => {
     expect(summary?.envs).toEqual(['test', 'pre']);
   });
 
+  it('falls back to span tags when the process does not carry the environment attribute', () => {
+    const summary = traceResponseToSummary({
+      traceID: 'abc',
+      processes,
+      spans: [
+        span({
+          spanID: 'root',
+          startTime: 1_000,
+          duration: 100,
+          tags: [{ key: 'deployment.environment.name', value: 'pre' }],
+        }),
+      ],
+    });
+
+    expect(summary?.envs).toEqual(['pre']);
+  });
+
   // Most services have not been injected with the attribute yet; that must read as "no environment
   // information", not as an environment named "".
   it('reports an empty list when no process carries the environment attribute', () => {

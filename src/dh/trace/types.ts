@@ -13,7 +13,7 @@ export type TracePluginType = 'jaeger' | 'skywalking' | 'otel';
  * `src/dh/trace/explorer/**` 之间流转（Search -> TraceExplorer -> TraceList），上游代码不消费它。
  */
 export type TraceSearchState = SearchTraceType & {
-  /** 环境维度收窄，口径见 `./env.ts`；空值表示不过滤。 */
+  /** 环境维度收窄，口径见 `./env.ts`。全局页必填三档之一；详情页锁定态可为空（不加过滤）。 */
   env?: string;
 };
 
@@ -40,7 +40,8 @@ export interface TraceSearchParams {
   start_time_max: number;
   /**
    * 环境维度收窄（`deployment.environment.name`）。后端把它折成 `query.attributes`，前端不自己拼
-   * 属性名 —— 口径见 `./env.ts`。空值表示不过滤（软降级），不是「过滤空环境」。
+   * 属性名 —— 口径见 `./env.ts`。空值表示不过滤（软降级，仅详情页未带 identity.env 时），
+   * 不是「过滤空环境」。全局探索页始终传 test / pre / prod 之一。
    */
   env?: string;
   attributes?: Record<string, string> | null;
