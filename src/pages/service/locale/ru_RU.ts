@@ -52,7 +52,7 @@ const ru_RU = {
     chart_qps: 'Запросы',
     chart_error: 'Доля ошибок',
     chart_empty: 'В этом интервале нет временных рядов',
-    table_empty: 'Нет сервисов. Проверьте список Jaeger. RED — из spanmetrics или traces_service_graph_*.',
+    table_empty: 'Нет сервисов. Проверьте список Jaeger. RED — из spanmetrics.',
     table_empty_no_team: 'Нет сервисов ваших бизнесов. Неназначенные сервисы видят только SRE/эксплуатация.',
     load_failed: 'Не удалось загрузить сервисы',
     no_prometheus: 'Нет доступного источника Prometheus',

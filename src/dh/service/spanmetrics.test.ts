@@ -4,6 +4,7 @@ import {
   buildSpanmetricsTopQueries,
   pickSpanmetricsFamily,
   scaleSampleValues,
+  SPANMETRICS_NAME_MATCH,
   SPANMETRICS_NAME_REGEX,
 } from './spanmetrics';
 
@@ -57,12 +58,17 @@ describe('spanmetrics queries', () => {
     expect(q.failed).toBe(
       'sum by (service_name, deployment_environment_name, telemetry_sdk_language) (increase(traces_span_metrics_calls_total{status_code=~"STATUS_CODE_ERROR|ERROR"}[1h]))',
     );
-    expect(q.p95).toBe(
-      'histogram_quantile(0.95, sum by (service_name, deployment_environment_name, telemetry_sdk_language, le) (rate(traces_span_metrics_duration_milliseconds_bucket[1h])))',
-    );
-    expect(q.p99).toBe(
-      'histogram_quantile(0.99, sum by (service_name, deployment_environment_name, telemetry_sdk_language, le) (rate(traces_span_metrics_duration_milliseconds_bucket[1h])))',
-    );
+  });
+
+  it('asks for raw buckets once instead of one histogram_quantile call per quantile', () => {
+    const q = buildSpanmetricsCatalogQueries(family, '1h');
+    expect(q.quantileBuckets).toBe('sum by (service_name, deployment_environment_name, telemetry_sdk_language, le) (rate(traces_span_metrics_duration_milliseconds_bucket[1h]))');
+  });
+
+  it('omits the bucket query when the family has no duration histogram', () => {
+    const callsOnly = { calls: 'calls_total', durationScale: 1, serviceLabel: 'service_name' } as const;
+    expect(buildSpanmetricsCatalogQueries(callsOnly, '1h').quantileBuckets).toBeUndefined();
+    expect(buildSpanmetricsServiceQueries(callsOnly, 'order', '1h', (value) => value).quantileBuckets).toBeUndefined();
   });
 
   it('filters one service and quotes the label', () => {
@@ -76,9 +82,7 @@ describe('spanmetrics queries', () => {
     expect(q.failed).toBe(
       'increase(traces_span_metrics_calls_total{service_name="order", deployment_environment_name="prod", status_code=~"STATUS_CODE_ERROR|ERROR"}[5m])',
     );
-    expect(q.p95).toBe(
-      'histogram_quantile(0.95, sum by (le) (rate(traces_span_metrics_duration_milliseconds_bucket{service_name="order", deployment_environment_name="prod"}[5m])))',
-    );
+    expect(q.quantileBuckets).toBe('sum by (le) (rate(traces_span_metrics_duration_milliseconds_bucket{service_name="order", deployment_environment_name="prod"}[5m]))');
   });
 
   it('builds top series matchers on the service label and splits lines per environment', () => {
@@ -95,6 +99,10 @@ describe('spanmetrics queries', () => {
   it('includes the probe regex for known metric names', () => {
     expect(SPANMETRICS_NAME_REGEX).toContain('traces_span_metrics_calls_total');
     expect(SPANMETRICS_NAME_REGEX).toContain('calls_total');
+  });
+
+  it('keeps the probe selector limited to __name__', () => {
+    expect(SPANMETRICS_NAME_MATCH).toBe(`{__name__=~"${SPANMETRICS_NAME_REGEX}"}`);
   });
 });
 

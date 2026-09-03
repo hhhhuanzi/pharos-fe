@@ -52,7 +52,7 @@ const zh_HK = {
     chart_qps: '請求量',
     chart_error: '錯誤率',
     chart_empty: '目前時間範圍沒有可畫的時序',
-    table_empty: '沒有服務。確認 Jaeger 有服務列表。RED 來自 spanmetrics 或 traces_service_graph_*。',
+    table_empty: '沒有服務。確認 Jaeger 有服務列表。RED 來自 spanmetrics。',
     table_empty_no_team: '沒有屬於你業務的服務。未關聯業務的服務只有運維/SRE 可見。',
     load_failed: '讀取服務列表失敗',
     no_prometheus: '沒有可用的 Prometheus 資料來源',

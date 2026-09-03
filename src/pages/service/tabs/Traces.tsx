@@ -11,9 +11,8 @@ import TabEmpty from './TabEmpty';
 interface Props {
   service: string;
   /**
-   * Environment from the page URL (`deployment.environment.name`). Undefined → no filter, and the
-   * list's 环境 column shows which environments the results actually mixed. Unlike the 日志 tab, an
-   * unknown env must not blank the tab: traces are the main troubleshooting path.
+   * Environment from the page URL (`deployment.environment.name`). The toolbar is read-only and the
+   * query is narrowed to this value. Undefined → no env filter (do not blank the tab).
    */
   env?: string;
   jaegerId?: number;

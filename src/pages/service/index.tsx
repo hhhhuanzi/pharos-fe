@@ -84,7 +84,12 @@ export default function ServicePage() {
         if (requestSeq.current !== seq) return;
         // 先挂目录行，让图表立刻开查；团队过滤失败不能把 Prom 查询拖死。
         setRows(res.rows);
-        setFailed(res.promFailed && res.jaegerFailed);
+        /**
+         * A failed RED query is now terminal: there is no second source to fill the columns from,
+         * so the page has to say so instead of listing Jaeger's service names with every metric
+         * blank and no explanation. Jaeger failing on its own still leaves a full spanmetrics list.
+         */
+        setFailed(res.promFailed);
         const filtered = await loadFilteredServiceCatalog(res.rows, localCanViewAll(profile));
         if (requestSeq.current !== seq) return;
         setRows(filtered.rows);

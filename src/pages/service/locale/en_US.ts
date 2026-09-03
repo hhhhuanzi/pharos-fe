@@ -52,7 +52,7 @@ const en_US = {
     chart_qps: 'Requests',
     chart_error: 'Error rate',
     chart_empty: 'No time series in this range',
-    table_empty: 'No services. Confirm Jaeger lists services. RED comes from spanmetrics or traces_service_graph_*.',
+    table_empty: 'No services. Confirm Jaeger lists services. RED comes from spanmetrics.',
     table_empty_no_team: 'No services for your businesses. Unassigned services are visible only to SRE/ops.',
     load_failed: 'Failed to load services',
     no_prometheus: 'No Prometheus datasource available',

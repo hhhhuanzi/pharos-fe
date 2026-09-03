@@ -6,6 +6,7 @@ import { N9E_PATHNAME } from '@/utils/constant';
 import {
   applyLanguageMap,
   aggregateServiceRows,
+  filterInstrumentedRows,
   languageMapFromSamples,
   mergeServiceCatalog,
   uniqueRefNames,
@@ -13,17 +14,11 @@ import {
   type ServiceRow,
 } from './list';
 import { buildGlobalEventerQueries, mergeServiceEvents, type GlobalEventQuery, type ServiceEventQuery, type ServiceEventsResult } from './events';
-import { buildCatalogRedQueries, buildServiceRedQueries, buildServerRegexMatcher, escapePromLabel, mergeServiceRed, toPromRange, type ServiceOverviewResult } from './red';
-import { buildTopSeriesQueries, matrixToSeries, promRangeStep, rateWindow, type NamedSeries, type PromMatrixSample } from './series';
-import {
-  buildSpanmetricsCatalogQueries,
-  buildSpanmetricsServiceQueries,
-  buildSpanmetricsTopQueries,
-  pickSpanmetricsFamily,
-  scaleSampleValues,
-  SPANMETRICS_NAME_REGEX,
-  type SpanmetricsFamily,
-} from './spanmetrics';
+import { quantilesFromBucketVector } from './histogramQuantile';
+import { buildServiceRegexMatcher, escapePromLabel, mergeServiceRed, RED_QUANTILES, toPromRange, type RedQuerySet, type ServiceOverviewResult } from './red';
+import { matrixToSeries, promRangeStep, rateWindow, type NamedSeries, type PromMatrixSample } from './series';
+import { buildSpanmetricsCatalogQueries, buildSpanmetricsServiceQueries, buildSpanmetricsTopQueries, scaleMatrixValues, scaleSampleValues } from './spanmetrics';
+import { detectSpanmetricsFamily } from './spanmetricsProbe';
 
 async function queryProm(datasourceId: number, query: string, time: number): Promise<PromVectorSample[]> {
   const data = await getPromData(`/api/${N9E_PATHNAME}/proxy/${datasourceId}/api/v1/query`, { query, time });
@@ -37,42 +32,53 @@ async function queryPromRange(datasourceId: number, query: string, start: number
   return Array.isArray(result) ? result : [];
 }
 
-export type ServiceRedSource = 'spanmetrics' | 'service_graph' | 'none';
+/**
+ * Node-level RED comes from spanmetrics alone. `traces_service_graph_*` is edge-level and stays
+ * with the topology: its `_request_failed_total` has no series on any real-service edge, its edge
+ * counts are dominated by synthesized `client="user"` nodes, and both diverge from the spanmetrics
+ * numbers by one to two orders of magnitude — so using it to refill these columns showed wrong
+ * values under a healthy-looking green `0.00%`.
+ */
+export type ServiceRedSource = 'spanmetrics' | 'none';
 
-async function detectSpanmetricsFamily(datasourceId: number, time: number): Promise<SpanmetricsFamily | undefined> {
-  try {
-    const samples = await queryProm(datasourceId, `count by (__name__) ({__name__=~"${SPANMETRICS_NAME_REGEX}"})`, time);
-    const names = samples.map((sample) => sample.metric?.__name__).filter((name): name is string => Boolean(name));
-    return pickSpanmetricsFamily(names);
-  } catch {
-    return undefined;
-  }
+interface RedQuantileVectors {
+  p95: PromVectorSample[];
+  p99: PromVectorSample[];
 }
 
-async function queryRedVectors(
-  datasourceId: number,
-  queries: { total: string; failed: string; p95?: string; p99?: string },
-  endUnix: number,
-  durationScale = 1,
-): Promise<{ total: PromVectorSample[]; failed: PromVectorSample[]; p95: PromVectorSample[]; p99: PromVectorSample[] }> {
-  const [total, failed, p95Raw, p99Raw] = await Promise.all([
-    queryProm(datasourceId, queries.total, endUnix),
-    queryProm(datasourceId, queries.failed, endUnix),
-    queries.p95 ? queryProm(datasourceId, queries.p95, endUnix) : Promise.resolve([]),
-    queries.p99 ? queryProm(datasourceId, queries.p99, endUnix) : Promise.resolve([]),
-  ]);
+interface RedVectors extends RedQuantileVectors {
+  total: PromVectorSample[];
+  failed: PromVectorSample[];
+}
+
+/** Turn one cumulative-bucket vector into the P95 / P99 vectors `histogram_quantile` would return. */
+function splitQuantiles(buckets: PromVectorSample[], durationScale: number): RedQuantileVectors {
+  const [p95, p99] = quantilesFromBucketVector(buckets, RED_QUANTILES);
   return {
-    total,
-    failed,
-    p95: scaleSampleValues(p95Raw, durationScale),
-    p99: scaleSampleValues(p99Raw, durationScale),
+    p95: scaleSampleValues(p95, durationScale),
+    p99: scaleSampleValues(p99, durationScale),
   };
 }
 
 /**
- * Incoming RED: spanmetrics first (service itself), then service_graph inbound. `env` narrows the
- * spanmetrics slice to the environment the list row came from; service_graph has no environment
- * dimension, so the fallback stays fleet-wide for that service.
+ * The bucket query is far heavier than the two counter queries — fleet-wide spanmetrics buckets
+ * run ~15s against Thanos while the counters answer in ~1s. Letting it settle on its own keeps a
+ * slow histogram from discarding counts, service names, environment and language that already came
+ * back; P95 / P99 then render as `—`, which is what "we could not measure it" should look like.
+ */
+async function queryRedVectors(datasourceId: number, queries: RedQuerySet, endUnix: number, durationScale = 1): Promise<RedVectors> {
+  const [total, failed, buckets] = await Promise.all([
+    queryProm(datasourceId, queries.total, endUnix),
+    queryProm(datasourceId, queries.failed, endUnix),
+    queries.quantileBuckets ? settledProm(datasourceId, queries.quantileBuckets, endUnix) : Promise.resolve<PromVectorSample[]>([]),
+  ]);
+  return { total, failed, ...splitQuantiles(buckets, durationScale) };
+}
+
+/**
+ * Incoming RED plus the cluster / namespace association for one service, from spanmetrics. `env`
+ * narrows the slice to the environment the list row was opened from. A failed query rejects so the
+ * caller can show an error rather than numbers taken from somewhere else.
  */
 export async function fetchServiceOverview(
   datasourceId: number,
@@ -84,18 +90,9 @@ export async function fetchServiceOverview(
   const rangeSeconds = Math.max(1, endUnix - startUnix);
   const range = toPromRange(rangeSeconds);
   const family = await detectSpanmetricsFamily(datasourceId, endUnix);
-  if (family) {
-    const vectors = await queryRedVectors(
-      datasourceId,
-      buildSpanmetricsServiceQueries(family, service, range, escapePromLabel, env),
-      endUnix,
-      family.durationScale,
-    );
-    const merged = mergeServiceRed({ ...vectors, rangeSeconds });
-    if (!merged.empty) return merged;
-  }
-  const queries = buildServiceRedQueries(service, range);
-  const vectors = await queryRedVectors(datasourceId, queries, endUnix);
+  if (!family) return { association: { clusters: [], namespaces: [] }, empty: true };
+  const queries = buildSpanmetricsServiceQueries(family, service, range, escapePromLabel, env);
+  const vectors = await queryRedVectors(datasourceId, queries, endUnix, family.durationScale);
   return mergeServiceRed({ ...vectors, rangeSeconds });
 }
 
@@ -108,14 +105,14 @@ export interface ServiceCatalogResult {
 
 async function fetchLanguageMap(datasourceId: number, endUnix: number): Promise<Record<string, string>> {
   try {
-    const samples = await queryProm(datasourceId, 'count by (server, service_name, service, telemetry_sdk_language, telemetry_sdk_language_name) (target_info)', endUnix);
+    const samples = await queryProm(datasourceId, 'count by (service_name, service, exported_job, telemetry_sdk_language, telemetry_sdk_language_name) (target_info)', endUnix);
     return languageMapFromSamples(samples);
   } catch {
     return {};
   }
 }
 
-/** Jaeger services ∪ Prom RED. Prefer spanmetrics; fall back to traces_service_graph_*. */
+/** Jaeger services ∪ spanmetrics RED. */
 export async function fetchServiceCatalog(
   promId: number | undefined,
   jaegerId: number | undefined,
@@ -128,6 +125,8 @@ export async function fetchServiceCatalog(
   let jaegerNames: string[] = [];
   let jaegerFailed = false;
   let redSource: ServiceRedSource = 'none';
+  /** Names spanmetrics showed to have no SDK language; the Jaeger union must not re-add them. */
+  let nonInstrumented: string[] = [];
 
   const tasks: Array<Promise<void>> = [];
 
@@ -136,23 +135,20 @@ export async function fetchServiceCatalog(
       (async () => {
         try {
           const family = await detectSpanmetricsFamily(promId, endUnix);
+          /** No spanmetrics in this Prometheus: the catalog still lists Jaeger's services, with every RED cell blank. */
+          if (!family) return;
           const range = toPromRange(rangeSeconds);
-          const load = async (queries: { total: string; failed: string; p95?: string; p99?: string }, durationScale = 1) => {
-            const vectors = await queryRedVectors(promId, queries, endUnix, durationScale);
-            const langMap = await fetchLanguageMap(promId, endUnix);
-            return applyLanguageMap(aggregateServiceRows({ ...vectors, rangeSeconds }), langMap);
-          };
-          if (family) {
-            const spanRows = await load(buildSpanmetricsCatalogQueries(family, range), family.durationScale);
-            if (spanRows.some((row) => row.hasRed)) {
-              promRows = spanRows;
-              redSource = 'spanmetrics';
-              return;
-            }
-          }
-          promRows = await load(buildCatalogRedQueries(range));
-          redSource = promRows.some((row) => row.hasRed) ? 'service_graph' : 'none';
+          const [vectors, langMap] = await Promise.all([
+            queryRedVectors(promId, buildSpanmetricsCatalogQueries(family, range), endUnix, family.durationScale),
+            /** One fleet-wide `target_info` scan per catalog load; it only fills languages the RED vector lacks. */
+            fetchLanguageMap(promId, endUnix),
+          ]);
+          const instrumented = filterInstrumentedRows(applyLanguageMap(aggregateServiceRows({ ...vectors, rangeSeconds }), langMap));
+          promRows = instrumented.rows;
+          nonInstrumented = instrumented.excluded;
+          redSource = promRows.some((row) => row.hasRed) ? 'spanmetrics' : 'none';
         } catch {
+          /** RED has no second source, so a failed query has to reach the page as an error. */
           promFailed = true;
         }
       })(),
@@ -173,8 +169,12 @@ export async function fetchServiceCatalog(
   }
 
   await Promise.all(tasks);
+  const suppressed = new Set(nonInstrumented);
   return {
-    rows: mergeServiceCatalog(jaegerNames, promRows),
+    rows: mergeServiceCatalog(
+      jaegerNames.filter((name) => !suppressed.has(name)),
+      promRows,
+    ),
     promFailed,
     jaegerFailed,
     redSource,
@@ -199,45 +199,22 @@ export async function fetchServiceTopSeries(
   const step = promRangeStep(startUnix, endUnix);
   const window = rateWindow(step);
   const family = await detectSpanmetricsFamily(datasourceId, endUnix);
-  const spanQueries = family ? buildSpanmetricsTopQueries(family, services, window, buildServerRegexMatcher) : null;
-  const queries = spanQueries || buildTopSeriesQueries(services, window);
+  if (!family) return empty;
+  const queries = buildSpanmetricsTopQueries(family, services, window, buildServiceRegexMatcher);
   if (!queries) return empty;
-  const durationScale = spanQueries && family ? family.durationScale : 1;
-  try {
-    const [qps, errorRate, p95Raw] = await Promise.all([
-      queryPromRange(datasourceId, queries.qps, startUnix, endUnix, step),
-      queryPromRange(datasourceId, queries.errorRate, startUnix, endUnix, step),
-      queries.p95 ? queryPromRange(datasourceId, queries.p95, startUnix, endUnix, step) : Promise.resolve([]),
-    ]);
-    const p95 =
-      durationScale === 1
-        ? p95Raw
-        : p95Raw.map((sample) => ({
-            ...sample,
-            values: sample.values.map(([ts, value]) => {
-              const n = Number(value);
-              return [ts, Number.isFinite(n) ? String(n * durationScale) : value] as [number, string];
-            }),
-          }));
-    const series = {
-      qps: matrixToSeries(qps),
-      errorRate: matrixToSeries(errorRate),
-      p95: matrixToSeries(p95),
-    };
-    if (spanQueries && series.qps.length === 0 && series.errorRate.length === 0 && series.p95.length === 0) {
-      const fallback = buildTopSeriesQueries(services, window);
-      if (!fallback) return empty;
-      const [fqps, ferror, fp95] = await Promise.all([
-        queryPromRange(datasourceId, fallback.qps, startUnix, endUnix, step),
-        queryPromRange(datasourceId, fallback.errorRate, startUnix, endUnix, step),
-        queryPromRange(datasourceId, fallback.p95, startUnix, endUnix, step),
-      ]);
-      return { qps: matrixToSeries(fqps), errorRate: matrixToSeries(ferror), p95: matrixToSeries(fp95) };
-    }
-    return series;
-  } catch {
-    return empty;
-  }
+
+  const [qps, errorRate, p95Raw] = await Promise.all([
+    queryPromRange(datasourceId, queries.qps, startUnix, endUnix, step),
+    queryPromRange(datasourceId, queries.errorRate, startUnix, endUnix, step),
+    /** A calls-only family exports no histogram, so the P95 chart simply has no series to draw. */
+    queries.p95 ? queryPromRange(datasourceId, queries.p95, startUnix, endUnix, step) : Promise.resolve<PromMatrixSample[]>([]),
+  ]);
+
+  return {
+    qps: matrixToSeries(qps),
+    errorRate: matrixToSeries(errorRate),
+    p95: matrixToSeries(scaleMatrixValues(p95Raw, family.durationScale)),
+  };
 }
 
 async function settledProm(datasourceId: number, query: string, time: number): Promise<PromVectorSample[]> {

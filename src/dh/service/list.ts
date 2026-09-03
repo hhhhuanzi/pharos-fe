@@ -156,14 +156,56 @@ export function applyLanguageMap(rows: ServiceRow[], langByService: Record<strin
   });
 }
 
-export function languageMapFromSamples(samples: PromVectorSample[], nameKeys: readonly string[] = ['server', 'service_name', 'service']): Record<string, string> {
+/**
+ * Keep only services reported by an OTel SDK, which is the closest label-level test for "an
+ * application we wrote": middleware never carries `telemetry.sdk.language`.
+ *
+ * Filtering rows rather than the PromQL selector is deliberate. A row aggregates every series of
+ * its (service, environment), so a service whose language sits on only some series is still
+ * recognised and still shows its full RED; `telemetry_sdk_language=~".+"` in the query would drop
+ * those series and shrink the counts.
+ *
+ * `telemetry.sdk.language` is a declared spanmetrics connector dimension, so every RED row carries
+ * it; a row without one really is a component nobody instrumented. There is no "language dimension
+ * missing" escape hatch, because RED has no second source to degrade to any more.
+ *
+ * `excluded` feeds the Jaeger union, which would otherwise re-add the very names dropped here.
+ */
+export function filterInstrumentedRows(rows: ServiceRow[]): { rows: ServiceRow[]; excluded: string[] } {
+  const instrumented = new Set<string>();
+  rows.forEach((row) => {
+    if (row.language) instrumented.add(row.name);
+  });
+
+  const excluded = new Set<string>();
+  const kept = rows.filter((row) => {
+    if (instrumented.has(row.name)) return true;
+    excluded.add(row.name);
+    return false;
+  });
+  return { rows: kept, excluded: Array.from(excluded) };
+}
+
+/**
+ * `target_info` carries no `service_name`: the SDK's own `job` collides with the scrape job, so
+ * Prometheus renames it to `exported_job`, shaped `<namespace>/<service>`. Without this the map is
+ * empty, which now also empties the list: {@link filterInstrumentedRows} keeps only named services.
+ */
+function serviceFromExportedJob(metric: Record<string, string>): string {
+  const raw = metric.exported_job?.trim();
+  if (!raw) return '';
+  const slash = raw.lastIndexOf('/');
+  return (slash >= 0 ? raw.slice(slash + 1) : raw).trim();
+}
+
+export function languageMapFromSamples(samples: PromVectorSample[], nameKeys: readonly string[] = ['service_name', 'service']): Record<string, string> {
   const map: Record<string, string> = {};
   samples.forEach((sample) => {
     const metric = sample.metric || {};
     const langs = extractLanguages([sample]);
     if (!langs.length) return;
-    nameKeys.forEach((key) => {
-      const name = metric[key]?.trim();
+    [...nameKeys.map((key) => metric[key]), serviceFromExportedJob(metric)].forEach((raw) => {
+      const name = raw?.trim();
       if (name && !map[name]) map[name] = langs[0];
     });
   });

@@ -1,18 +1,4 @@
-import { SERVICE_GRAPH_METRICS } from '@/dh/trace/dependencies/promql';
-
-import {
-  alignServiceSeries,
-  assignServiceColors,
-  buildPromRatio,
-  buildTopSeriesQueries,
-  colorsForSeries,
-  errorRateYMax,
-  fillMissingSeries,
-  filterSeriesByNames,
-  matrixToSeries,
-  promRangeStep,
-  rateWindow,
-} from './series';
+import { alignServiceSeries, assignServiceColors, buildPromRatio, colorsForSeries, errorRateYMax, filterSeriesByNames, matrixToSeries, promRangeStep, rateWindow } from './series';
 
 describe('promRangeStep / rateWindow', () => {
   it('keeps at least 15s step and a 60s rate window', () => {
@@ -21,29 +7,10 @@ describe('promRangeStep / rateWindow', () => {
   });
 });
 
-describe('buildTopSeriesQueries', () => {
-  it('returns null without services', () => {
-    expect(buildTopSeriesQueries([], '5m')).toBeNull();
-  });
-
-  it('regex-matches the given servers for qps / error rate / p95', () => {
-    const q = buildTopSeriesQueries(['order', 'a.b'], '5m');
-    expect(q?.qps).toBe(`sum by (server) (rate(${SERVICE_GRAPH_METRICS.total}{server=~"order|a\\\\.b"}[5m]))`);
-    expect(q?.errorRate).toBe(
-      buildPromRatio(
-        `sum by (server) (rate(${SERVICE_GRAPH_METRICS.failed}{server=~"order|a\\\\.b"}[5m]))`,
-        `sum by (server) (rate(${SERVICE_GRAPH_METRICS.total}{server=~"order|a\\\\.b"}[5m]))`,
-      ),
-    );
-    expect(q?.p95).toContain('histogram_quantile(0.95');
-    expect(q?.p95).toContain(`${SERVICE_GRAPH_METRICS.serverBucket}{server=~"order|a\\\\.b"}[5m]`);
-  });
-});
-
 describe('matrixToSeries / filterSeriesByNames / alignServiceSeries', () => {
   const matrix = [
     {
-      metric: { server: 'order' },
+      metric: { service_name: 'order' },
       values: [
         [1, '1.5'],
         [2, 'NaN'],
@@ -51,7 +18,7 @@ describe('matrixToSeries / filterSeriesByNames / alignServiceSeries', () => {
       ] as Array<[number, string]>,
     },
     { metric: { service_name: 'pay' }, values: [[1, '3']] as Array<[number, string]> },
-    { metric: { server: '' }, values: [[1, '9']] as Array<[number, string]> },
+    { metric: { service_name: '' }, values: [[1, '9']] as Array<[number, string]> },
   ];
 
   it('drops empty names and non-finite points', () => {
@@ -59,6 +26,11 @@ describe('matrixToSeries / filterSeriesByNames / alignServiceSeries', () => {
       { name: 'order', points: [[1, 1.5], [3, 2]] },
       { name: 'pay', points: [[1, 3]] },
     ]);
+  });
+
+  it('ignores the service_graph server label, which node-level RED no longer reads', () => {
+    const graphShaped = [{ metric: { server: 'order', server_deployment_environment_name: 'prod' }, values: [[1, '7']] as Array<[number, string]> }];
+    expect(matrixToSeries(graphShaped)).toEqual([]);
   });
 
   it('names series per service + environment so two environments do not collapse into one line', () => {
@@ -81,17 +53,10 @@ describe('matrixToSeries / filterSeriesByNames / alignServiceSeries', () => {
     expect(filterSeriesByNames(series, ['a', 'missing', 'b']).map((item) => item.name)).toEqual(['a', 'b']);
   });
 
-  it('fills Prom-omitted names with zeros so a 0% service still draws', () => {
+  it('leaves a name with no series out rather than drawing it as a flat zero', () => {
+    /** A fabricated 0 line read as "this service is healthy" when Prom had simply returned nothing. */
     const series = [{ name: 'quote', points: [[1, 0] as [number, number], [2, 0] as [number, number]] }];
-    expect(fillMissingSeries(series, ['admin', 'quote', 'auth'])).toEqual([
-      { name: 'admin', points: [[1, 0], [2, 0]] },
-      { name: 'quote', points: [[1, 0], [2, 0]] },
-      { name: 'auth', points: [[1, 0], [2, 0]] },
-    ]);
-  });
-
-  it('does not invent timestamps when nothing arrived', () => {
-    expect(fillMissingSeries([], ['admin', 'quote'])).toEqual([]);
+    expect(filterSeriesByNames(series, ['admin', 'quote', 'auth'])).toEqual([series[0]]);
   });
 
   it('aligns timestamps and fills gaps with null', () => {

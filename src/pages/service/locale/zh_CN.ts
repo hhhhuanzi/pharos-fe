@@ -52,7 +52,7 @@ const zh_CN = {
     chart_qps: '请求量',
     chart_error: '错误率',
     chart_empty: '当前时间范围没有可画的时序',
-    table_empty: '没有服务。确认 Jaeger 有服务列表。RED 来自 spanmetrics 或 traces_service_graph_*。',
+    table_empty: '没有服务。确认 Jaeger 有服务列表。RED 来自 spanmetrics。',
     table_empty_no_team: '没有属于你业务的服务。未关联业务的服务只有运维/SRE 可见。',
     load_failed: '读取服务列表失败',
     no_prometheus: '没有可用的 Prometheus 数据源',

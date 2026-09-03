@@ -7,7 +7,7 @@ import type { AlignedData, Options } from 'uplot';
 import UPlotChart, { axisBuilder, cursorBuider, paddingSide, scalesBuilder, seriesBuider, tooltipPlugin } from '@/components/UPlotChart';
 import { CommonStateContext } from '@/App';
 import { hexPalette } from '@/pages/dashboard/config';
-import { alignServiceSeries, assignServiceColors, colorsForSeries, errorRateYMax, fillMissingSeries, filterSeriesByNames, type NamedSeries } from '@/dh/service';
+import { alignServiceSeries, assignServiceColors, colorsForSeries, errorRateYMax, filterSeriesByNames, type NamedSeries } from '@/dh/service';
 
 import { NS } from '../constants';
 import { formatErrorRate, formatLatency, formatQps } from '../format';
@@ -36,10 +36,12 @@ function ChartCard(props: ChartCardProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const size = useSize(wrapRef);
   const width = size?.width || 0;
-  const visible = useMemo(
-    () => (kind === 'errorRate' ? fillMissingSeries(series, names) : filterSeriesByNames(series, names)),
-    [kind, series, names],
-  );
+  /**
+   * All three charts drop names Prom returned nothing for. The error-rate chart used to synthesize
+   * a flat zero line instead, which drew a reassuring 0% for services that had no data at all;
+   * `buildPromRatio` already keeps genuine zero-error series via `or (denom * 0)`.
+   */
+  const visible = useMemo(() => filterSeriesByNames(series, names), [series, names]);
   const aligned = useMemo(() => alignServiceSeries(visible), [visible]);
   const colors = useMemo(() => colorsForSeries(aligned.labels, colorByName, hexPalette), [aligned.labels, colorByName]);
   const yMax = useMemo(

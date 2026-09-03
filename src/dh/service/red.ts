@@ -1,4 +1,4 @@
-import { SERVICE_GRAPH_METRICS, toPromRange, type PromVectorSample } from '@/dh/trace/dependencies/promql';
+import { toPromRange, type PromVectorSample } from '@/dh/trace/dependencies/promql';
 
 import { CLUSTER_LABEL_KEYS, ENV_LABEL_KEYS, LANGUAGE_LABEL_KEYS, NAMESPACE_LABEL_KEYS } from './constants';
 
@@ -24,11 +24,12 @@ export interface ServiceAssociation {
 export interface ServiceOverviewResult {
   red?: ServiceRed;
   association: ServiceAssociation;
-  /** True when Prometheus returned no service_graph series for this service. */
+  /** True when spanmetrics returned no series for this service. */
   empty: boolean;
 }
 
-export const SERVICE_NAME_LABEL_KEYS = ['service_name', 'service', 'server'] as const;
+/** Node-level RED reads spanmetrics only, so `server` — the `traces_service_graph_*` key — is not one of these. */
+export const SERVICE_NAME_LABEL_KEYS = ['service_name', 'service'] as const;
 
 export function pickServiceName(metric: Record<string, string> | undefined): string {
   if (!metric) return '';
@@ -57,31 +58,25 @@ export function escapePromLabel(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-export function buildServiceRedQueries(service: string, range: string) {
-  const matcher = `{server="${escapePromLabel(service)}"}`;
-  return {
-    total: `increase(${SERVICE_GRAPH_METRICS.total}${matcher}[${range}])`,
-    failed: `increase(${SERVICE_GRAPH_METRICS.failed}${matcher}[${range}])`,
-    p95: `histogram_quantile(0.95, sum by (le) (rate(${SERVICE_GRAPH_METRICS.serverBucket}${matcher}[${range}])))`,
-    p99: `histogram_quantile(0.99, sum by (le) (rate(${SERVICE_GRAPH_METRICS.serverBucket}${matcher}[${range}])))`,
-  };
-}
+/** RED quantiles shown by list and detail, in the order `queryRedVectors` returns them. */
+export const RED_QUANTILES = [0.95, 0.99] as const;
 
-/** Fleet-wide instant vectors. Keep raw labels so language / cluster can be read in JS. */
-export function buildCatalogRedQueries(range: string) {
-  return {
-    total: `increase(${SERVICE_GRAPH_METRICS.total}[${range}])`,
-    failed: `increase(${SERVICE_GRAPH_METRICS.failed}[${range}])`,
-    p95: `histogram_quantile(0.95, sum by (server, le) (rate(${SERVICE_GRAPH_METRICS.serverBucket}[${range}])))`,
-    p99: `histogram_quantile(0.99, sum by (server, le) (rate(${SERVICE_GRAPH_METRICS.serverBucket}[${range}])))`,
-  };
+export interface RedQuerySet {
+  total: string;
+  failed: string;
+  /**
+   * Raw cumulative buckets, not a `histogram_quantile(...)` call: P95 and P99 differ only in the
+   * quantile, so one bucket scan feeds both and the second scan disappears.
+   */
+  quantileBuckets?: string;
 }
 
 export function escapePromRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-export function buildServerRegexMatcher(services: string[], label = 'server'): string {
+/** The label is required: there is no default service-identity label now that `server` is gone. */
+export function buildServiceRegexMatcher(services: string[], label: string): string {
   const regex = services.map(escapePromRegex).join('|');
   return `{${label}=~"${escapePromLabel(regex)}"}`;
 }

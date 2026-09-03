@@ -1,6 +1,6 @@
-import { SERVICE_GRAPH_METRICS, toPromRange } from '@/dh/trace/dependencies/promql';
+import { toPromRange } from '@/dh/trace/dependencies/promql';
 
-import { buildServerRegexMatcher, pickServiceEnv, pickServiceName, serviceKey } from './red';
+import { pickServiceEnv, pickServiceName, serviceKey } from './red';
 
 export interface PromMatrixSample {
   metric: Record<string, string>;
@@ -26,18 +26,6 @@ export function buildPromRatio(numerator: string, denominator: string): string {
   return `(${numerator} or (${denominator} * 0)) / ${denominator}`;
 }
 
-export function buildTopSeriesQueries(services: string[], window: string) {
-  if (services.length === 0) return null;
-  const matcher = buildServerRegexMatcher(services);
-  const total = `sum by (server) (rate(${SERVICE_GRAPH_METRICS.total}${matcher}[${window}]))`;
-  const failed = `sum by (server) (rate(${SERVICE_GRAPH_METRICS.failed}${matcher}[${window}]))`;
-  return {
-    qps: total,
-    errorRate: buildPromRatio(failed, total),
-    p95: `histogram_quantile(0.95, sum by (server, le) (rate(${SERVICE_GRAPH_METRICS.serverBucket}${matcher}[${window}])))`,
-  };
-}
-
 /** Series name is the row key, so two environments of one service draw as two lines. */
 export function matrixToSeries(samples: PromMatrixSample[]): NamedSeries[] {
   return samples
@@ -55,33 +43,6 @@ export function filterSeriesByNames(series: NamedSeries[], names: string[]): Nam
   return names.reduce<NamedSeries[]>((acc, name) => {
     const item = byName.get(name);
     if (item) acc.push(item);
-    return acc;
-  }, []);
-}
-
-export function collectSeriesTimes(series: NamedSeries[]): number[] {
-  const timeSet = new Set<number>();
-  series.forEach((item) => {
-    item.points.forEach(([ts]) => timeSet.add(ts));
-  });
-  return Array.from(timeSet).sort((a, b) => a - b);
-}
-
-/**
- * Keep the requested name order. Names Prom omitted (classic `A/B` drop of zero-error series)
- * are filled with `fill` at the timestamps of series that did arrive.
- */
-export function fillMissingSeries(series: NamedSeries[], names: string[], fill = 0): NamedSeries[] {
-  const times = collectSeriesTimes(series);
-  const byName = new Map(series.map((item) => [item.name, item]));
-  return names.reduce<NamedSeries[]>((acc, name) => {
-    const existing = byName.get(name);
-    if (existing) {
-      acc.push(existing);
-      return acc;
-    }
-    if (times.length === 0) return acc;
-    acc.push({ name, points: times.map((ts) => [ts, fill] as [number, number]) });
     return acc;
   }, []);
 }

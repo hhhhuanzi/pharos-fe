@@ -1,4 +1,5 @@
 import { ENV_GROUP_LABEL } from './constants';
+import type { RedQuerySet } from './red';
 import { buildPromRatio } from './series';
 
 /** OTel spanmetrics families commonly exported to Prometheus. Prefer namespaced names first. */
@@ -26,6 +27,9 @@ export const SPANMETRICS_NAME_REGEX = [
   ...SPANMETRICS_DURATION_MS_CANDIDATES,
   ...SPANMETRICS_DURATION_S_CANDIDATES,
 ].join('|');
+
+/** Probe selector: keep it `__name__`-only so the metadata endpoint answers from the index. */
+export const SPANMETRICS_NAME_MATCH = `{__name__=~"${SPANMETRICS_NAME_REGEX}"}`;
 
 export interface SpanmetricsFamily {
   calls: string;
@@ -63,13 +67,12 @@ export function buildSpanmetricsCatalogQueries(family: SpanmetricsFamily, range:
    */
   const by = `${family.serviceLabel}, ${ENV_GROUP_LABEL}, telemetry_sdk_language`;
   const errorSel = `{${spanmetricsErrorMatcher()}}`;
-  const queries: { total: string; failed: string; p95?: string; p99?: string } = {
+  const queries: RedQuerySet = {
     total: `sum by (${by}) (increase(${family.calls}[${range}]))`,
     failed: `sum by (${by}) (increase(${family.calls}${errorSel}[${range}]))`,
   };
   if (family.durationBucket) {
-    queries.p95 = `histogram_quantile(0.95, sum by (${by}, le) (rate(${family.durationBucket}[${range}])))`;
-    queries.p99 = `histogram_quantile(0.99, sum by (${by}, le) (rate(${family.durationBucket}[${range}])))`;
+    queries.quantileBuckets = `sum by (${by}, le) (rate(${family.durationBucket}[${range}]))`;
   }
   return queries;
 }
@@ -85,13 +88,12 @@ export function buildSpanmetricsServiceQueries(
   const envSel = env ? `, ${ENV_GROUP_LABEL}="${escapeLabel(env)}"` : '';
   const matcher = `{${family.serviceLabel}="${escapeLabel(service)}"${envSel}}`;
   const errorSel = `{${family.serviceLabel}="${escapeLabel(service)}"${envSel}, ${spanmetricsErrorMatcher()}}`;
-  const queries: { total: string; failed: string; p95?: string; p99?: string } = {
+  const queries: RedQuerySet = {
     total: `increase(${family.calls}${matcher}[${range}])`,
     failed: `increase(${family.calls}${errorSel}[${range}])`,
   };
   if (family.durationBucket) {
-    queries.p95 = `histogram_quantile(0.95, sum by (le) (rate(${family.durationBucket}${matcher}[${range}])))`;
-    queries.p99 = `histogram_quantile(0.99, sum by (le) (rate(${family.durationBucket}${matcher}[${range}])))`;
+    queries.quantileBuckets = `sum by (le) (rate(${family.durationBucket}${matcher}[${range}]))`;
   }
   return queries;
 }
@@ -126,4 +128,15 @@ export function scaleSampleValues<T extends { value?: [number, string] }>(sample
     if (!sample.value || !Number.isFinite(n)) return sample;
     return { ...sample, value: [sample.value[0], String(n * scale)] };
   });
+}
+
+export function scaleMatrixValues<T extends { values: Array<[number, string]> }>(samples: T[], scale: number): T[] {
+  if (scale === 1) return samples;
+  return samples.map((sample) => ({
+    ...sample,
+    values: (sample.values || []).map(([ts, value]) => {
+      const n = Number(value);
+      return [ts, Number.isFinite(n) ? String(n * scale) : value] as [number, string];
+    }),
+  }));
 }

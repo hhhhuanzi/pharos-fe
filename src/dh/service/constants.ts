@@ -18,17 +18,18 @@ export const LOG_NAMESPACE_FIELD = 'kubernetes.namespace_name';
 export { LOG_EXPLORER_PATH, TRACE_EXPLORER_PATH };
 
 /**
- * Prometheus label aliases for cluster / namespace on `traces_service_graph_*`.
+ * Prometheus label aliases for cluster / namespace / environment on spanmetrics series.
  * OTel → Prom exporters usually turn dots into underscores.
+ *
+ * The OTel dimension names come first because the bare `cluster` / `namespace` on these series are
+ * the scraping Prometheus's own labels (`k8s-devops` / `opentelemetry`), not the service's. No
+ * `server_`-prefixed key is listed: those only exist on `traces_service_graph_*`, which node-level
+ * RED no longer reads.
  */
 export const CLUSTER_LABEL_KEYS = ['k8s_cluster_name', 'k8s_cluster', 'cluster', 'k8s.cluster.name'] as const;
 export const NAMESPACE_LABEL_KEYS = ['k8s_namespace_name', 'k8s_namespace', 'namespace', 'k8s.namespace.name'] as const;
 
-/**
- * `deployment.environment.name` is declared as a spanmetrics connector dimension, so list
- * RED rows carry it. `traces_service_graph_*` historically had none; 1.2.1 adds client_/
- * server_ prefixed copies for topology. List fallback still has no unprefixed env label.
- */
+/** `deployment.environment.name` is a declared spanmetrics connector dimension, so RED rows carry it. */
 export const ENV_LABEL_KEYS = ['deployment_environment_name', 'deployment_environment', 'deployment.environment.name'] as const;
 
 /**

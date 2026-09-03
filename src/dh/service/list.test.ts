@@ -1,6 +1,16 @@
 import type { PromVectorSample } from '@/dh/trace/dependencies/promql';
 
-import { aggregateServiceRows, dedupeRefs, filterRowsByServiceName, mergeServiceCatalog, pickTopServices, uniqueRefNames, type ServiceRow } from './list';
+import {
+  aggregateServiceRows,
+  dedupeRefs,
+  filterInstrumentedRows,
+  filterRowsByServiceName,
+  languageMapFromSamples,
+  mergeServiceCatalog,
+  pickTopServices,
+  uniqueRefNames,
+  type ServiceRow,
+} from './list';
 
 function sample(metric: Record<string, string>, value: string): PromVectorSample {
   return { metric, value: [1_700_000_000, value] };
@@ -17,16 +27,16 @@ function row(partial: Partial<ServiceRow> & { name: string }): ServiceRow {
 }
 
 describe('aggregateServiceRows', () => {
-  it('sums RED by server and keeps language / cluster labels', () => {
+  it('sums RED by service and keeps language / cluster labels', () => {
     const rows = aggregateServiceRows({
       total: [
-        sample({ server: 'order', telemetry_sdk_language: 'java', k8s_cluster_name: 'prod' }, '100'),
-        sample({ server: 'order', telemetry_sdk_language: 'java' }, '50'),
-        sample({ server: 'gateway' }, '20'),
+        sample({ service_name: 'order', telemetry_sdk_language: 'java', k8s_cluster_name: 'prod' }, '100'),
+        sample({ service_name: 'order', telemetry_sdk_language: 'java' }, '50'),
+        sample({ service_name: 'gateway' }, '20'),
       ],
-      failed: [sample({ server: 'order' }, '5')],
-      p95: [sample({ server: 'order' }, '0.2'), sample({ server: 'gateway' }, '0.05')],
-      p99: [sample({ server: 'order' }, '0.4')],
+      failed: [sample({ service_name: 'order' }, '5')],
+      p95: [sample({ service_name: 'order' }, '0.2'), sample({ service_name: 'gateway' }, '0.05')],
+      p99: [sample({ service_name: 'order' }, '0.4')],
       rangeSeconds: 100,
     });
     const byName = Object.fromEntries(rows.map((item) => [item.name, item]));
@@ -109,9 +119,9 @@ describe('aggregateServiceRows', () => {
     expect(byEnv.test).toMatchObject({ name: 'quote', env: 'test', requestCount: 10, failedCount: 5, errorRate: 0.5, p95Seconds: 15 });
   });
 
-  it('leaves env undefined for service_graph series, which has no environment dimension', () => {
+  it('leaves env undefined when the series carries no environment dimension', () => {
     const rows = aggregateServiceRows({
-      total: [sample({ server: 'order' }, '10')],
+      total: [sample({ service_name: 'order' }, '10')],
       failed: [],
       p95: [],
       p99: [],
@@ -120,7 +130,7 @@ describe('aggregateServiceRows', () => {
     expect(rows[0].env).toBeUndefined();
   });
 
-  it('skips series without a server label', () => {
+  it('skips series without a service name', () => {
     expect(
       aggregateServiceRows({
         total: [sample({ client: 'gw' }, '9')],
@@ -130,6 +140,78 @@ describe('aggregateServiceRows', () => {
         rangeSeconds: 60,
       }),
     ).toEqual([]);
+  });
+
+  it('produces no row from a service_graph edge, whatever its connection_type', () => {
+    /**
+     * This is what used to put MySQL schema names and `jaeger-collector` in the list: edges were
+     * keyed by `server`. Node-level RED no longer reads that label, so an edge sample yields nothing
+     * even if one reaches this function.
+     */
+    const rows = aggregateServiceRows({
+      total: [
+        sample({ client: 'order', server: 'bdc10_0', connection_type: 'database' }, '500'),
+        sample({ client: 'user', server: 'order', connection_type: 'virtual_node' }, '342280'),
+        sample({ client: 'gateway', server: 'order', connection_type: '' }, '1000'),
+      ],
+      failed: [],
+      p95: [],
+      p99: [],
+      rangeSeconds: 3600,
+    });
+    expect(rows).toEqual([]);
+  });
+});
+
+describe('languageMapFromSamples', () => {
+  it('reads the service out of exported_job, the only name target_info actually carries', () => {
+    expect(languageMapFromSamples([sample({ exported_job: 'rome-sec/rome-sec-auth', telemetry_sdk_language: 'java' }, '1')])).toEqual({
+      'rome-sec-auth': 'java',
+    });
+  });
+
+  it('still prefers the explicit name labels when they exist', () => {
+    expect(languageMapFromSamples([sample({ service_name: 'order', exported_job: 'shop/order', telemetry_sdk_language: 'go' }, '1')])).toEqual({
+      order: 'go',
+    });
+  });
+});
+
+describe('filterInstrumentedRows', () => {
+  it('keeps SDK-reported services and drops components with no language', () => {
+    const result = filterInstrumentedRows([
+      row({ name: 'order', language: 'Java', requestCount: 300 }),
+      row({ name: 'pricing', language: 'Python', requestCount: 20 }),
+      row({ name: 'jaeger-collector', requestCount: 1_148_052 }),
+    ]);
+    expect(result.rows.map((item) => item.name)).toEqual(['order', 'pricing']);
+    expect(result.excluded).toEqual(['jaeger-collector']);
+  });
+
+  it('leaves every kept row byte-identical, so no displayed number moves', () => {
+    const order = row({ name: 'order', language: 'Java', requestCount: 300, failedCount: 3, errorRate: 0.01, p95Seconds: 0.5, p99Seconds: 1 });
+    const result = filterInstrumentedRows([order, row({ name: 'infra' })]);
+    expect(result.rows[0]).toBe(order);
+  });
+
+  it('keeps every environment of a service that has a language in any one of them', () => {
+    const result = filterInstrumentedRows([
+      row({ name: 'order', env: 'prod', language: 'Java', requestCount: 300 }),
+      row({ name: 'order', env: 'test', requestCount: 5 }),
+    ]);
+    expect(result.rows.map((item) => `${item.name}/${item.env}`)).toEqual(['order/prod', 'order/test']);
+    expect(result.excluded).toEqual([]);
+  });
+
+  it('drops every row when nothing carries a language, instead of falling through unfiltered', () => {
+    /**
+     * `telemetry.sdk.language` is a declared spanmetrics dimension, so a language-less RED vector
+     * means the connector lost it. The old escape hatch existed to keep the service_graph fallback
+     * from emptying the list; with no fallback left, an empty list is the honest answer.
+     */
+    const result = filterInstrumentedRows([row({ name: 'order', requestCount: 300 }), row({ name: 'pricing', requestCount: 20 })]);
+    expect(result.rows).toEqual([]);
+    expect(result.excluded).toEqual(['order', 'pricing']);
   });
 });
 

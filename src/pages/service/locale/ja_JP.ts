@@ -52,7 +52,7 @@ const ja_JP = {
     chart_qps: 'リクエスト量',
     chart_error: 'エラー率',
     chart_empty: 'この期間に描画できる時系列がありません',
-    table_empty: 'サービスがありません。Jaeger のサービス一覧を確認してください。RED は spanmetrics または traces_service_graph_* です。',
+    table_empty: 'サービスがありません。Jaeger のサービス一覧を確認してください。RED は spanmetrics です。',
     table_empty_no_team: '所属ビジネスのサービスがありません。未割当サービスは SRE / 運用のみ閲覧できます。',
     load_failed: 'サービスの読み込みに失敗しました',
     no_prometheus: '利用可能な Prometheus データソースがありません',
