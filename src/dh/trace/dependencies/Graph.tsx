@@ -34,7 +34,6 @@ import {
   edgeHighlightZIndex,
   edgeStrokeGeometry,
   edgeStrokeWidth,
-  endpointsHighlight,
   errorTone,
   nodeFontScale,
   NODE_LABEL_FONT,
@@ -45,17 +44,17 @@ import {
   GRAPH_ACTUAL_ZOOM,
   GRAPH_MAX_ZOOM,
   GRAPH_MIN_ZOOM,
-  incidentHighlight,
   planGraphViewport,
   quantizeZoom,
-  type GraphHighlight,
+  resolveHighlight,
+  type EdgeContrastMode,
   type ViewportPlan,
 } from './graphVisual';
 import { BASE_BEZIER_CURVATURE, HANDLE_IN, HANDLE_OUT, edgeBezierFans, getOffsetBezierPath } from './edgePath';
 import { freezeLayoutPositions } from './graphReady';
 import { layoutServiceGraph, type GraphNodeKind, type LaidOutNode } from './layout';
 import { fitLabel, NODE_LABEL_CHROME } from './nodeWidth';
-import { mergeMutualEdges, type EdgeDirectionMetrics, type GraphDisplayEdge } from './mutualEdge';
+import { mergeMutualEdges, type EdgeDirectionMetrics } from './mutualEdge';
 import { quantizeViewport, DEFAULT_VIEWPORT } from './spacing';
 import { inferPeerGlyph, type PeerGlyph } from './peerType';
 import EdgeMetricCard, { type EdgeMetricDirection } from './EdgeMetricCard';
@@ -77,6 +76,9 @@ interface ServiceNodeData {
   cardWidth: number;
   /** Matches `--dh-node-font-scale`, so the cut follows the text the zoom actually renders. */
   fontScale: number;
+  /** Whole card (text included) is the hover hit target — not just a handle or edge stub. */
+  onPointerEnter?: () => void;
+  onPointerLeave?: () => void;
 }
 
 interface ServiceEdgeData {
@@ -96,6 +98,7 @@ interface ServiceEdgeData {
   onLabelEnter: () => void;
   onLabelLeave: () => void;
   onLabelClick: (event: React.MouseEvent) => void;
+  onLabelClose: (event: React.MouseEvent) => void;
 }
 
 const ERROR_TEXT_CLASS: Record<ReturnType<typeof errorTone>, string> = {
@@ -131,7 +134,11 @@ function ServiceNode({ data }: NodeProps<ServiceNodeData>) {
   const title = subtitle ? `${data.label} · ${subtitle}` : data.label;
   const label = fitLabel(data.label, data.cardWidth - NODE_LABEL_CHROME, NODE_LABEL_FONT * data.fontScale);
   return (
-    <div className={`relative flex h-full w-full items-center gap-1.5 rounded-lg border px-2 ${card} ${data.dimmed ? 'opacity-40' : ''}`}>
+    <div
+      className={`dh-service-node relative flex h-full w-full items-center gap-1.5 rounded-lg border px-2 pointer-events-auto ${card} ${data.dimmed ? 'opacity-40' : ''}`}
+      onPointerEnter={data.onPointerEnter}
+      onPointerLeave={data.onPointerLeave}
+    >
       <Handle type='target' position={Position.Left} id={HANDLE_IN} isConnectable={false} />
       <NodeGlyph glyph={data.glyph} />
       {/* Reaching the full name used to mean waiting out the native `title` delay. */}
@@ -177,7 +184,7 @@ function ServiceGraphEdge(props: EdgeProps<ServiceEdgeData>) {
             onMouseEnter={data.onLabelEnter}
             onMouseLeave={data.onLabelLeave}
             onClick={data.onLabelClick}
-            onClose={data.onLabelClick}
+            onClose={data.onLabelClose}
           />
         </EdgeLabelRenderer>
       ) : null}
@@ -188,12 +195,7 @@ function ServiceGraphEdge(props: EdgeProps<ServiceEdgeData>) {
 const nodeTypes = { service: ServiceNode };
 const edgeTypes = { service: ServiceGraphEdge };
 
-function toRfNodes(
-  laidOut: LaidOutNode[],
-  labels: Record<string, string>,
-  subtitles: Record<string, string>,
-  glyphs: Record<string, PeerGlyph>,
-): Node<ServiceNodeData>[] {
+function toRfNodes(laidOut: LaidOutNode[], labels: Record<string, string>, subtitles: Record<string, string>, glyphs: Record<string, PeerGlyph>): Node<ServiceNodeData>[] {
   return laidOut.map((node) => {
     const glyph = glyphs[node.id] || inferPeerGlyph(node.id, node.kind, node.connectionHint);
     const subtitle = node.kind === 'virtual' && glyph !== 'user' ? subtitles[node.id] || undefined : undefined;
@@ -248,27 +250,6 @@ function usePaneHasSize(ref: React.RefObject<HTMLElement>): boolean {
   return ready;
 }
 
-function resolveHighlight(input: {
-  edges: GraphDisplayEdge[];
-  hoveredNode?: string;
-  hoveredEdge?: string;
-  selectedNode?: string;
-  selectedId?: string;
-}): GraphHighlight | null {
-  const { edges, hoveredNode, hoveredEdge, selectedNode, selectedId } = input;
-  if (hoveredNode) return incidentHighlight(hoveredNode, edges);
-  if (hoveredEdge) {
-    const edge = edges.find((item) => item.id === hoveredEdge);
-    return edge ? endpointsHighlight(edge) : null;
-  }
-  if (selectedNode) return incidentHighlight(selectedNode, edges);
-  if (selectedId) {
-    const edge = edges.find((item) => item.id === selectedId);
-    return edge ? endpointsHighlight(edge) : null;
-  }
-  return null;
-}
-
 interface IProps {
   edges: PharosServiceEdge[];
   rangeSeconds: number;
@@ -279,13 +260,15 @@ interface IProps {
   nodeGlyphs?: Record<string, PeerGlyph>;
   /** Detail 1-hop center; emphasizes the current service and anchors bidirectional peers downstream. */
   focusService?: string;
+  /** Layered (default) spends weight on busy / anomalous edges; uniform treats healthy edges equally. */
+  contrast?: EdgeContrastMode;
   /** Pins / unpins the metric chip of an edge; `undefined` clears the pin. */
   onSelectEdge: (id: string | undefined) => void;
   onSelectNode: (id: string | undefined, kind?: GraphNodeKind) => void;
 }
 
 function ServiceGraphCanvasInner(props: IProps) {
-  const { edges, rangeSeconds, selectedId, selectedNode, nodeLabels, nodeSubtitles, nodeGlyphs, focusService, onSelectEdge, onSelectNode } = props;
+  const { edges, rangeSeconds, selectedId, selectedNode, nodeLabels, nodeSubtitles, nodeGlyphs, focusService, contrast = 'layered', onSelectEdge, onSelectNode } = props;
   const { t } = useTranslation('trace');
   const { fitView, setCenter, viewportInitialized } = useReactFlow();
   const fitViewRef = useRef(fitView);
@@ -299,16 +282,11 @@ function ServiceGraphCanvasInner(props: IProps) {
   // Quantized so a pinch/scroll does not restyle every edge on each intermediate zoom level.
   const zoom = useStore((state: ReactFlowState) => quantizeZoom(state.transform[2]));
   const displayEdges = useMemo(() => mergeMutualEdges(edges, focusService), [edges, focusService]);
+  const maxRequestCount = useMemo(() => displayEdges.reduce((max, edge) => Math.max(max, edge.requestCount), 0), [displayEdges]);
   // React Flow already keeps pane width/height in its store via a ResizeObserver; quantizing it
   // keeps a drag-resize from relayouting on every pixel (and from oscillating with the layout).
-  const container = useMemo(
-    () => quantizeViewport(paneWidth > 0 && paneHeight > 0 ? { width: paneWidth, height: paneHeight } : DEFAULT_VIEWPORT),
-    [paneWidth, paneHeight],
-  );
-  const laidOutRaw = useMemo(
-    () => layoutServiceGraph(displayEdges, nodeSubtitles, focusService, container),
-    [displayEdges, nodeSubtitles, focusService, container],
-  );
+  const container = useMemo(() => quantizeViewport(paneWidth > 0 && paneHeight > 0 ? { width: paneWidth, height: paneHeight } : DEFAULT_VIEWPORT), [paneWidth, paneHeight]);
+  const laidOutRaw = useMemo(() => layoutServiceGraph(displayEdges, nodeSubtitles, focusService, container), [displayEdges, nodeSubtitles, focusService, container]);
   const frozenLayoutRef = useRef<LaidOutNode[] | null>(null);
   const containerKeyRef = useRef(`${container.width}x${container.height}`);
   if (containerKeyRef.current !== `${container.width}x${container.height}`) {
@@ -322,30 +300,61 @@ function ServiceGraphCanvasInner(props: IProps) {
   const [hoveredNode, setHoveredNode] = useState<string>();
   const [hoveredEdge, setHoveredEdge] = useState<string>();
   const hoverLeaveTimer = useRef<number>();
+  const nodeLeaveTimer = useRef<number>();
+  const draggingNodeRef = useRef<string>();
+  const pinnedEdge = selectedId;
 
-  const setEdgeHover = useCallback((id?: string) => {
-    if (hoverLeaveTimer.current) window.clearTimeout(hoverLeaveTimer.current);
-    if (id) {
-      setHoveredEdge(id);
-      return;
-    }
-    hoverLeaveTimer.current = window.setTimeout(() => setHoveredEdge(undefined), 100);
-  }, []);
+  const setEdgeHover = useCallback(
+    (id?: string) => {
+      if (hoverLeaveTimer.current) window.clearTimeout(hoverLeaveTimer.current);
+      // A pinned RED owns highlight; zoom / pointer over other edges must not steal it.
+      if (pinnedEdge) return;
+      if (id) {
+        setHoveredEdge(id);
+        return;
+      }
+      hoverLeaveTimer.current = window.setTimeout(() => setHoveredEdge(undefined), 100);
+    },
+    [pinnedEdge],
+  );
+
+  const setNodeHover = useCallback(
+    (id?: string) => {
+      if (nodeLeaveTimer.current) window.clearTimeout(nodeLeaveTimer.current);
+      if (pinnedEdge) return;
+      if (id) {
+        setHoveredNode(id);
+        return;
+      }
+      if (draggingNodeRef.current) return;
+      nodeLeaveTimer.current = window.setTimeout(() => {
+        if (!draggingNodeRef.current) setHoveredNode(undefined);
+      }, 100);
+    },
+    [pinnedEdge],
+  );
 
   useLayoutEffect(() => {
     setNodes((current) => reuseMeasuredNodes(current, toRfNodes(laidOut, nodeLabels || {}, nodeSubtitles || {}, nodeGlyphs || {})));
   }, [laidOut, nodeLabels, nodeSubtitles, nodeGlyphs]);
 
+  useEffect(() => {
+    if (!pinnedEdge) return;
+    setHoveredEdge(undefined);
+    setHoveredNode(undefined);
+  }, [pinnedEdge]);
+
   useEffect(
     () => () => {
       if (hoverLeaveTimer.current) window.clearTimeout(hoverLeaveTimer.current);
+      if (nodeLeaveTimer.current) window.clearTimeout(nodeLeaveTimer.current);
     },
     [],
   );
 
   const highlight = useMemo(
-    () => resolveHighlight({ edges: displayEdges, hoveredNode, hoveredEdge, selectedNode, selectedId }),
-    [displayEdges, hoveredNode, hoveredEdge, selectedNode, selectedId],
+    () => resolveHighlight({ edges: displayEdges, hoveredNode, hoveredEdge, selectedNode, pinnedEdge }),
+    [displayEdges, hoveredNode, hoveredEdge, selectedNode, pinnedEdge],
   );
 
   const fontScale = nodeFontScale(zoom);
@@ -358,10 +367,12 @@ function ServiceGraphCanvasInner(props: IProps) {
           ...node.data,
           fontScale,
           dimmed: Boolean(highlight) && !highlight?.nodes.has(node.id),
-          emphasized: node.id === hoveredNode || node.id === focusService || node.id === selectedNode,
+          emphasized: (!pinnedEdge && node.id === hoveredNode) || node.id === focusService || node.id === selectedNode,
+          onPointerEnter: () => setNodeHover(node.id),
+          onPointerLeave: () => setNodeHover(undefined),
         },
       })),
-    [nodes, highlight, hoveredNode, focusService, selectedNode, fontScale],
+    [nodes, highlight, hoveredNode, focusService, selectedNode, fontScale, pinnedEdge, setNodeHover],
   );
 
   const bezierFans = useMemo(() => {
@@ -387,9 +398,16 @@ function ServiceGraphCanvasInner(props: IProps) {
         const id = edge.id;
         const highlighted = Boolean(highlight?.edges.has(id));
         const dimmed = Boolean(highlight) && !highlighted;
-        const pinned = id === selectedId;
-        const showExtra = id === hoveredEdge || pinned;
-        const emphasis = edgeEmphasis({ errorRate: edge.errorRate, dimmed, highlighted });
+        const pinned = id === pinnedEdge;
+        const showExtra = pinned || (!pinnedEdge && id === hoveredEdge);
+        const emphasis = edgeEmphasis({
+          errorRate: edge.errorRate,
+          requestCount: edge.requestCount,
+          maxRequestCount,
+          dimmed,
+          highlighted,
+          contrast,
+        });
         const stroke = emphasis.stroke;
         const fan = bezierFans.get(id);
         const geometry = edgeStrokeGeometry({
@@ -418,9 +436,7 @@ function ServiceGraphCanvasInner(props: IProps) {
             errorRateLabel: t('graph.edge_chip.error_rate'),
             qpsLabel: t('graph.edge_chip.qps_avg'),
             p95Label: t('graph.edge_chip.p95'),
-            directions: edge.backward
-              ? [directionRow(edge.forward, true), directionRow(edge.backward, true)]
-              : [directionRow(edge.forward, false)],
+            directions: edge.backward ? [directionRow(edge.forward, true), directionRow(edge.backward, true)] : [directionRow(edge.forward, false)],
             expanded: showExtra,
             pinned,
             closeLabel: t('graph.edge_chip.unpin'),
@@ -435,10 +451,14 @@ function ServiceGraphCanvasInner(props: IProps) {
               event.stopPropagation();
               onSelectEdge(id);
             },
+            onLabelClose: (event) => {
+              event.stopPropagation();
+              onSelectEdge(undefined);
+            },
           },
         };
       }),
-    [displayEdges, highlight, hoveredEdge, selectedId, t, setEdgeHover, onSelectEdge, bezierFans, directionRow, zoom],
+    [displayEdges, highlight, hoveredEdge, pinnedEdge, t, setEdgeHover, onSelectEdge, bezierFans, directionRow, zoom, maxRequestCount, contrast],
   );
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
@@ -447,10 +467,7 @@ function ServiceGraphCanvasInner(props: IProps) {
 
   const layoutToken = useMemo(() => laidOut.map((node) => `${node.id}:${Math.round(node.x)}:${Math.round(node.y)}`).join('\n'), [laidOut]);
 
-  const viewportNodes = useMemo(
-    () => laidOut.map((node) => ({ id: node.id, x: node.x, y: node.y, width: node.width, height: node.height })),
-    [laidOut],
-  );
+  const viewportNodes = useMemo(() => laidOut.map((node) => ({ id: node.id, x: node.x, y: node.y, width: node.width, height: node.height })), [laidOut]);
   const viewportPlan = useMemo(() => planGraphViewport({ nodes: viewportNodes, paneWidth, paneHeight }), [viewportNodes, paneWidth, paneHeight]);
   const planRef = useRef<ViewportPlan | null>(viewportPlan);
   planRef.current = viewportPlan;
@@ -534,8 +551,17 @@ function ServiceGraphCanvasInner(props: IProps) {
       onEdgeClick={(_e, rfEdge) => {
         onSelectEdge(rfEdge.id);
       }}
-      onNodeMouseEnter={(_e, node) => setHoveredNode(node.id)}
-      onNodeMouseLeave={() => setHoveredNode(undefined)}
+      onNodeMouseEnter={(_e, node) => setNodeHover(node.id)}
+      onNodeMouseMove={(_e, node) => setNodeHover(node.id)}
+      onNodeMouseLeave={() => setNodeHover(undefined)}
+      onNodeDragStart={(_e, node) => {
+        draggingNodeRef.current = node.id;
+        setNodeHover(node.id);
+      }}
+      onNodeDrag={(_e, node) => setNodeHover(node.id)}
+      onNodeDragStop={() => {
+        draggingNodeRef.current = undefined;
+      }}
       onEdgeMouseEnter={(_e, edge) => setEdgeHover(edge.id)}
       onEdgeMouseLeave={() => setEdgeHover(undefined)}
       onPaneClick={() => {

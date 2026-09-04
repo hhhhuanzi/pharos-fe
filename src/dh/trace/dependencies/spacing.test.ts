@@ -17,6 +17,13 @@ import {
 const CARD = { nodeWidth: 176, nodeHeight: 36 };
 const PANE = { width: 1408, height: 868 };
 
+describe('ranksep floor', () => {
+  it('keeps the readable-arc corridor at 96px, including after squeeze', () => {
+    expect(MIN_RANKSEP).toBe(96);
+    expect(TIGHT_RANKSEP).toBe(MIN_RANKSEP);
+  });
+});
+
 describe('planGraphSpacing', () => {
   it('spreads a small graph towards the maximum gap', () => {
     const spacing = planGraphSpacing({ container: PANE, rankCount: 3, maxNodesPerRank: 3, ...CARD });
@@ -38,7 +45,7 @@ describe('planGraphSpacing', () => {
   });
 
   it('lands between the bounds for a mid-sized graph', () => {
-    const spacing = planGraphSpacing({ container: PANE, rankCount: 5, maxNodesPerRank: 5, ...CARD });
+    const spacing = planGraphSpacing({ container: PANE, rankCount: 4, maxNodesPerRank: 5, ...CARD });
     expect(spacing.ranksep).toBeGreaterThan(MIN_RANKSEP);
     expect(spacing.ranksep).toBeLessThan(MAX_RANKSEP);
   });
@@ -99,6 +106,17 @@ describe('squeezeGraphSpacing', () => {
   it('surrenders every gap when the cards alone overflow, instead of returning a useless number', () => {
     const next = squeezeGraphSpacing({ ...base, rankCount: 40, spacing, bounds: { width: 9000, height: 9000 } });
     expect(next.ranksep).toBe(TIGHT_RANKSEP);
+  });
+
+  it('will not close the horizontal corridor to buy a fit, even when the cards alone overflow', () => {
+    const next = squeezeGraphSpacing({
+      ...base,
+      spacing: { ranksep: MIN_RANKSEP, nodesep: MAX_NODESEP, edgesep: EDGESEP },
+      bounds: { width: 9000, height: 2400 },
+    });
+    expect(next.ranksep).toBe(TIGHT_RANKSEP);
+    expect(next.ranksep).toBe(MIN_RANKSEP);
+    expect(next.nodesep).toBeLessThan(MAX_NODESEP);
   });
 
   it('ignores a broken measurement rather than collapsing the layout', () => {

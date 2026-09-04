@@ -199,17 +199,14 @@ export function rankProfile(nodes: Array<{ x: number }>): RankProfile {
  * what `planGraphSpacing` needs to turn the pane size into gaps. The pass is cheap (pure math on a
  * few dozen nodes) and it is the only way to size the gaps before placement.
  *
- * The passes after that exist because the card size is the hard constraint, not the gaps: a graph
- * that would only fit at a scale where the service name is unreadable keeps giving up whitespace
- * until it fits at a readable one. Only the global graph does this — the detail topology already
- * opens at 1:1, and its gaps stay on the wider `MIN_*` floors.
+ * The passes after that exist because the card size used to be the only hard constraint: a graph
+ * that would only fit at a scale where the service name is unreadable kept giving up whitespace
+ * until it fitted at a readable one. The rank gap is now also a constraint — squeeze may pack
+ * cards vertically, but it will not close the horizontal corridor an edge needs to bow. Only the
+ * global graph does this — the detail topology already opens at 1:1, and its gaps stay on the
+ * wider `MIN_*` floors.
  */
-export function layoutServiceGraph(
-  edges: PharosServiceEdge[],
-  subtitles?: Record<string, string>,
-  focusService?: string,
-  container: Viewport = DEFAULT_VIEWPORT,
-): LaidOutNode[] {
+export function layoutServiceGraph(edges: PharosServiceEdge[], subtitles?: Record<string, string>, focusService?: string, container: Viewport = DEFAULT_VIEWPORT): LaidOutNode[] {
   const captions = subtitles || {};
   const names = new Set<string>();
   edges.forEach((edge) => {
@@ -265,9 +262,11 @@ export function layoutServiceGraph(
   applySpacing(spacing);
   dagre.layout(graph);
 
-  // Only the global graph. The squeeze exists to buy card size back from the gaps, and a 1-hop
-  // graph already fits at 1:1 — tightening it there spends the layout's one free variable to gain
-  // nothing, collapsing six cards into a clump ringed by empty canvas with the fan-out unreadable.
+  // Only the global graph. The squeeze exists to buy card size back from the *vertical* gaps, and
+  // a 1-hop graph already fits at 1:1 — tightening it there spends the layout's free variable to
+  // gain nothing, collapsing six cards into a clump ringed by empty canvas with the fan-out
+  // unreadable. Ranksep is left on `MIN_RANKSEP` so neighbouring columns do not become a vertical
+  // line; a pane that still cannot hold the width just opens at a smaller fit zoom.
   if (!focusService) {
     for (let pass = 0; pass < SPACING_SQUEEZE_PASSES; pass += 1) {
       const box = graph.graph();

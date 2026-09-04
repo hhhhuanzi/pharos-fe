@@ -49,13 +49,18 @@ const en_US = {
   },
   graph: {
     hint: 'Line color shows the error rate of this call: green below 1%, yellow below 5%, red at 5% or above; services that call each other share one line with an arrow at both ends. Hover a line for the P95 latency and average QPS of each direction, click a line to pin its metric card, or click a service for details.',
+    range_fixed: 'Showing call relationships from the last 1 hour.',
+    edge_contrast: 'Edge contrast',
+    edge_contrast_layered: 'Layered',
+    edge_contrast_uniform: 'Uniform',
     prom_placeholder: 'Select Prometheus',
     filter_service: 'Filter by service',
     actual_size: 'Actual size (1:1) for readable service names; use "fit view" to see the whole graph again',
     refresh: 'Refresh',
     no_prometheus: 'No Prometheus datasource available',
     load_failed: 'Query failed. Check the datasource and PromQL access.',
-    empty: 'No service_graph data in this range. Jaeger collector needs an ocb build with service_graph before tail_sampling, and Prometheus must scrape traces_service_graph_*. An empty graph without ocb is expected.',
+    empty:
+      'No service_graph data in this range. Jaeger collector needs an ocb build with service_graph before tail_sampling, and Prometheus must scrape traces_service_graph_*. An empty graph without ocb is expected.',
     edge_chip: {
       error_rate: 'Error rate: ',
       p95: 'P95 latency: ',

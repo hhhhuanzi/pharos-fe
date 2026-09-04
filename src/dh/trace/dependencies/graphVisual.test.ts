@@ -8,6 +8,8 @@ import {
   edgeStrokeAlpha,
   edgeStrokeGeometry,
   edgeStrokeWidth,
+  edgeVolumeRank,
+  healthyLayeredStroke,
   endpointsHighlight,
   errorStroke,
   filterOneHopEdges,
@@ -17,11 +19,17 @@ import {
   graphTranslateExtent,
   isHealthyEdge,
   nodeFontScale,
+  EDGE_HEALTHY_SCALE_MIN,
+  EDGE_HEALTHY_SCALE_UNIFORM,
+  EDGE_HEALTHY_STROKE_DIM,
+  EDGE_HEALTHY_STROKE_PRIMARY,
+  EDGE_HEALTHY_STROKE_QUIET,
   EDGE_MARKER_SIZE,
   EDGE_MARKER_SIZE_THIN,
   EDGE_QUIET_SCREEN_STROKE_MIN,
   EDGE_SCREEN_STROKE_MAX,
   EDGE_SCREEN_STROKE_MIN,
+  EDGE_VOLUME_PRIMARY_RANK,
   GRAPH_ACTUAL_ZOOM,
   GRAPH_MAX_ZOOM,
   GRAPH_MIN_ZOOM,
@@ -33,8 +41,10 @@ import {
   isTypedConnection,
   planGraphViewport,
   quantizeZoom,
+  resolveHighlight,
 } from './graphVisual';
 import { SERVICE_NODE_WIDTH, layoutServiceGraph } from './layout';
+import { MIN_RANKSEP } from './spacing';
 
 function edge(client: string, server: string, connectionType = '', errorRate = 0, requestCount = 1): PharosServiceEdge {
   return { client, server, connectionType, requestCount, failedCount: 0, errorRate };
@@ -190,7 +200,7 @@ describe('graphVisual', () => {
     expect(edgeStrokeAlpha({ dimmed: false, highlighted: false, errorRate: 0.02 })).toBe(0.92);
     expect(edgeStrokeAlpha({ dimmed: false, highlighted: false, errorRate: 0.05 })).toBe(1);
     expect(edgeStrokeAlpha({ dimmed: false, highlighted: true })).toBe(1);
-    expect(edgeStrokeAlpha({ dimmed: true, highlighted: false })).toBe(0.22);
+    expect(edgeStrokeAlpha({ dimmed: true, highlighted: false })).toBe(0.12);
   });
 
   it('formats a short error-rate label', () => {
@@ -232,6 +242,32 @@ describe('graphVisual', () => {
     const hi = endpointsHighlight(edge('a', 'b', 'database'));
     expect([...hi.nodes].sort()).toEqual(['a', 'b']);
     expect([...hi.edges]).toEqual([edgeKey('a', 'b', 'database')]);
+  });
+
+  it('highlights incident edges when a node is hovered', () => {
+    const ab = { ...edge('a', 'b'), id: edgeKey('a', 'b', '') };
+    const ac = { ...edge('a', 'c'), id: edgeKey('a', 'c', '') };
+    const bc = { ...edge('b', 'c'), id: edgeKey('b', 'c', '') };
+    const hi = resolveHighlight({ edges: [ab, ac, bc], hoveredNode: 'a' });
+    expect(hi?.edges.has(ab.id)).toBe(true);
+    expect(hi?.edges.has(ac.id)).toBe(true);
+    expect(hi?.edges.has(bc.id)).toBe(false);
+  });
+
+  it('keeps a pinned edge highlighted when another edge is hovered', () => {
+    const ab = { ...edge('a', 'b'), id: edgeKey('a', 'b', '') };
+    const cd = { ...edge('c', 'd'), id: edgeKey('c', 'd', '') };
+    const hi = resolveHighlight({ edges: [ab, cd], pinnedEdge: ab.id, hoveredEdge: cd.id, hoveredNode: 'c' });
+    expect([...hi!.edges]).toEqual([ab.id]);
+    expect([...hi!.nodes].sort()).toEqual(['a', 'b']);
+  });
+
+  it('keeps a pinned edge even when a node is selected', () => {
+    const ab = { ...edge('a', 'b'), id: edgeKey('a', 'b', '') };
+    const cd = { ...edge('c', 'd'), id: edgeKey('c', 'd', '') };
+    const hi = resolveHighlight({ edges: [ab, cd], pinnedEdge: ab.id, selectedNode: 'c' });
+    expect([...hi!.edges]).toEqual([ab.id]);
+    expect([...hi!.nodes].sort()).toEqual(['a', 'b']);
   });
 
   it('opens centred on the bounding box, capped at 1:1', () => {
@@ -281,7 +317,7 @@ describe('graphVisual', () => {
     expect(graphTranslateExtent({ nodes: [], paneWidth: 1200, paneHeight: 600 })).toBeUndefined();
   });
 
-  it('lays a 7-rank topology out tightly enough to fit a normal pane whole', () => {
+  it('keeps a 7-rank topology at the ranksep floor and still fits the pane by zooming out', () => {
     const chain = ['user', 'gateway', 'index', 'quote', 'kline', 'report', 'clickhouse'];
     const edges = chain.slice(1).map((server, i) => edge(chain[i], server, '', 0, 100));
     const pane = { width: 1520, height: 760 };
@@ -292,10 +328,48 @@ describe('graphVisual', () => {
       width: SERVICE_NODE_WIDTH,
       height: node.height,
     }));
+    const xs = [...new Set(nodes.map((node) => Math.round(node.x)))].sort((a, b) => a - b);
+    expect(xs[1] - xs[0] - SERVICE_NODE_WIDTH).toBe(MIN_RANKSEP);
     const width = Math.max(...nodes.map((node) => node.x + node.width)) - Math.min(...nodes.map((node) => node.x));
-    expect(width).toBeLessThan(1600);
+    expect(width).toBe(SERVICE_NODE_WIDTH * 7 + MIN_RANKSEP * 6);
     const plan = planGraphViewport({ nodes, paneWidth: pane.width, paneHeight: pane.height });
-    expect(plan?.zoom).toBeGreaterThan(0.7);
+    expect(plan).not.toBeNull();
+    expect(plan!.zoom).toBeLessThan(1);
+    expect(plan!.zoom * width).toBeLessThanOrEqual(pane.width);
+  });
+
+  it('ranks volume on a log scale so a long tail of small calls does not vanish against one hot path', () => {
+    expect(edgeVolumeRank(0, 1000)).toBe(0);
+    expect(edgeVolumeRank(1000, 1000)).toBe(1);
+    expect(edgeVolumeRank(10, 0)).toBe(0);
+    const mid = edgeVolumeRank(100, 1000);
+    expect(mid).toBeGreaterThan(0.4);
+    expect(mid).toBeLessThan(0.8);
+  });
+
+  it('keeps every edge and only spends weight: quiet greens whisper, busy greens read, anomalies stay loud', () => {
+    const quiet = edgeEmphasis({ errorRate: 0, requestCount: 2, maxRequestCount: 1000, dimmed: false, highlighted: false });
+    const busy = edgeEmphasis({ errorRate: 0, requestCount: 1000, maxRequestCount: 1000, dimmed: false, highlighted: false });
+    const anomaly = edgeEmphasis({ errorRate: 0.09, requestCount: 1, maxRequestCount: 1000, dimmed: false, highlighted: false });
+    expect(quiet.stroke).toBe(EDGE_HEALTHY_STROKE_QUIET);
+    expect(busy.stroke).toBe(EDGE_HEALTHY_STROKE_PRIMARY);
+    expect(busy.screenWidthScale).toBeGreaterThan(quiet.screenWidthScale);
+    expect(quiet.screenWidthScale).toBeGreaterThanOrEqual(EDGE_HEALTHY_SCALE_MIN);
+    expect(quiet.screenWidthScale).toBeLessThan(0.5);
+    expect(anomaly.stroke).toContain('--fc-fill-error-rgb');
+    expect(anomaly.screenConstantWidth).toBe(true);
+    expect(anomaly.screenWidthScale).toBeGreaterThan(quiet.screenWidthScale);
+    expect(healthyLayeredStroke(EDGE_VOLUME_PRIMARY_RANK)).toBe(EDGE_HEALTHY_STROKE_PRIMARY);
+  });
+
+  it('flattens healthy edges in uniform contrast and still dims the rest on hover', () => {
+    const a = edgeEmphasis({ errorRate: 0, requestCount: 2, maxRequestCount: 1000, dimmed: false, highlighted: false, contrast: 'uniform' });
+    const b = edgeEmphasis({ errorRate: 0, requestCount: 1000, maxRequestCount: 1000, dimmed: false, highlighted: false, contrast: 'uniform' });
+    const dimmed = edgeEmphasis({ errorRate: 0, requestCount: 1000, maxRequestCount: 1000, dimmed: true, highlighted: false, contrast: 'uniform' });
+    expect(a.stroke).toBe(b.stroke);
+    expect(a.screenWidthScale).toBe(EDGE_HEALTHY_SCALE_UNIFORM);
+    expect(b.screenWidthScale).toBe(EDGE_HEALTHY_SCALE_UNIFORM);
+    expect(dimmed.stroke).toBe(EDGE_HEALTHY_STROKE_DIM);
   });
 
   it('filters detail topology to 1-hop and drops neighbors of neighbors', () => {

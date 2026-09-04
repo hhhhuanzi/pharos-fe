@@ -230,15 +230,37 @@ export function edgeStrokeGeometry(input: { screenWidth: number; zoom: number; s
 }
 
 /**
- * Healthy edges keep the green band — the graph read as a wall of lines because of their weight,
- * not their hue — but they take the pale, low-chroma step of the green ramp rather than the solid
- * one. `--fc-green-5` / `--fc-green-7` are alpha-over-canvas tokens, so they land pale on the
- * light theme and soft-but-visible on the dark one, and they already carry their own alpha: the
- * weight is in the colour, which is what lets the arrowhead (a plain `fill`) match the stroke.
- * Yellow and red keep the solid `--fc-fill-*` bands at full attention.
+ * Healthy edges stay green — never grey — and already carry alpha in the `--fc-green-*` ramp.
+ * Layered contrast spends that ramp: quiet calls sit on the pale end so the structure is still
+ * there, busy calls step up, and hover-dim drops one more step. Yellow and red keep `--fc-fill-*`.
  */
-export const EDGE_HEALTHY_STROKE = 'var(--fc-green-7)';
-export const EDGE_HEALTHY_STROKE_DIM = 'var(--fc-green-5)';
+export const EDGE_HEALTHY_STROKE_QUIET = 'var(--fc-green-3)';
+export const EDGE_HEALTHY_STROKE = 'var(--fc-green-5)';
+export const EDGE_HEALTHY_STROKE_PRIMARY = 'var(--fc-green-7)';
+export const EDGE_HEALTHY_STROKE_DIM = 'var(--fc-green-2)';
+
+/** Default: weight follows volume. Uniform: every healthy edge uses the same solid step. */
+export type EdgeContrastMode = 'layered' | 'uniform';
+
+/**
+ * Log-scaled 0–1 share of the busiest edge. Every edge stays drawn; this only feeds weight.
+ * Linear rank would collapse a long tail of small calls against one hot path.
+ */
+export function edgeVolumeRank(requestCount: number, maxRequestCount: number): number {
+  if (!Number.isFinite(requestCount) || requestCount <= 0) return 0;
+  if (!Number.isFinite(maxRequestCount) || maxRequestCount <= 0) return 0;
+  const capped = Math.min(requestCount, maxRequestCount);
+  return Math.log10(capped + 1) / Math.log10(maxRequestCount + 1);
+}
+
+export const EDGE_VOLUME_MID_RANK = 0.4;
+export const EDGE_VOLUME_PRIMARY_RANK = 0.7;
+
+export function healthyLayeredStroke(rank: number): string {
+  if (rank >= EDGE_VOLUME_PRIMARY_RANK) return EDGE_HEALTHY_STROKE_PRIMARY;
+  if (rank >= EDGE_VOLUME_MID_RANK) return EDGE_HEALTHY_STROKE;
+  return EDGE_HEALTHY_STROKE_QUIET;
+}
 
 /**
  * Arrowhead box, in `markerUnits="strokeWidth"` — React Flow's markers are multiples of the
@@ -264,7 +286,9 @@ export const EDGE_ANOMALY_SCREEN_SCALE = 0.75;
  * alone would have been a no-op: the scale factor and the skipped `EDGE_SCREEN_STROKE_MIN` clamp
  * apply at 1:1 just the same.
  */
-export const EDGE_HEALTHY_SCREEN_SCALE = 0.7;
+export const EDGE_HEALTHY_SCALE_MIN = 0.32;
+export const EDGE_HEALTHY_SCALE_MAX = 0.85;
+export const EDGE_HEALTHY_SCALE_UNIFORM = 0.7;
 
 export interface EdgeEmphasis {
   stroke: string;
@@ -275,21 +299,27 @@ export interface EdgeEmphasis {
   markerSize: number;
 }
 
+export interface EdgeEmphasisInput {
+  errorRate: number;
+  dimmed: boolean;
+  highlighted: boolean;
+  requestCount?: number;
+  maxRequestCount?: number;
+  /** Defaults to layered: low-traffic greens whisper, busy greens read, anomalies stay loud. */
+  contrast?: EdgeContrastMode;
+}
+
 /**
  * Colour, weight class and arrowhead size of one edge — the same rule on both topologies.
  *
- * The three colour bands stay: the canvas read as "all lines" because of weight, not hue. So the
- * healthy band drops the zoom compensation and moves to the pale end of the green ramp, while
- * yellow and red keep both their solid colour and a constant screen width — one clear step heavier
- * than the hairlines around them, but still thin. Hovering or selecting is a request to follow an
- * edge, so it comes back at full weight and full colour.
- *
- * Nothing here is mode-dependent: the two topologies differ in how much canvas they have, not in
- * what an edge means, and a healthy edge that is a whisper on one graph cannot be the loudest thing
- * on the other. The on-screen widths still land slightly apart, because the detail graph sits at
- * 1:1 while the global one fits below it — that is the zoom, not a second rule.
+ * Edges are not dropped. Layered contrast spends weight: a quiet healthy call is a hairline, a
+ * busy one is a real stroke, and yellow/red stay a constant screen width even when their volume
+ * is tiny. Uniform contrast flattens the healthy band so a large screen can treat every line as
+ * equal. Hovering or selecting is a request to follow an edge, so it comes back at full weight.
  */
-export function edgeEmphasis(input: { errorRate: number; dimmed: boolean; highlighted: boolean }): EdgeEmphasis {
+export function edgeEmphasis(input: EdgeEmphasisInput): EdgeEmphasis {
+  const contrast = input.contrast ?? 'layered';
+  const rank = edgeVolumeRank(input.requestCount ?? 0, input.maxRequestCount ?? 0);
   const banded = errorStroke(input.errorRate, edgeStrokeAlpha(input));
   if (input.highlighted) {
     return { stroke: banded, screenConstantWidth: true, screenWidthScale: 1, markerSize: EDGE_MARKER_SIZE };
@@ -297,10 +327,19 @@ export function edgeEmphasis(input: { errorRate: number; dimmed: boolean; highli
   if (!isHealthyEdge(input.errorRate)) {
     return { stroke: banded, screenConstantWidth: true, screenWidthScale: EDGE_ANOMALY_SCREEN_SCALE, markerSize: EDGE_MARKER_SIZE };
   }
+  if (contrast === 'uniform') {
+    return {
+      stroke: input.dimmed ? EDGE_HEALTHY_STROKE_DIM : EDGE_HEALTHY_STROKE_PRIMARY,
+      screenConstantWidth: false,
+      screenWidthScale: EDGE_HEALTHY_SCALE_UNIFORM,
+      markerSize: EDGE_MARKER_SIZE_THIN,
+    };
+  }
+  const scale = EDGE_HEALTHY_SCALE_MIN + rank * (EDGE_HEALTHY_SCALE_MAX - EDGE_HEALTHY_SCALE_MIN);
   return {
-    stroke: input.dimmed ? EDGE_HEALTHY_STROKE_DIM : EDGE_HEALTHY_STROKE,
+    stroke: input.dimmed ? EDGE_HEALTHY_STROKE_DIM : healthyLayeredStroke(rank),
     screenConstantWidth: false,
-    screenWidthScale: EDGE_HEALTHY_SCREEN_SCALE,
+    screenWidthScale: Math.round(scale * 100) / 100,
     markerSize: EDGE_MARKER_SIZE_THIN,
   };
 }
@@ -313,9 +352,9 @@ export function edgeEmphasis(input: { errorRate: number; dimmed: boolean; highli
 export const NODE_LABEL_FONT = 14;
 /**
  * Safety net under the spacing solve (`CARD_MIN_FIT_SCALE`), which is what is supposed to keep the
- * label readable. It only bites on a graph too wide to reach that scale even with the gaps fully
- * squeezed — the cards alone overflow — where growing the text is the last lever left that does
- * not feed back into the layout.
+ * label readable. It only bites on a graph too wide to reach that scale even with the vertical
+ * gaps fully squeezed — ranksep is no longer given up for fit — where growing the text is the
+ * last lever left that does not feed back into the layout.
  */
 export const NODE_MIN_SCREEN_FONT = 10.5;
 /**
@@ -343,7 +382,7 @@ export function edgeHighlightZIndex(highlighted: boolean): number {
 }
 
 export function edgeStrokeAlpha(input: { dimmed: boolean; highlighted: boolean; errorRate?: number }): number {
-  if (input.dimmed) return 0.22;
+  if (input.dimmed) return 0.12;
   if (input.highlighted) return 1;
   const rate = input.errorRate ?? 0;
   if (rate >= 0.05) return 1;
@@ -374,4 +413,38 @@ export function endpointsHighlight(edge: PharosServiceEdge): GraphHighlight {
     nodes: new Set([edge.client, edge.server]),
     edges: new Set([edgeKey(edge.client, edge.server, edge.connectionType)]),
   };
+}
+
+/** Drawn edge with a stable id — the highlight resolver keys off this, not a reconstructed pair. */
+export interface HighlightableEdge extends PharosServiceEdge {
+  id: string;
+}
+
+export interface ResolveHighlightInput {
+  edges: ReadonlyArray<HighlightableEdge>;
+  hoveredNode?: string;
+  hoveredEdge?: string;
+  selectedNode?: string;
+  /** Click-pinned RED chip. Outranks hover so zoom / pointer jitter cannot steal the highlight. */
+  pinnedEdge?: string;
+}
+
+function highlightByEdgeId(edges: ReadonlyArray<HighlightableEdge>, id: string | undefined): GraphHighlight | null {
+  if (!id) return null;
+  const edge = edges.find((item) => item.id === id);
+  return edge ? endpointsHighlight(edge) : null;
+}
+
+/**
+ * One highlight owner at a time. A pinned edge keeps the RED chip and neighborhood until
+ * explicitly released; node hover otherwise lights every incident edge.
+ */
+export function resolveHighlight(input: ResolveHighlightInput): GraphHighlight | null {
+  const pinned = highlightByEdgeId(input.edges, input.pinnedEdge);
+  if (pinned) return pinned;
+  if (input.hoveredNode) return incidentHighlight(input.hoveredNode, input.edges);
+  const hovered = highlightByEdgeId(input.edges, input.hoveredEdge);
+  if (hovered) return hovered;
+  if (input.selectedNode) return incidentHighlight(input.selectedNode, input.edges);
+  return null;
 }

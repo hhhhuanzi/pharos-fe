@@ -47,13 +47,18 @@ const zh_CN = {
   },
   graph: {
     hint: '线的颜色表示这段调用的错误率：绿色低于 1%，黄色低于 5%，红色达到或超过 5%；互相调用的两个服务合并为一条两端带箭头的线。鼠标放在线上可看两个方向各自的 P95 延迟和平均 QPS，点击线可把指标卡片固定住，点击服务可查看详情。',
+    range_fixed: '展示最近 1 小时的调用关系。',
+    edge_contrast: '边对比度',
+    edge_contrast_layered: '分层',
+    edge_contrast_uniform: '均匀',
     prom_placeholder: '选择 Prometheus',
     filter_service: '按服务名筛选',
     actual_size: '实际大小（1:1），看清服务名；用「适应画布」切回全貌',
     refresh: '刷新',
     no_prometheus: '没有可用的 Prometheus 数据源',
     load_failed: '查询失败，请检查数据源与 PromQL 权限',
-    empty: '当前时间范围没有 service_graph 数据。需要 Jaeger collector ocb 编入 service_graph，且须在 tail_sampling 之前；Prometheus 要能查到 traces_service_graph_*。没 ocb 时空图属预期。',
+    empty:
+      '当前时间范围没有 service_graph 数据。需要 Jaeger collector ocb 编入 service_graph，且须在 tail_sampling 之前；Prometheus 要能查到 traces_service_graph_*。没 ocb 时空图属预期。',
     edge_chip: {
       error_rate: '错误率： ',
       p95: 'P95延迟： ',

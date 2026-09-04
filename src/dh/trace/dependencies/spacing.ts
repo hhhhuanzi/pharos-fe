@@ -13,8 +13,6 @@ export interface GraphSpacing {
   edgesep: number;
 }
 
-/** Below this the bezier bulge of neighbouring ranks starts to overlap and arrows lose room. */
-export const MIN_RANKSEP = 36;
 /**
  * Rank gap that the card-width solve is not allowed to spend (see `planNodeWidth`).
  *
@@ -25,6 +23,16 @@ export const MIN_RANKSEP = 36;
  * it would cost is not, so the widening only gets what is left after this is set aside.
  */
 export const WIDENING_RESERVED_RANKSEP = 48;
+/**
+ * Minimum horizontal gap between LR ranks.
+ *
+ * `WIDENING_RESERVED_RANKSEP` (2 × `BEZIER_MIN_DX`) only keeps the control points from crossing.
+ * A hop that still reads as an arc needs that plus a mid-corridor for the bezier to run
+ * horizontally — otherwise neighbouring ranks sit so close the edge leaves travelling straight
+ * down. Twice the reserved gap is the smallest span that still bows. Fit scale yields if the
+ * pane cannot hold it: a slightly smaller label is better than a column of vertical lines.
+ */
+export const MIN_RANKSEP = WIDENING_RESERVED_RANKSEP * 2;
 /** Above this a small graph stops reading as connected and drifts apart. */
 export const MAX_RANKSEP = 180;
 export const MIN_NODESEP = 20;
@@ -33,12 +41,14 @@ export const EDGESEP = 12;
 
 /**
  * Floors used only while squeezing a graph that cannot otherwise be fitted at a readable card size
- * (the global topology). They are well below `MIN_*` on purpose: at a fit scale near 0.7 a 24px
- * rank gap is still 17px on screen and an 8px card gap is still 6px, so the gap was never the
- * thing that needed protecting — the card was. `TIGHT_RANKSEP` stops at `BEZIER_MIN_DX` so an edge
- * still has the horizontal room to leave one card and enter the next without bulging over either.
+ * (the global topology).
+ *
+ * Ranksep is no longer a squeeze lever: `TIGHT_RANKSEP` equals `MIN_RANKSEP`, so a graph that
+ * cannot fit at `CARD_MIN_FIT_SCALE` gives up vertical gaps and then zoom, never the horizontal
+ * corridor. Vertical floors stay well below `MIN_NODESEP` on purpose — at a fit scale near 0.7
+ * an 8px card gap is still 6px on screen.
  */
-export const TIGHT_RANKSEP = 24;
+export const TIGHT_RANKSEP = MIN_RANKSEP;
 export const TIGHT_NODESEP = 8;
 export const TIGHT_EDGESEP = 3;
 
@@ -127,7 +137,7 @@ export function planGraphSpacing(input: {
 }): GraphSpacing {
   const { container, rankCount, maxNodesPerRank, nodeWidth, nodeHeight } = input;
   const targetScale = input.targetScale && input.targetScale > 0 ? input.targetScale : SPACING_TARGET_SCALE;
-  const usable = (size: number) => size * (1 - GRAPH_FIT_PADDING * 2) / targetScale - GRAPH_MARGIN * 2;
+  const usable = (size: number) => (size * (1 - GRAPH_FIT_PADDING * 2)) / targetScale - GRAPH_MARGIN * 2;
   const gap = (available: number, count: number, cardSize: number, min: number, max: number) => {
     const gaps = count - 1;
     if (gaps <= 0) return max;
@@ -157,10 +167,12 @@ export interface SqueezeSpacingInput {
  * Scale each gap by the share of its whitespace that still fits.
  *
  * Only whitespace is negotiable, so the cards and dagre's margin come off both the box we got and
- * the box we are allowed, and the gap keeps the ratio between the two remainders. That is exact
- * horizontally — a rank really is cards plus gaps — and an under-estimate vertically, which is why
- * this runs a few times. A gap that already fits is returned unchanged, so the caller's loop stops
- * on the first pass that succeeds rather than squeezing past the point of need.
+ * the box we are allowed, and the gap keeps the ratio between the two remainders. Vertically that
+ * is an under-estimate (see `edgesep`), which is why this runs a few times. Horizontally the
+ * rank gap stops at `TIGHT_RANKSEP` — the readable-arc floor — even when the cards alone overflow:
+ * the opening fit then lands below `CARD_MIN_FIT_SCALE` instead of turning every hop into a
+ * vertical line. A gap that already fits is returned unchanged, so the caller's loop stops on the
+ * first pass that succeeds rather than squeezing past the point of need.
  */
 export function squeezeGraphSpacing(input: SqueezeSpacingInput): GraphSpacing {
   const scale = input.minFitScale && input.minFitScale > 0 ? input.minFitScale : CARD_MIN_FIT_SCALE;

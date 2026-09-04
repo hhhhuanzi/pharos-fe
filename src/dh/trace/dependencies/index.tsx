@@ -1,16 +1,16 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useDebounce } from 'ahooks';
-import { Button, Empty, Input, Select, Space, Spin, Tooltip } from 'antd';
+import { Button, Empty, Input, Segmented, Space, Spin, Tooltip } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
-import TimeRangePicker, { getDefaultValue, IRawTimeRange, timeRangeUnix } from '@/components/TimeRangePicker';
-import InputGroupWithFormItem from '@/components/InputGroupWithFormItem';
+import { timeRangeUnix } from '@/components/TimeRangePicker';
 import { CommonStateContext } from '@/App';
 import type { PharosServiceEdge } from '../contract';
 import type { TracePluginType } from '../types';
 import { edgeKey } from './promql';
 import { fetchServiceGraph } from './query';
-import { filterOneHopEdges } from './graphVisual';
+import { GRAPH_FIXED_RANGE } from './graphRange';
+import { filterOneHopEdges, type EdgeContrastMode } from './graphVisual';
 import { type GraphNodeKind } from './layout';
 import { enrichVirtualGraph, type VirtualGraphEnrichment } from './peerType';
 import ServiceGraphCanvas from './Graph';
@@ -18,7 +18,6 @@ import ServiceNodeDrawer from './ServiceNodeDrawer';
 import VirtualPeerDrawer from './VirtualPeerDrawer';
 import { fetchPeerMetasForGraph } from './virtualPeerQuery';
 
-const RANGE_LS = 'n9e-dh-service-graph-range';
 const PROM_LS = 'n9e-dh-service-graph-prom-id';
 const JAEGER_LS = 'n9e-dh-service-jaeger-id';
 const EMPTY_METAS = new Map();
@@ -72,17 +71,17 @@ export default function ServiceGraphPage(props: Props) {
     return prometheusList[0]?.id;
   });
   const tracingId = pickDatasourceId(tracingList, tracingPlugin === 'jaeger' ? readStoredId(JAEGER_LS) : undefined);
-  const [range, setRange] = useState<IRawTimeRange>(() => getDefaultValue(RANGE_LS, { start: 'now-1h', end: 'now' }) || { start: 'now-1h', end: 'now' });
   const [edges, setEdges] = useState<PharosServiceEdge[]>([]);
   const [visibleServices, setVisibleServices] = useState<string[]>();
   const [rangeSeconds, setRangeSeconds] = useState(3600);
   const [rangeMs, setRangeMs] = useState(() => {
-    const { start, end } = timeRangeUnix({ start: 'now-1h', end: 'now' });
+    const { start, end } = timeRangeUnix(GRAPH_FIXED_RANGE);
     return { start: start * 1000, end: end * 1000 };
   });
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [edgeContrast, setEdgeContrast] = useState<EdgeContrastMode>('layered');
   const [serviceFilter, setServiceFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string>();
   const [selectedNode, setSelectedNode] = useState<SelectedNode>();
@@ -107,7 +106,7 @@ export default function ServiceGraphPage(props: Props) {
       setFailed(false);
       return;
     }
-    const { start, end } = timeRangeUnix(range);
+    const { start, end } = timeRangeUnix(GRAPH_FIXED_RANGE);
     const seq = requestSeq.current + 1;
     requestSeq.current = seq;
     setLoading(true);
@@ -135,7 +134,7 @@ export default function ServiceGraphPage(props: Props) {
         if (requestSeq.current !== seq) return;
         setLoading(false);
       });
-  }, [datasourceId, range, refreshKey, oneHopService, env, cluster, namespace]);
+  }, [datasourceId, refreshKey, oneHopService, env, cluster, namespace]);
 
   /**
    * Services the backend says this user may see. An absent field (older backend, partial response)
@@ -145,7 +144,11 @@ export default function ServiceGraphPage(props: Props) {
 
   const scopedEdges = useMemo(() => (oneHopService ? filterOneHopEdges(edges, oneHopService) : edges), [edges, oneHopService]);
   const scopedKey = useMemo(
-    () => scopedEdges.map((edge) => edgeKey(edge.client, edge.server, edge.connectionType)).sort().join('\n'),
+    () =>
+      scopedEdges
+        .map((edge) => edgeKey(edge.client, edge.server, edge.connectionType))
+        .sort()
+        .join('\n'),
     [scopedEdges],
   );
   const namedEnrichment = useMemo(() => enrichVirtualGraph(scopedEdges, EMPTY_METAS), [scopedEdges]);
@@ -221,38 +224,26 @@ export default function ServiceGraphPage(props: Props) {
     <div className='flex flex-col gap-4'>
       <div className='fc-border rounded-lg bg-fc-100 p-4'>
         <Space wrap>
-          <InputGroupWithFormItem label={t('common:datasource.id')}>
-            <Select
-              showSearch
-              optionFilterProp='children'
-              style={{ minWidth: 180 }}
-              placeholder={t('graph.prom_placeholder')}
-              value={datasourceId}
-              onChange={(id) => {
-                setDatasourceId(id);
-                localStorage.setItem(PROM_LS, String(id));
-              }}
-            >
-              {prometheusList.map((ds) => (
-                <Select.Option key={ds.id} value={ds.id}>
-                  {ds.name}
-                </Select.Option>
-              ))}
-            </Select>
-          </InputGroupWithFormItem>
-          <TimeRangePicker localKey={RANGE_LS} value={range} onChange={(val) => val && setRange(val)} dateFormat='YYYY-MM-DD HH:mm:ss' />
-          <Input
-            allowClear
-            style={{ width: 200 }}
-            placeholder={t('graph.filter_service')}
-            value={serviceFilter}
-            onChange={(e) => setServiceFilter(e.target.value)}
-          />
+          <Input allowClear style={{ width: 200 }} placeholder={t('graph.filter_service')} value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} />
+          <div className='flex items-center gap-2'>
+            <span className='text-base text-hint'>{t('graph.edge_contrast')}</span>
+            <Segmented
+              value={edgeContrast}
+              onChange={(value) => setEdgeContrast(value as EdgeContrastMode)}
+              options={[
+                { label: t('graph.edge_contrast_layered'), value: 'layered' },
+                { label: t('graph.edge_contrast_uniform'), value: 'uniform' },
+              ]}
+            />
+          </div>
           <Tooltip title={t('graph.refresh')}>
             <Button icon={<ReloadOutlined />} onClick={() => setRefreshKey((k) => k + 1)} />
           </Tooltip>
         </Space>
-        <div className='mt-2 text-hint text-sm'>{t('graph.hint')}</div>
+        <div className='mt-2 flex flex-col gap-1 text-hint text-sm'>
+          <div>{t('graph.range_fixed')}</div>
+          <div>{t('graph.hint')}</div>
+        </div>
       </div>
 
       {/* The call-detail table used to sit below; give the freed space to the canvas. The floor
@@ -285,6 +276,7 @@ export default function ServiceGraphPage(props: Props) {
             nodeSubtitles={nodeSubtitles}
             nodeGlyphs={nodeGlyphs}
             focusService={oneHopService}
+            contrast={edgeContrast}
             onSelectEdge={handleSelectEdge}
             onSelectNode={handleSelectNode}
           />
@@ -293,11 +285,7 @@ export default function ServiceGraphPage(props: Props) {
 
       <VirtualPeerDrawer
         nodeId={selectedNode?.kind === 'virtual' ? selectedNode.id : undefined}
-        displayName={
-          selectedNode
-            ? [nodeLabels?.[selectedNode.id], nodeSubtitles?.[selectedNode.id]].filter(Boolean).join(' · ') || selectedNode.id
-            : undefined
-        }
+        displayName={selectedNode ? [nodeLabels?.[selectedNode.id], nodeSubtitles?.[selectedNode.id]].filter(Boolean).join(' · ') || selectedNode.id : undefined}
         edges={displayEdges}
         allowedServices={allowedServices}
         dataSourceId={tracingId}

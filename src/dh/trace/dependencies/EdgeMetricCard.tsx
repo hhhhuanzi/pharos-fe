@@ -74,7 +74,16 @@ export default function EdgeMetricCard(props: EdgeMetricCardProps) {
       {expanded ? (
         <div className='relative flex flex-col items-start gap-2 pr-4 text-left'>
           {pinned ? (
-            <button type='button' aria-label={closeLabel} title={closeLabel} className='absolute -right-1 -top-1 border-0 bg-transparent p-0 leading-none text-hint' onClick={onClose}>
+            <button
+              type='button'
+              aria-label={closeLabel}
+              title={closeLabel}
+              className='absolute -right-1 -top-1 border-0 bg-transparent p-0 leading-none text-hint'
+              onClick={(event) => {
+                event.stopPropagation();
+                onClose?.(event);
+              }}
+            >
               <CloseOutlined className='text-xs' />
             </button>
           ) : null}

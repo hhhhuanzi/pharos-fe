@@ -40,11 +40,7 @@ describe('layoutServiceGraph', () => {
   });
 
   it('spaces a fan-in so bezier corridors are not a single channel', () => {
-    const nodes = layoutServiceGraph([
-      edge('quote', 'redis', 'database'),
-      edge('kline', 'redis', 'database'),
-      edge('auth', 'redis', 'database'),
-    ]);
+    const nodes = layoutServiceGraph([edge('quote', 'redis', 'database'), edge('kline', 'redis', 'database'), edge('auth', 'redis', 'database')]);
     const sources = nodes.filter((n) => n.id !== 'redis').sort((a, b) => a.y - b.y);
     expect(sources[1].y - sources[0].y).toBeGreaterThanOrEqual(SERVICE_NODE_HEIGHT + MIN_NODESEP - 4);
     const redis = nodes.find((n) => n.id === 'redis');
@@ -70,9 +66,27 @@ describe('layoutServiceGraph', () => {
     expect(rankProfile(large).rankCount).toBe(7);
     expect(rankGap(small)).toBeGreaterThan(rankGap(large));
     expect(rankGap(small)).toBe(MAX_RANKSEP);
-    // A graph that cannot be fitted at a readable card size keeps giving up whitespace past the
-    // comfortable floor: the card is the constraint, the gap is what pays for it.
+    // Vertical gaps still pack; the rank gap stops at the readable-arc floor so hops stay bowed.
     expect(rankGap(large)).toBe(TIGHT_RANKSEP);
+  });
+
+  it('keeps neighbouring ranks far enough apart for a horizontal bezier after squeeze', () => {
+    const chain = ['user', 'gateway', 'index', 'quote', 'kline', 'report', 'clickhouse'];
+    const nodes = layoutServiceGraph(
+      chain.slice(1).map((server, i) => edge(chain[i], server)),
+      undefined,
+      undefined,
+      { width: 1280, height: 800 },
+    );
+    const width = nodes[0].width;
+    const xs = [...new Set(nodes.map((node) => Math.round(node.x)))].sort((a, b) => a - b);
+    expect(xs.length).toBeGreaterThanOrEqual(3);
+    const centerGaps = xs.slice(1).map((x, i) => x - xs[i]);
+    centerGaps.forEach((centerGap) => {
+      expect(centerGap).toBeGreaterThanOrEqual(width + TIGHT_RANKSEP);
+    });
+    // Columns stay even — the first hop must not hoard slack the middle hops then lose.
+    expect(Math.max(...centerGaps) - Math.min(...centerGaps)).toBeLessThanOrEqual(2);
   });
 
   it('reacts to the pane: the same graph gets wider gaps in a wider pane', () => {
@@ -89,9 +103,7 @@ describe('layoutServiceGraph', () => {
 
   it('keeps the detail topology on the comfortable floors, squeezing only the global graph', () => {
     const center = 'quote';
-    const edges = Array.from({ length: 12 }, (_, i) => edge(`client-${i}`, center)).concat(
-      Array.from({ length: 6 }, (_, i) => edge(center, `sink-${i}`)),
-    );
+    const edges = Array.from({ length: 12 }, (_, i) => edge(`client-${i}`, center)).concat(Array.from({ length: 6 }, (_, i) => edge(center, `sink-${i}`)));
     const pane = { width: 1280, height: 420 };
     const gaps = (nodes: Array<{ x: number; y: number }>) => {
       const xs = [...new Set(nodes.map((node) => Math.round(node.x)))].sort((a, b) => a - b);

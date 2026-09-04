@@ -47,6 +47,10 @@ const zh_HK = {
   },
   graph: {
     hint: '線的顏色表示這段呼叫的錯誤率：綠色低於 1%，黃色低於 5%，紅色達到或超過 5%；互相呼叫的兩個服務會合併為一條兩端帶箭頭的線。滑鼠放在線上可看兩個方向各自的 P95 延遲和平均 QPS，點擊線可把指標卡片固定住，點擊服務可查看詳情。',
+    range_fixed: '展示最近 1 小時的呼叫關係。',
+    edge_contrast: '邊對比度',
+    edge_contrast_layered: '分層',
+    edge_contrast_uniform: '均勻',
     prom_placeholder: '選擇 Prometheus',
     filter_service: '按服務名篩選',
     actual_size: '實際大小（1:1），看清服務名；用「適應畫布」切回全貌',

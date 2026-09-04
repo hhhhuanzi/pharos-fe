@@ -48,13 +48,18 @@ const ja_JP = {
   },
   graph: {
     hint: '線の色はこの呼び出しのエラー率を表します：緑は 1% 未満、黄は 5% 未満、赤は 5% 以上。相互に呼び出すサービスは両端に矢印の付いた 1 本の線にまとめます。線にマウスを置くと方向ごとの P95 遅延と平均 QPS が見られ、線をクリックすると指標カードを固定でき、サービスをクリックすると詳細を確認できます。',
+    range_fixed: '直近 1 時間の呼び出し関係を表示します。',
+    edge_contrast: '線のコントラスト',
+    edge_contrast_layered: '階層',
+    edge_contrast_uniform: '均一',
     prom_placeholder: 'Prometheus を選択',
     filter_service: 'サービス名で絞り込み',
     actual_size: '実際のサイズ（1:1）でサービス名を読む。全体に戻すには「画面に合わせる」',
     refresh: '更新',
     no_prometheus: '利用可能な Prometheus データソースがありません',
     load_failed: 'クエリに失敗しました。データソースと PromQL 権限を確認してください',
-    empty: 'この期間に service_graph データがありません。Jaeger collector を ocb して service_graph を tail_sampling より前に置く必要があります。ocb が無ければ空図は想定どおりです。',
+    empty:
+      'この期間に service_graph データがありません。Jaeger collector を ocb して service_graph を tail_sampling より前に置く必要があります。ocb が無ければ空図は想定どおりです。',
     edge_chip: {
       error_rate: 'エラー率： ',
       p95: 'P95遅延： ',
