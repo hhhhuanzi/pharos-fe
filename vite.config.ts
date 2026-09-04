@@ -58,7 +58,7 @@ export default defineConfig(({ mode }) => {
     base: baseName + '/',
     plugins: [
       lazyToEagerOnBuild(),
-      devSingleLocale(env.VITE_DEV_LOCALE || 'en_US'),
+      devSingleLocale(env.VITE_DEV_LOCALE || 'zh_CN'),
       react(),
       svgr({
         svgrOptions: {
