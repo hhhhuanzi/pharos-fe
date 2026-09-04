@@ -6,7 +6,8 @@ import { pickSpanmetricsFamily, SPANMETRICS_NAME_MATCH, type SpanmetricsFamily }
 /**
  * Thanos aborts queries around 20s and a matcher-less spanmetrics selector fans out to every series
  * in the fleet, so which candidate names exist has to come from the index, never from an instant
- * vector.
+ * vector. The match also covers `svc:*` recording rules; `pickSpanmetricsFamily` attaches them when
+ * present and the catalog falls back to raw increase/rate when they are missing.
  */
 const PROBE_URL_SUFFIX = 'api/v1/label/__name__/values';
 

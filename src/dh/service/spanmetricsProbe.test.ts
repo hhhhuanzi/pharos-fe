@@ -6,7 +6,7 @@ jest.mock('@/components/PromGraphCpt/services', () => ({
 
 jest.mock('@/utils/constant', () => ({ N9E_PATHNAME: 'n9e' }));
 
-import { SPANMETRICS_NAME_MATCH } from './spanmetrics';
+import { SPANMETRICS_NAME_MATCH, SVC_SPANMETRICS_CALLS_RATE1M, SVC_SPANMETRICS_DURATION_MS_BUCKET_RATE1M } from './spanmetrics';
 import { detectSpanmetricsFamily, resetSpanmetricsFamilyCache, SPANMETRICS_PROBE_TTL_MS, SPANMETRICS_PROBE_WINDOW_SECONDS } from './spanmetricsProbe';
 
 const END_UNIX = 1_700_000_000;
@@ -33,6 +33,25 @@ describe('detectSpanmetricsFamily', () => {
       durationScale: 0.001,
       serviceLabel: 'service_name',
     });
+  });
+
+  it('attaches svc:* when the index has recording rules, and omits them when it does not', async () => {
+    getPromDataMock.mockResolvedValue([
+      'traces_span_metrics_calls_total',
+      'traces_span_metrics_duration_milliseconds_bucket',
+      SVC_SPANMETRICS_CALLS_RATE1M,
+      SVC_SPANMETRICS_DURATION_MS_BUCKET_RATE1M,
+    ]);
+
+    expect(await detectSpanmetricsFamily(7, END_UNIX)).toEqual({
+      calls: 'traces_span_metrics_calls_total',
+      durationBucket: 'traces_span_metrics_duration_milliseconds_bucket',
+      durationScale: 0.001,
+      serviceLabel: 'service_name',
+      recordedCalls: SVC_SPANMETRICS_CALLS_RATE1M,
+      recordedDurationBucket: SVC_SPANMETRICS_DURATION_MS_BUCKET_RATE1M,
+    });
+    expect(SPANMETRICS_NAME_MATCH).toContain(SVC_SPANMETRICS_CALLS_RATE1M);
   });
 
   it('ignores non-string entries and unexpected payload shapes', async () => {

@@ -13,6 +13,7 @@ import type { PromVectorSample } from '@/dh/trace/dependencies/promql';
 
 import { fetchServiceCatalog, fetchServiceOverview, fetchServiceTopSeries } from './query';
 import type { PromMatrixSample } from './series';
+import { SVC_SPANMETRICS_CALLS_RATE1M, SVC_SPANMETRICS_DURATION_MS_BUCKET_RATE1M } from './spanmetrics';
 import { resetSpanmetricsFamilyCache } from './spanmetricsProbe';
 
 const PROM_ID = 6;
@@ -23,6 +24,7 @@ const TS = 1_700_000_000;
 
 const FAMILY_FULL = ['traces_span_metrics_calls_total', 'traces_span_metrics_duration_milliseconds_bucket'];
 const FAMILY_CALLS_ONLY = ['traces_span_metrics_calls_total'];
+const FAMILY_RECORDED = [...FAMILY_FULL, SVC_SPANMETRICS_CALLS_RATE1M, SVC_SPANMETRICS_DURATION_MS_BUCKET_RATE1M];
 
 /** `telemetry.sdk.language` is a declared connector dimension, so every real RED row carries one. */
 const ORDER = { service_name: 'order', deployment_environment_name: 'prod', telemetry_sdk_language: 'java' } as const;
@@ -211,6 +213,36 @@ describe('fetchServiceCatalog', () => {
     expect(res.rows).toEqual([]);
   });
 
+  it('reads catalog RED from recording rules when the probe finds svc:*', async () => {
+    const rec = { service_name: 'order', deployment_environment_name: 'prod' } as const;
+    stubProm({
+      names: FAMILY_RECORDED,
+      instant: [
+        [/sum_over_time\(svc:traces_span_metrics_calls:rate1m\{/, vector([sample(rec, '3')])],
+        [/sum_over_time\(svc:traces_span_metrics_duration_ms_bucket/, vector(bucketSamples(rec, BUCKETS))],
+        [/sum_over_time\(svc:traces_span_metrics_calls:rate1m\[/, vector([sample(rec, '300')])],
+        [/target_info/, vector([sample({ service_name: 'order', telemetry_sdk_language: 'java' }, '1')])],
+      ],
+    });
+
+    const res = await fetchServiceCatalog(PROM_ID, undefined, START, END);
+
+    expect(res.rows[0]).toMatchObject({
+      name: 'order',
+      env: 'prod',
+      language: 'java',
+      requestCount: 300,
+      failedCount: 3,
+      p95Seconds: 0.0005,
+      p99Seconds: 0.001,
+    });
+    const queries = sentQueries();
+    expect(queries.some((query) => query.includes(`sum_over_time(${SVC_SPANMETRICS_CALLS_RATE1M}`))).toBe(true);
+    expect(queries.some((query) => query.includes(`sum_over_time(${SVC_SPANMETRICS_DURATION_MS_BUCKET_RATE1M}`))).toBe(true);
+    expect(queries.some((query) => query.includes('increase('))).toBe(false);
+    expect(queries.some((query) => query.includes('increase(svc:'))).toBe(false);
+  });
+
   it('leaves RED blank without failing when this Prometheus has no spanmetrics at all', async () => {
     stubProm({ names: ['up'] });
     (getTraceServices as jest.Mock).mockResolvedValue([{ value: 'order' }]);
@@ -248,6 +280,24 @@ describe('fetchServiceOverview', () => {
     await expect(fetchServiceOverview(PROM_ID, 'order', START, END)).rejects.toThrow('502 timeout');
   });
 
+  it('keeps detail RED on raw spanmetrics when recording rules are present', async () => {
+    stubProm({
+      names: FAMILY_RECORDED,
+      instant: [
+        [/status_code/, vector([sample(ORDER, '3')])],
+        [/duration_milliseconds_bucket/, vector(bucketSamples(ORDER, BUCKETS))],
+        [/calls_total/, vector([sample({ ...ORDER, k8s_cluster_name: 'k8s-prod' }, '300')])],
+      ],
+    });
+
+    const res = await fetchServiceOverview(PROM_ID, 'order', START, END, 'prod');
+
+    expect(res.red).toMatchObject({ requestCount: 300, failedCount: 3, p95Seconds: 0.0005 });
+    const queries = sentQueries();
+    expect(queries.some((query) => query.includes('increase(traces_span_metrics_calls_total'))).toBe(true);
+    expect(queries.some((query) => query.includes('svc:'))).toBe(false);
+  });
+
   it('reports counts without latency for a calls-only family', async () => {
     stubProm({
       names: FAMILY_CALLS_ONLY,
@@ -281,6 +331,30 @@ describe('fetchServiceTopSeries', () => {
     expect(res.qps.map((item) => item.name)).toEqual(['order (prod)']);
     // The histogram is in milliseconds, so the quantile is scaled to seconds.
     expect(res.p95).toEqual([{ name: 'order (prod)', points: [[TS, 0.5]] }]);
+  });
+
+  it('reads top series from recording rules when the probe finds svc:*', async () => {
+    stubProm({
+      names: FAMILY_RECORDED,
+      range: [
+        [/svc:traces_span_metrics_duration_ms_bucket/, matrix([series({ service_name: 'order', deployment_environment_name: 'prod' }, '500')])],
+        [/svc:traces_span_metrics_calls:rate1m/, matrix([series({ service_name: 'order', deployment_environment_name: 'prod' }, '2')])],
+      ],
+    });
+
+    const res = await fetchServiceTopSeries(PROM_ID, refs, START, END);
+
+    expect(res.qps.map((item) => item.name)).toEqual(['order (prod)']);
+    expect(res.p95).toEqual([{ name: 'order (prod)', points: [[TS, 0.5]] }]);
+    const queries = sentQueries('range');
+    expect(queries).toHaveLength(3);
+    expect(queries.every((query) => query.includes('svc:'))).toBe(true);
+    expect(queries.some((query) => query.includes('increase(svc:'))).toBe(false);
+    expect(queries.some((query) => query.includes('rate(svc:'))).toBe(false);
+    expect(queries.some((query) => query.includes('rate(traces_span_metrics_duration_milliseconds_bucket'))).toBe(false);
+    expect(
+      queries.some((query) => query.includes(`histogram_quantile(0.95, sum by (service_name, deployment_environment_name, le) (${SVC_SPANMETRICS_DURATION_MS_BUCKET_RATE1M}`)),
+    ).toBe(true);
   });
 
   it('leaves the P95 curve empty for a calls-only family rather than drawing an edge quantile', async () => {
