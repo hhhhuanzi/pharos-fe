@@ -8,13 +8,7 @@ import { CommonStateContext } from '@/App';
 import PageLayout from '@/components/pageLayout';
 import { timeRangeUnix } from '@/components/TimeRangePicker';
 import { EnvTag } from '@/dh/env';
-import {
-  buildServiceListPath,
-  decodeServiceParam,
-  fetchServiceOverview,
-  parseServiceIdentity,
-  type ServiceAssociation,
-} from '@/dh/service';
+import { buildServiceListPath, decodeServiceParam, fetchServiceOverview, parseServiceIdentity, type ServiceAssociation } from '@/dh/service';
 import { BusinessTags, checkResultTeams, checkServiceTeamAccess, localCanViewAll, type NamedTeam } from '@/dh/serviceTeam';
 
 import { DEFAULT_DETAIL_TAB, isDeferredDetailTab, isVisibleDetailTab, NS, PATH } from './constants';
@@ -89,6 +83,7 @@ export default function ServiceDetailPage() {
     const { start, end } = timeRangeUnix({ start: 'now-1h', end: 'now' });
     const seq = requestSeq.current + 1;
     requestSeq.current = seq;
+    setAssociation({ clusters: [], namespaces: [] });
     setAssociationReady(false);
     fetchServiceOverview(promId, service, start, end, identity.env)
       .then((res) => {
@@ -133,6 +128,8 @@ export default function ServiceDetailPage() {
   const cluster = identity.cluster || (association.clusters.length ? association.clusters.join(', ') : undefined);
   const namespace = identity.namespace || (association.namespaces.length ? association.namespaces.join(', ') : undefined);
   const meta = [cluster ? `${t('identity.cluster')}: ${cluster}` : null, namespace ? `${t('identity.namespace')}: ${namespace}` : null].filter(Boolean);
+  const monitoringClusters = associationReady ? (identity.cluster ? [identity.cluster] : association.clusters) : undefined;
+  const monitoringNamespaces = associationReady ? (identity.namespace ? [identity.namespace] : association.namespaces) : undefined;
 
   if (!service) {
     return <Redirect to={buildServiceListPath()} />;
@@ -161,6 +158,12 @@ export default function ServiceDetailPage() {
       <div className='flex flex-col gap-4'>
         {identity.env || meta.length || teamBindings.length ? (
           <div className='flex flex-wrap items-center gap-2 text-sm text-hint'>
+            {teamBindings.length ? (
+              <span className='flex items-center gap-2'>
+                {`${t('table.team')}:`}
+                <BusinessTags teams={teamBindings} />
+              </span>
+            ) : null}
             {identity.env ? (
               <span className='flex items-center gap-2'>
                 {`${t('identity.env')}:`}
@@ -168,21 +171,11 @@ export default function ServiceDetailPage() {
               </span>
             ) : null}
             {meta.length ? <span>{meta.join(' · ')}</span> : null}
-            {teamBindings.length ? (
-              <span className='flex items-center gap-2'>
-                {`${t('table.team')}:`}
-                <BusinessTags teams={teamBindings} />
-              </span>
-            ) : null}
           </div>
         ) : null}
         <Tabs activeKey={tab} onChange={replaceTab}>
           <Tabs.TabPane tab={t('tab.monitoring')} key='monitoring'>
-            <Monitoring
-              service={service}
-              clusters={identity.cluster ? [identity.cluster] : association.clusters}
-              namespaces={identity.namespace ? [identity.namespace] : association.namespaces}
-            />
+            <Monitoring service={service} env={identity.env} clusters={monitoringClusters} namespaces={monitoringNamespaces} />
           </Tabs.TabPane>
           <Tabs.TabPane tab={t('tab.topology')} key='topology'>
             {/* antd 4 keeps visited panes at display:none; Graph must not measure at 0×0. */}

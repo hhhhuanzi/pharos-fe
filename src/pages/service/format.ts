@@ -1,3 +1,4 @@
+import { errorRateTone } from '@/dh/status';
 import { formatDuration } from '@/pages/traceCpt/utils/date';
 
 export function formatQps(qps?: number): string {
@@ -12,11 +13,12 @@ export function formatErrorRate(rate?: number): string {
   return `${(rate * 100).toFixed(rate >= 0.1 ? 1 : 2)}%`;
 }
 
+/**
+ * Kept as the list's local name for the colour, but the scale itself lives in `@/dh/status` so the
+ * list, the monitoring tab, the dependency graph and the node drawer cannot drift apart.
+ */
 export function errorRateClass(rate?: number): string {
-  if (rate == null) return 'text-soft';
-  if (rate >= 0.05) return 'text-error';
-  if (rate >= 0.01) return 'text-warning';
-  return 'text-success';
+  return errorRateTone(rate);
 }
 
 export function formatLatency(seconds?: number): string {

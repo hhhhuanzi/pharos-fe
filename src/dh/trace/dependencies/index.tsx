@@ -10,7 +10,7 @@ import type { TracePluginType } from '../types';
 import { edgeKey } from './promql';
 import { fetchServiceGraph } from './query';
 import { GRAPH_FIXED_RANGE } from './graphRange';
-import { filterOneHopEdges, type EdgeContrastMode } from './graphVisual';
+import { defaultEdgeContrast, filterOneHopEdges, type EdgeContrastMode } from './graphVisual';
 import { type GraphNodeKind } from './layout';
 import { enrichVirtualGraph, type VirtualGraphEnrichment } from './peerType';
 import ServiceGraphCanvas from './Graph';
@@ -81,7 +81,7 @@ export default function ServiceGraphPage(props: Props) {
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [edgeContrast, setEdgeContrast] = useState<EdgeContrastMode>('layered');
+  const [edgeContrast, setEdgeContrast] = useState<EdgeContrastMode>(() => defaultEdgeContrast(oneHopService));
   const [serviceFilter, setServiceFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string>();
   const [selectedNode, setSelectedNode] = useState<SelectedNode>();

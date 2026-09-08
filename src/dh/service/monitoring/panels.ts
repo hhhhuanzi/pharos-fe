@@ -1,4 +1,6 @@
 import { buildPromRatio } from '../series';
+import type { MonitoringYAxisMode } from './axis';
+import type { MonitoringLegendPreference, MonitoringSeriesReference } from './chartTheme';
 import type { MonitoringNameRewrite, MonitoringUnit } from './format';
 import { JVM_SECTION } from './sections/jvm';
 import { MIDDLEWARE_SECTION } from './sections/middleware';
@@ -21,14 +23,36 @@ export interface MonitoringTargetDef {
   /** i18n key for a label-less series name (threshold lines) or a suffix (direction). */
   nameKey?: string;
   nameRewrite?: MonitoringNameRewrite;
-  /** Threshold lines are drawn dashed so they read as a reference, not as measured data. */
-  dashed?: boolean;
+  /**
+   * Marks the series as something the measured ones are compared *against* rather than one of
+   * them: chrome grey, dashed, no palette slot, no area fill. See `MonitoringSeriesReference` for
+   * why a static `threshold` is a hairline while a moving `baseline` keeps full weight.
+   */
+  reference?: MonitoringSeriesReference;
   /** Instant vector at range end. Stats / tables default to this; charts stay range queries. */
   instant?: boolean;
   /** How to collapse a matrix into one number for a stat card. */
   reduce?: MonitoringReduce;
-  /** Empty series: RED uses "未接入"; OOM uses 0; everything else uses an em dash. */
+  /**
+   * What an empty result means for *this* query. An empty result is not automatically a missing
+   * sample: see `absent: 'zero'` below.
+   *
+   * - `uninstrumented`: the series only exists once the service is instrumented, so no series means
+   *   no instrumentation. RED metrics use this.
+   * - `zero`: the series only exists once the event has happened at least once, so no series means
+   *   it never happened — the reading is a real 0, graded like any other 0.
+   * - `dash` (default): the exporter should always be publishing this, so no series means we failed
+   *   to collect it. Genuinely unknown.
+   */
   absent?: MonitoringAbsentMode;
+  /**
+   * Only read when `absent: 'zero'`. RefId of a sibling target in the same panel that proves the
+   * exporter behind this query is actually being scraped: same exporter, same label matcher, but a
+   * series that exists whether or not anything happened. If that sibling is empty too, nothing
+   * about this container is being reported, so "it never happened" would be a guess and the em
+   * dash is the honest answer.
+   */
+  absentZeroRequires?: string;
   /** Override the panel unit for mixed-unit stat cards. */
   unit?: MonitoringUnit;
   /** i18n key for a secondary stat metric or a table-adjacent label. */
@@ -52,8 +76,16 @@ export interface MonitoringPanelDef {
   /** Extra explanation rendered as a tooltip on the panel title. */
   hintKey?: string;
   unit: MonitoringUnit;
+  /** Y-axis strategy; defaults to the unit's natural mode (see `axis.ts`). */
+  yAxis?: MonitoringYAxisMode;
   /** antd grid span within a 24-column row. */
   span: number;
+  /**
+   * Multi-series legends sit under the plot by default. A panel sets this only when its series
+   * names are short and fixed enough that a side column costs less width than a legend row costs
+   * height — see `replicas.ts`. Single-series panels never show a legend either way.
+   */
+  legend?: MonitoringLegendPreference;
   kind?: MonitoringPanelKind;
   /** First two targets render as `a / b` (ready replicas). */
   primaryAsPair?: boolean;
@@ -94,13 +126,13 @@ function cpuPanel(): MonitoringPanelDef {
       {
         refId: 'request',
         nameKey: 'monitoring.legend.request',
-        dashed: true,
+        reference: 'budget',
         build: (scope) => `max(kube_pod_container_resource_requests${containerMatcher(scope, ['resource="cpu"'])})`,
       },
       {
         refId: 'limit',
         nameKey: 'monitoring.legend.limit',
-        dashed: true,
+        reference: 'ceiling',
         build: (scope) => `max(kube_pod_container_resource_limits${containerMatcher(scope, ['resource="cpu"'])})`,
       },
     ],
@@ -144,13 +176,13 @@ function memoryPanel(): MonitoringPanelDef {
       {
         refId: 'request',
         nameKey: 'monitoring.legend.request',
-        dashed: true,
+        reference: 'budget',
         build: (scope) => `max(kube_pod_container_resource_requests${containerMatcher(scope, ['resource="memory"'])})`,
       },
       {
         refId: 'limit',
         nameKey: 'monitoring.legend.limit',
-        dashed: true,
+        reference: 'ceiling',
         build: (scope) => `max(kube_pod_container_resource_limits${containerMatcher(scope, ['resource="memory"'])})`,
       },
     ],
@@ -165,7 +197,6 @@ function networkPanel(): MonitoringPanelDef {
   return {
     id: 'container_network',
     titleKey: 'monitoring.panel.network',
-    hintKey: 'monitoring.panel.network_hint',
     unit: 'bytesPerSecond',
     span: 12,
     targets: [
@@ -183,15 +214,20 @@ export const WORKLOAD_SECTION: MonitoringSectionDef = {
   panels: [cpuPanel(), cpuThrottlingPanel(), memoryPanel(), networkPanel()],
 };
 
-export const MONITORING_SECTIONS: MonitoringSectionDef[] = [
-  SUMMARY_SECTION,
-  TRAFFIC_SECTION,
-  WORKLOAD_SECTION,
-  REPLICAS_SECTION,
-  JVM_SECTION,
-  NODE_SECTION,
-  MIDDLEWARE_SECTION,
-];
+/**
+ * Reading order is symptom → cause, then outwards from the service: the summary, the request side
+ * that tells you whether anything is actually wrong (RED), then the candidate causes in the order
+ * a service owner rules them out — are the instances up (replicas), are they starved (workload),
+ * is the runtime itself struggling (JVM), is the machine underneath dragging us down (node), is a
+ * dependency to blame (middleware).
+ *
+ * The reverse (status → resource → traffic) was tried and reads backwards: it asks the reader to
+ * study causes before knowing whether there is a symptom to explain.
+ *
+ * Sections that are routinely empty sit at the end so an uninstrumented service does not open on a
+ * blank panel: JVM is empty without a Java probe, middleware is empty for everyone this period.
+ */
+export const MONITORING_SECTIONS: MonitoringSectionDef[] = [SUMMARY_SECTION, TRAFFIC_SECTION, REPLICAS_SECTION, WORKLOAD_SECTION, JVM_SECTION, NODE_SECTION, MIDDLEWARE_SECTION];
 
 export function batchRefId(panelId: string, targetRefId: string): string {
   return `${panelId}.${targetRefId}`;
@@ -210,12 +246,7 @@ function targetIsInstant(panel: MonitoringPanelDef, target: MonitoringTargetDef)
 }
 
 /** Flattens a section into one batch payload, keeping the panel each query belongs to. */
-export function buildSectionQueries(
-  section: MonitoringSectionDef,
-  scope: MonitoringScope,
-  rateWindow: string,
-  rangeWindow = '1h',
-): MonitoringSectionQuery[] {
+export function buildSectionQueries(section: MonitoringSectionDef, scope: MonitoringScope, rateWindow: string, rangeWindow = '1h'): MonitoringSectionQuery[] {
   return section.panels.flatMap((panel) =>
     panel.targets.map((target) => ({
       ...target,

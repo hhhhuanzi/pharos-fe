@@ -8,6 +8,10 @@ function replicaTrendPanel(): MonitoringPanelDef {
     hintKey: 'monitoring.panel.replicas_hint',
     unit: 'count',
     span: 12,
+    // Three fixed, one-word series names, so the side column takes ~60px and costs the plot less
+    // than a legend row costs its height. The pod-name panels stay bottom-legend: their labels are
+    // long enough that a side column would eat the plot instead.
+    legend: 'right',
     targets: [
       {
         refId: 'available',
@@ -17,7 +21,11 @@ function replicaTrendPanel(): MonitoringPanelDef {
       {
         refId: 'desired',
         nameKey: 'monitoring.legend.desired',
-        dashed: true,
+        // A `baseline`, not a `threshold`: desired replicas is a real time series shown next to the
+        // available / unavailable counts it is read against, so it carries the same line weight as
+        // them and only the dash marks it as the target. As a threshold it came out a hairline,
+        // which made it thinner in the legend than the tooltip chip next to the same name.
+        reference: 'baseline',
         build: (scope) => `sum(kube_deployment_spec_replicas${workloadMatcher(scope)})`,
       },
       {
@@ -33,7 +41,6 @@ function restartsPanel(): MonitoringPanelDef {
   return {
     id: 'replicas_restarts',
     titleKey: 'monitoring.panel.restarts',
-    hintKey: 'monitoring.panel.restarts_hint',
     unit: 'count',
     span: 12,
     targets: [
@@ -50,7 +57,6 @@ function waitingTable(): MonitoringPanelDef {
   return {
     id: 'replicas_waiting',
     titleKey: 'monitoring.panel.waiting',
-    hintKey: 'monitoring.panel.waiting_hint',
     kind: 'table',
     unit: 'count',
     span: 24,
@@ -91,7 +97,6 @@ function podsTable(): MonitoringPanelDef {
   return {
     id: 'replicas_pods',
     titleKey: 'monitoring.panel.pods',
-    hintKey: 'monitoring.panel.pods_hint',
     kind: 'table',
     unit: 'short',
     span: 24,

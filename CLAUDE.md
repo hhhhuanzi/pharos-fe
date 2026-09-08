@@ -97,6 +97,8 @@ Less/CSS 侧要求：
 ## 测试
 
 - 使用 Jest。
+- **测试范围与改动范围匹配**：日常小需求、小 bug 修复只跑与改动直接相关的测试，例如只改了 `src/dh/service/monitoring` 就跑 `npx jest src/dh/service/monitoring`，必要时收敛到单个测试文件。
+- 完整、全面的测试只在版本发布前跑；平时全量既慢又费 token。同理不要主动跑 `npm run build` / `npx tsc` 等项目级命令，确有需要时先问用户。
 - 测试文件命名：`*.test.ts` / `*.test.tsx` 或 `*.spec.ts` / `*.spec.tsx`，与待测文件同目录或约定目录即可。
 - 测试中的数据字面量优先使用 `as const` 收窄类型，防止字符串/数值被扩宽，在 IDE 中捕获拼写错误：
   ```typescript

@@ -200,7 +200,8 @@ module.exports = {
       placeholder: 'var(--fc-text-placeholder)',
       error: 'var(--fc-fill-error)',
       alert: 'var(--fc-fill-alert)',
-      warning: 'var(--fc-fill-warning)',
+      // 只有黄色分了文字档和填充档：`bg-warning` 仍是 `--fc-fill-warning`，理由见 variable.css
+      warning: 'var(--fc-text-warning)',
       success: 'var(--fc-fill-success)',
     }),
     screens: {

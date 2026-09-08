@@ -4,7 +4,7 @@
 - Avoid antd 5-only APIs (`ConfigProvider theme`, `theme.useToken`, `Modal open`, `Tabs items`, `Dropdown menu`, ...); this repo is antd 4.
 - For UI work, read `.cursor/skills/pharos-ui-design-system/SKILL.md` first (theme CSS variables, Tailwind/Less split, typography and spacing scales, dashboard card rules, pre-change checklist).
 - After making code changes, do not run `npm run build` or `npx tsc` unless the user explicitly asks for it.
-- If verification is useful, prefer lighter checks that are relevant to the changed files, or ask before running expensive project-wide commands.
+- If verification is useful, prefer lighter checks that are relevant to the changed files, or ask before running expensive project-wide commands. Concretely, for small features and bug fixes run only the tests covering what you touched (for example `npx jest src/dh/service/monitoring` after editing that directory, or even a single test file); reserve the full suite for pre-release verification, because a full run is slow and burns tokens.
 - After modifying source files, run `./node_modules/.bin/prettier --write` on the changed files and verify them with `./node_modules/.bin/prettier --check` before delivery. Follow `.prettierrc.json`; do not leave formatting-only violations in changed files.
 - Prefer native type-checking APIs over lodash for type narrowing: use `Array.isArray` instead of `_.isArray`, `typeof x === 'number'` instead of `_.isNumber`, `x == null` instead of `_.isNil`, etc. Lodash type guard functions are not recognized by TypeScript when `@types/lodash` is unavailable, leaving `unknown` types un-narrowed.
 

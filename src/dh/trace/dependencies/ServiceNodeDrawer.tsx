@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Drawer, Empty, Spin, Table } from 'antd';
 import type { ColumnsType } from 'antd/lib/table';
 import { useTranslation } from 'react-i18next';
+import { errorRateTone } from '@/dh/status';
 import { formatDuration } from '@/pages/traceCpt/utils/date';
 import { searchTraces } from '../api';
 import type { PharosServiceEdge } from '../contract';
@@ -116,7 +117,7 @@ export default function ServiceNodeDrawer(props: Props) {
       title: t('graph.columns.error_rate'),
       dataIndex: 'errorRate',
       width: 80,
-      render: (v: number) => <span className={v >= 0.05 ? 'text-error' : v >= 0.01 ? 'text-warning' : 'text-success'}>{formatErrorRatePercent(v)}</span>,
+      render: (v: number) => <span className={errorRateTone(v)}>{formatErrorRatePercent(v)}</span>,
     },
     {
       title: t('graph.columns.qps'),

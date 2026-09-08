@@ -1,3 +1,5 @@
+import { ERROR_RATE_WARNING, errorRateLevel, statusFillRgb, type StatusLevel } from '@/dh/status';
+
 import type { PharosServiceEdge } from '../contract';
 import { edgeKey } from './promql';
 
@@ -5,13 +7,6 @@ export const TYPED_CONNECTIONS = ['database', 'messaging_system', 'virtual_node'
 
 export function isTypedConnection(type: string): boolean {
   return type === 'database' || type === 'messaging_system' || type === 'virtual_node';
-}
-
-/** Product thresholds: green <1%, yellow <5%, red ≥5%. */
-export function errorTone(rate: number): 'success' | 'warning' | 'error' {
-  if (rate >= 0.05) return 'error';
-  if (rate >= 0.01) return 'warning';
-  return 'success';
 }
 
 export function formatErrorRatePercent(rate: number): string {
@@ -55,15 +50,14 @@ export function filterOneHopEdges(edges: PharosServiceEdge[], service: string): 
 
 /**
  * Stroke uses token RGB + alpha so idle edges still show the three error-rate
- * bands (not washed-out grey). Thresholds stay product-defined: <1% / <5% / ≥5%.
+ * bands (not washed-out grey), from the same tokens the text classes use.
  */
 export function errorStroke(rate: number, alpha = 1): string {
-  const rgb = rate >= 0.05 ? 'var(--fc-fill-error-rgb)' : rate >= 0.01 ? 'var(--fc-fill-warning-rgb)' : 'var(--fc-fill-success-rgb)';
-  return `rgb(${rgb} / ${alpha})`;
+  return statusFillRgb(errorRateLevel(rate), alpha);
 }
 
 /** Product threshold for "nothing to look at here": below it an edge is connective tissue. */
-export const HEALTHY_ERROR_RATE = 0.01;
+export const HEALTHY_ERROR_RATE = ERROR_RATE_WARNING;
 
 export function isHealthyEdge(rate: number): boolean {
   return rate < HEALTHY_ERROR_RATE;
@@ -243,6 +237,14 @@ export const EDGE_HEALTHY_STROKE_DIM = 'var(--fc-green-2)';
 export type EdgeContrastMode = 'layered' | 'uniform';
 
 /**
+ * Page-level initial contrast. Global topology has no focus service → layered.
+ * Service-detail topology (`focusService` set) → uniform. No persist — only the first paint.
+ */
+export function defaultEdgeContrast(focusService?: string): EdgeContrastMode {
+  return focusService ? 'uniform' : 'layered';
+}
+
+/**
  * Log-scaled 0–1 share of the busiest edge. Every edge stays drawn; this only feeds weight.
  * Linear rank would collapse a long tail of small calls against one hot path.
  */
@@ -381,13 +383,13 @@ export function edgeHighlightZIndex(highlighted: boolean): number {
   return highlighted ? 2 : 0;
 }
 
+/** Opacity follows the same three bands as the colour, so a worse edge is also a firmer line. */
+const EDGE_ALPHA: Record<StatusLevel, number> = { success: 0.78, warning: 0.92, error: 1 };
+
 export function edgeStrokeAlpha(input: { dimmed: boolean; highlighted: boolean; errorRate?: number }): number {
   if (input.dimmed) return 0.12;
   if (input.highlighted) return 1;
-  const rate = input.errorRate ?? 0;
-  if (rate >= 0.05) return 1;
-  if (rate >= 0.01) return 0.92;
-  return 0.78;
+  return EDGE_ALPHA[errorRateLevel(input.errorRate ?? 0)];
 }
 
 export interface GraphHighlight {

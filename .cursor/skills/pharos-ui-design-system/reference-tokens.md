@@ -41,13 +41,16 @@ Tailwind 映射：`tailwind.config.js`
 | 变量 | 浅色 | 深色 | Tailwind（文字 / 背景） | 语义 |
 | --- | --- | --- | --- | --- |
 | `--fc-fill-success` | `0 167 0` | `33 196 93` | `text-success` / `bg-success` | 正常、健康、成功 |
-| `--fc-fill-warning` | `250 200 0` | `245 194 10` | `text-warning` / `bg-warning` | 需关注、降级 |
+| `--fc-fill-warning` | `250 200 0` | `245 194 10` | `bg-warning`（填充 / SVG 描边） | 需关注、降级 |
+| `--fc-text-warning` | `149 115 0` | `255 206 53` | `text-warning` | 同上，文字专用档 |
 | `--fc-fill-alert` | `250 125 0` | `240 110 10` | `text-alert` / `bg-alert` | 次高危 |
 | `--fc-fill-error` | `200 0 0` | `239 67 67` | `text-error` / `bg-error` | 故障、失败 |
 | `--fc-fill-primary` | `108 83 177` | `148 112 255` | `bg-primary` | 品牌主色 |
 | `--fc-fill-gold` | `#ffbc0d` | 同 | — | 特殊标记 |
 
 无数据 / 禁用不用状态色，用 `text-soft` / `text-disable`。
+
+**只有黄色分了文字档和填充档**：`--fc-fill-warning` 在白底上只有 1.6:1，做 12px 文字读不清，所以 `text-warning` 指向 `--fc-text-warning`（浅色 4.4:1）。其余三档文字与填充仍共用一个变量。
 
 ## 4. 边框与阴影
 

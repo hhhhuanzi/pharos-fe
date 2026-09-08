@@ -20,11 +20,22 @@ function spanP95Ms(scope: MonitoringScope, window: string): string {
   return `histogram_quantile(0.95, sum by (le) (rate(${DURATION_MS_BUCKET}${spanmetricsMatcher(scope)}[${window}])))`;
 }
 
+/**
+ * All three RED numbers come from the same spanmetrics source, so an empty result is the same
+ * answer for all three: no spans were ever reported. That is why they say "未接入" instead of 0 —
+ * and why there is no sibling here that could act as an `absentZeroRequires` guard, unlike the
+ * replica card.
+ *
+ * "Instrumented but idle" still shows real zeroes rather than "未接入": the calls counter keeps
+ * being exported once it exists, so `rate` over a flat counter is 0, and the error ratio's
+ * `or (total * 0)` in `buildPromRatio` turns "traffic but no failures" into a genuine 0% instead of
+ * an empty result. P95 stays absent in that case on purpose — a percentile over no requests is
+ * undefined, not zero.
+ */
 function trafficCard(): MonitoringPanelDef {
   return {
     id: 'summary_traffic',
     titleKey: 'monitoring.stat.traffic',
-    hintKey: 'monitoring.stat.traffic_hint',
     kind: 'stat',
     unit: 'ops',
     span: 8,
@@ -80,13 +91,22 @@ function readyCard(): MonitoringPanelDef {
         refId: 'restarts',
         labelKey: 'monitoring.stat.restarts',
         unit: 'count',
+        // kube-state-metrics publishes `..._restarts_total` for every container from the moment it
+        // is created, at 0, so `increase` over a container that never restarted returns 0 rather
+        // than nothing. An empty result therefore means the exporter or the matcher failed, not
+        // that the service is calm — which is also what makes this the guard for OOM below.
         build: (scope, _rate, rangeWindow) => `sum(increase(kube_pod_container_status_restarts_total${containerMatcher(scope)}[${rangeWindow}]))`,
       },
       {
         refId: 'oom',
         labelKey: 'monitoring.stat.oom',
         unit: 'count',
+        // `kube_pod_container_status_last_terminated_reason` carries the reason as a label and is
+        // only published once a container has actually terminated, so `reason="OOMKilled"` matches
+        // nothing for every container that was never OOM-killed. Empty is the *healthy* case here,
+        // and the healthy case must not read as a collection failure.
         absent: 'zero',
+        absentZeroRequires: 'restarts',
         build: (scope) => `sum(kube_pod_container_status_last_terminated_reason${containerMatcher(scope, ['reason="OOMKilled"'])})`,
       },
     ],
@@ -126,7 +146,12 @@ function resourceCard(): MonitoringPanelDef {
   };
 }
 
-/** Section 0: headline numbers for the selected window. Instant queries, one batch. */
+/**
+ * Section 0: headline numbers for the selected window. Instant queries, one batch.
+ *
+ * Ordered the same way the sections below are — symptom first, then cause. Traffic is what a caller
+ * actually feels, replicas and resource are two of the reasons it might feel bad.
+ */
 export const SUMMARY_SECTION: MonitoringSectionDef = {
   id: 'summary',
   titleKey: 'monitoring.section.summary',

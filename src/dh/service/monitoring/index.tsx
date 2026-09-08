@@ -8,15 +8,21 @@ import { NS } from '@/pages/service/constants';
 import { MONITORING_RANGE_LS } from '@/pages/service/storage';
 
 import { fetchMonitoringScopes } from './api';
-import { pickMonitoringDatasourceId, readMonitoringDatasourceId, storeMonitoringDatasourceId, type MonitoringDatasource } from './datasource';
+import { pickMonitoringDatasourceId, readMonitoringDatasourceId, type MonitoringDatasource } from './datasource';
 import { MONITORING_SECTIONS } from './panels';
-import { resolveScopeOption, scopeOptionKey, type MonitoringScopeOption } from './scope';
+import { isMonitoringIdentityPending, resolveScopeOption, type MonitoringScopeOption } from './scope';
+import type { MonitoringScope } from './selectors';
 import SectionPanels from './components/SectionPanels';
 import Toolbar from './components/Toolbar';
 
 export interface ServiceMonitoringProps {
   service: string;
-  /** Preferred scope from the URL / trace association. Discovery decides what actually has metrics. */
+  /** Header environment. Spanmetrics queries use it; K8s queries use the env's cluster/ns. */
+  env?: string;
+  /**
+   * Preferred scope from the current environment's association.
+   * `undefined` means association is still loading — do not pick another env's pair.
+   */
   clusters?: string[];
   namespaces?: string[];
 }
@@ -45,7 +51,7 @@ function EmptyState({ description }: { description: string }) {
   );
 }
 
-export default function ServiceMonitoring({ service, clusters, namespaces }: ServiceMonitoringProps) {
+export default function ServiceMonitoring({ service, env, clusters, namespaces }: ServiceMonitoringProps) {
   const { t } = useTranslation(NS);
   const { groupedDatasourceList } = useContext(CommonStateContext);
   const datasourceList: MonitoringDatasource[] = groupedDatasourceList.prometheus || [];
@@ -55,18 +61,15 @@ export default function ServiceMonitoring({ service, clusters, namespaces }: Ser
   const [datasourceId, setDatasourceId] = useState<number | undefined>();
   const [scopeOptions, setScopeOptions] = useState<MonitoringScopeOption[]>([]);
   const [scopeLoading, setScopeLoading] = useState(false);
-  const [selectedScopeKey, setSelectedScopeKey] = useState<string>();
   const [refreshKey, setRefreshKey] = useState(0);
   const scopeSeq = useRef(0);
 
   // The datasource list arrives asynchronously, so re-pick until the current choice is in it.
   useEffect(() => {
-    setDatasourceId((current) => (current != null && datasourceList.some((item) => item.id === current) ? current : pickMonitoringDatasourceId(datasourceList, readMonitoringDatasourceId())));
+    setDatasourceId((current) =>
+      current != null && datasourceList.some((item) => item.id === current) ? current : pickMonitoringDatasourceId(datasourceList, readMonitoringDatasourceId()),
+    );
   }, [datasourceIds]);
-
-  useEffect(() => {
-    setSelectedScopeKey(undefined);
-  }, [service]);
 
   useEffect(() => {
     if (!service || datasourceId == null) {
@@ -93,32 +96,26 @@ export default function ServiceMonitoring({ service, clusters, namespaces }: Ser
   }, [service, datasourceId, range, refreshKey]);
 
   const preferredCluster = clusters?.length === 1 ? clusters[0] : undefined;
-  // Multiple namespaces mean Pharos could not tell them apart; omitting it is the documented degradation.
   const preferredNamespace = namespaces?.length === 1 ? namespaces[0] : undefined;
+  const identityPending = isMonitoringIdentityPending(env, clusters);
 
   const activeScopeOption = useMemo(() => {
-    if (selectedScopeKey) {
-      const selected = scopeOptions.find((option) => scopeOptionKey(option) === selectedScopeKey);
-      if (selected) return selected;
-    }
+    if (identityPending) return undefined;
     return resolveScopeOption(scopeOptions, { cluster: preferredCluster, namespace: preferredNamespace });
-  }, [scopeOptions, selectedScopeKey, preferredCluster, preferredNamespace]);
+  }, [scopeOptions, identityPending, preferredCluster, preferredNamespace]);
 
-  const scope = useMemo(
-    () => (activeScopeOption ? { service, cluster: activeScopeOption.cluster } : undefined),
-    [service, activeScopeOption?.cluster],
-  );
-
-  const handleDatasourceChange = (id: number) => {
-    setDatasourceId(id);
-    storeMonitoringDatasourceId(id);
-    setSelectedScopeKey(undefined);
-  };
+  const scope = useMemo((): MonitoringScope | undefined => {
+    if (!activeScopeOption) return undefined;
+    const next: MonitoringScope = { service, cluster: activeScopeOption.cluster };
+    if (activeScopeOption.namespace) next.namespace = activeScopeOption.namespace;
+    if (env) next.env = env;
+    return next;
+  }, [service, env, activeScopeOption]);
 
   const renderBody = () => {
     if (!datasourceList.length) return <EmptyState description={t('overview.no_prometheus')} />;
     if (datasourceId == null) return <EmptyState description={t('monitoring.no_datasource')} />;
-    if (scopeLoading && !scope) {
+    if (identityPending || (scopeLoading && !scope)) {
       return (
         <div className='flex min-h-[240px] items-center justify-center rounded-lg bg-fc-100 p-4 fc-border'>
           <Spin />
@@ -135,9 +132,10 @@ export default function ServiceMonitoring({ service, clusters, namespaces }: Ser
       >
         {MONITORING_SECTIONS.map((section) => (
           // No forceRender on purpose: an unmounted panel is how sections stay lazy.
-          // text-l1 keeps the title one step under PageLayout's 16px bold page title; the bar and
-          // the left rule carry the grouping weight instead.
-          <Collapse.Panel key={section.id} header={<span className='text-l1 font-bold text-title'>{t(section.titleKey)}</span>}>
+          // 16px bold is the top of this tab's hierarchy: panel titles sit at 14px medium and every
+          // label inside a card at 12px. It previously matched the panel titles exactly, which left
+          // the bar and the left rule as the only thing separating a section from its contents.
+          <Collapse.Panel key={section.id} header={<span className='text-l2 font-bold text-title'>{t(section.titleKey)}</span>}>
             <SectionPanels section={section} scope={scope} datasourceId={datasourceId} range={range} refreshKey={refreshKey} />
           </Collapse.Panel>
         ))}
@@ -147,17 +145,7 @@ export default function ServiceMonitoring({ service, clusters, namespaces }: Ser
 
   return (
     <div className='flex flex-col gap-4'>
-      <Toolbar
-        range={range}
-        onRangeChange={setRange}
-        datasourceList={datasourceList}
-        datasourceId={datasourceId}
-        onDatasourceChange={handleDatasourceChange}
-        scopeOptions={scopeOptions}
-        activeScope={activeScopeOption}
-        onScopeChange={setSelectedScopeKey}
-        onRefresh={() => setRefreshKey((key) => key + 1)}
-      />
+      <Toolbar range={range} onRangeChange={setRange} onRefresh={() => setRefreshKey((key) => key + 1)} />
       {renderBody()}
     </div>
   );

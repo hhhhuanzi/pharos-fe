@@ -253,7 +253,7 @@ export default function LogExportModal(props: Props) {
           ) : totalUnknown ? (
             <Space direction='vertical' size={4} className='w-full'>
               <span>{t('progress.first_batch')}</span>
-              {!!progress.notice && <span className='text-[var(--fc-fill-warning)]'>{progress.notice}</span>}
+              {!!progress.notice && <span className='text-warning'>{progress.notice}</span>}
             </Space>
           ) : (
             <Space direction='vertical' size={4} className='w-full'>
@@ -262,7 +262,7 @@ export default function LogExportModal(props: Props) {
               <span>{t('progress.fetched', { fetched: progress.fetched, target: progress.target })}</span>
               {/* 次要信息：小字。体积接近闸门时才变成醒目的警告 */}
               <Space size={24} className={nearOutputLimit ? 'text-xs' : 'text-xs text-[var(--fc-text-3)]'}>
-                <span className={nearOutputLimit ? 'text-[var(--fc-fill-warning)]' : undefined}>
+                <span className={nearOutputLimit ? 'text-warning' : undefined}>
                   {nearOutputLimit
                     ? t('progress.size_near_limit', { size: formatChars(progress.accumulatedChars), limit: OUTPUT_LIMIT_LABEL })
                     : t('progress.size', { size: formatChars(progress.accumulatedChars) })}
@@ -271,7 +271,7 @@ export default function LogExportModal(props: Props) {
                   <span>{t('progress.remaining', { time: formatDuration((progress.target - progress.fetched) / progress.rate / 1000) })}</span>
                 )}
               </Space>
-              {!!progress.notice && <span className='text-[var(--fc-fill-warning)]'>{progress.notice}</span>}
+              {!!progress.notice && <span className='text-warning'>{progress.notice}</span>}
             </Space>
           )}
           <div className='mt-3 text-right'>

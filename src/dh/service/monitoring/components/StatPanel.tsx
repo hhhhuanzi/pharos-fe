@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Col, Empty, Row, Spin, Tooltip } from 'antd';
+import { Spin, Tooltip } from 'antd';
 import { QuestionCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 
@@ -7,6 +7,7 @@ import { NS } from '@/pages/service/constants';
 
 import { formatMonitoringValue, type MonitoringUnit } from '../format';
 import type { MonitoringAbsentMode, MonitoringPanelDef, MonitoringTargetDef } from '../panels';
+import { errorRateTone, oomTone, readyTone, restartTone, TONE_ABSENT, utilizationTone, type StatusToneOrAbsent } from '@/dh/status';
 import { reduceSeries } from '../values';
 import type { PanelChartEntry } from './PanelChart';
 
@@ -22,19 +23,53 @@ interface ResolvedMetric {
   empty: boolean;
 }
 
+/** Numbers with no threshold behind them are values, not grades; see `../tone`. */
+const TONE_UNGRADED = 'text-title';
+
+/** One column of a card. Columns are peers: same label style, same number size, equal width. */
+interface MetricCell {
+  refId: string;
+  label: string;
+  value: string;
+  suffix: string;
+  tone: StatusToneOrAbsent | typeof TONE_UNGRADED;
+}
+
 function seriesFor(entries: PanelChartEntry[], refId: string) {
   return entries.find((entry) => entry.target.refId === refId)?.series || [];
 }
 
-function resolveMetric(target: MonitoringTargetDef, entries: PanelChartEntry[]): ResolvedMetric {
+function readMetric(target: MonitoringTargetDef, entries: PanelChartEntry[]): ResolvedMetric {
   const series = seriesFor(entries, target.refId);
   const value = reduceSeries(series, target.reduce);
   return { target, value, empty: series.length === 0 || value == null };
 }
 
+/**
+ * Turns "the query matched nothing" into "the event never happened" for the queries where those are
+ * the same statement — a `reason="OOMKilled"` matcher publishes no series until a container is
+ * actually OOM-killed, so a healthy service returns nothing and used to render as a grey dash,
+ * telling people their monitoring was broken when it was their service that was fine.
+ *
+ * The rewrite is deliberately guarded rather than blind: it only applies while the target's
+ * `absentZeroRequires` sibling did return data, which proves the exporter behind the empty query is
+ * being scraped at all. See `../panels`.
+ */
+function withAbsentZero(metric: ResolvedMetric, panelMetrics: ResolvedMetric[]): ResolvedMetric {
+  if (!metric.empty || metric.target.absent !== 'zero') return metric;
+  const guardRefId = metric.target.absentZeroRequires;
+  if (guardRefId && panelMetrics.find((item) => item.target.refId === guardRefId)?.empty !== false) return metric;
+  return { ...metric, value: 0, empty: false };
+}
+
+function resolveMetrics(panel: MonitoringPanelDef, entries: PanelChartEntry[]): ResolvedMetric[] {
+  const read = panel.targets.map((target) => readMetric(target, entries));
+  return read.map((metric) => withAbsentZero(metric, read));
+}
+
+/** Only reached for queries whose empty result really is unknown — `absent: 'zero'` is resolved away. */
 function absentText(absent: MonitoringAbsentMode | undefined, t: (key: string) => string): string {
   if (absent === 'uninstrumented') return t('monitoring.stat.uninstrumented');
-  if (absent === 'zero') return formatMonitoringValue('count', 0);
   return '—';
 }
 
@@ -43,117 +78,97 @@ function displayValue(metric: ResolvedMetric, fallbackUnit: MonitoringUnit, t: (
   return formatMonitoringValue(metric.target.unit || fallbackUnit, metric.value);
 }
 
-function errorRateClass(rate?: number): string {
-  if (rate == null || !Number.isFinite(rate)) return 'text-soft';
-  if (rate >= 0.05) return 'text-error';
-  if (rate >= 0.01) return 'text-warning';
-  return 'text-success';
+/** Leading number (including a `a / b` pair) plus whatever unit follows it. */
+const NUMBER_HEAD = /^(-?[\d.,]+(?:\s*\/\s*-?[\d.,]+)?)\s*(.*)$/;
+
+/** Splits `5.46 ms` into number and unit so the unit can render one step down, never as a number. */
+function splitValue(text: string): { value: string; suffix: string } {
+  const matched = NUMBER_HEAD.exec(text);
+  if (!matched) return { value: text, suffix: '' };
+  return { value: matched[1], suffix: matched[2] };
 }
 
-function waterClass(ratio?: number): string {
-  if (ratio == null || !Number.isFinite(ratio)) return 'text-soft';
-  if (ratio >= 0.95) return 'text-error';
-  if (ratio >= 0.85) return 'text-alert';
-  if (ratio >= 0.7) return 'text-warning';
-  return 'text-success';
+/**
+ * Thresholds and their reasoning live in `../tone`, shared with the pod table. The tone functions
+ * handle the absent case themselves, so an empty reading is not short-circuited here.
+ *
+ * Everything else falls through ungraded on purpose: QPS and P95 have no threshold, so colouring
+ * them would dress a plain number up as a verdict and cost green the meaning it just gained.
+ */
+function metricTone(metric: ResolvedMetric): StatusToneOrAbsent | typeof TONE_UNGRADED {
+  const { refId } = metric.target;
+  if (refId === 'error_rate') return errorRateTone(metric.value);
+  if (refId === 'cpu_water' || refId === 'mem_water') return utilizationTone(metric.value);
+  if (refId === 'restarts') return restartTone(metric.value);
+  if (refId === 'oom') return oomTone(metric.value);
+  return metric.empty ? TONE_ABSENT : TONE_UNGRADED;
 }
 
-function readyClass(ready?: number, desired?: number): string {
-  if (ready == null || desired == null) return 'text-soft';
-  if (desired <= 0) return 'text-soft';
-  if (ready >= desired) return 'text-success';
-  if (ready <= 0) return 'text-error';
-  return 'text-warning';
+function labelFor(target: MonitoringTargetDef, t: (key: string) => string): string {
+  return target.labelKey ? t(target.labelKey) : target.refId;
 }
 
-function primaryClass(panel: MonitoringPanelDef, metrics: ResolvedMetric[]): string {
-  if (panel.id === 'summary_traffic') {
-    const qps = metrics[0];
-    return qps && !qps.empty ? 'text-title' : 'text-soft';
-  }
-  if (panel.id === 'summary_ready' && panel.primaryAsPair) {
-    return readyClass(metrics[0]?.value, metrics[1]?.value);
-  }
-  if (panel.id === 'summary_resource') {
-    return waterClass(metrics[0]?.value);
-  }
-  return metrics[0] && !metrics[0].empty ? 'text-title' : 'text-soft';
-}
+function buildCells(panel: MonitoringPanelDef, metrics: ResolvedMetric[], t: (key: string) => string): MetricCell[] {
+  const toCell = (metric: ResolvedMetric): MetricCell => ({
+    refId: metric.target.refId,
+    label: labelFor(metric.target, t),
+    ...splitValue(displayValue(metric, metric.target.unit || panel.unit, t)),
+    tone: metricTone(metric),
+  });
 
-function secondaryClass(target: MonitoringTargetDef, value?: number, empty?: boolean): string {
-  if (empty) return 'text-soft';
-  if (target.refId === 'error_rate') return errorRateClass(value);
-  if (target.refId === 'cpu_water' || target.refId === 'mem_water' || target.refId === 'oom') {
-    if (target.refId === 'oom') return (value || 0) > 0 ? 'text-error' : 'text-success';
-    return waterClass(value);
-  }
-  if (target.refId === 'restarts') return (value || 0) > 0 ? 'text-warning' : 'text-title';
-  return 'text-title';
+  const [left, right] = metrics;
+  if (!panel.primaryAsPair || !left || !right) return metrics.map(toCell);
+
+  const paired = left.empty || right.empty;
+  const pairText = paired
+    ? absentText(left.target.absent, t)
+    : `${formatMonitoringValue(left.target.unit || panel.unit, left.value)} / ${formatMonitoringValue(right.target.unit || panel.unit, right.value)}`;
+  const pairCell: MetricCell = {
+    refId: left.target.refId,
+    label: labelFor(left.target, t),
+    ...splitValue(pairText),
+    tone: paired ? TONE_ABSENT : readyTone(left.value, right.value),
+  };
+  return [pairCell, ...metrics.slice(2).map(toCell)];
 }
 
 export default function StatPanel({ panel, entries, loading }: Props) {
   const { t } = useTranslation(NS);
-  const metrics = useMemo(() => panel.targets.map((target) => resolveMetric(target, entries)), [panel.targets, entries]);
-
-  const primaryText = (() => {
-    if (panel.primaryAsPair) {
-      const left = metrics[0];
-      const right = metrics[1];
-      if (!left || !right || left.empty || right.empty) return absentText(left?.target.absent, t);
-      return `${formatMonitoringValue(left.target.unit || panel.unit, left.value)} / ${formatMonitoringValue(
-        right.target.unit || panel.unit,
-        right.value,
-      )}`;
-    }
-    return displayValue(metrics[0], panel.unit, t);
-  })();
-
-  const secondary = panel.primaryAsPair ? metrics.slice(2) : metrics.slice(1);
-  const titleClass = `mb-3 text-l4 font-bold leading-none ${primaryClass(panel, metrics)}`;
+  const metrics = useMemo(() => resolveMetrics(panel, entries), [panel, entries]);
+  const cells = useMemo(() => buildCells(panel, metrics, t), [panel, metrics, t]);
+  const title = t(panel.titleKey);
 
   return (
-    <div className='fc-border flex h-[164px] flex-col rounded-lg bg-fc-100 p-4'>
-      <div className='mb-3 flex shrink-0 items-center gap-2 text-base font-normal leading-none text-hint'>
-        <span className='truncate' title={t(panel.titleKey)}>
-          {t(panel.titleKey)}
+    <div className='fc-border flex h-[120px] flex-col rounded-lg bg-fc-100 p-4'>
+      {/* Same level as a chart panel title. It used to be 12px hint — identical to the metric labels
+          underneath it, so the card name and its columns flattened into one another. */}
+      <div className='flex shrink-0 items-center gap-2 text-l1 font-medium leading-none text-title'>
+        <span className='truncate' title={title}>
+          {title}
         </span>
         {panel.hintKey ? (
           <Tooltip title={t(panel.hintKey)}>
-            <QuestionCircleOutlined className='text-soft' />
+            <QuestionCircleOutlined className='shrink-0 text-soft' />
           </Tooltip>
         ) : null}
       </div>
-      <div className='min-h-0 flex-1'>
+      <div className='mt-3 flex min-h-0 flex-1 items-center gap-4'>
         {loading && metrics.every((item) => item.empty) ? (
-          <div className='flex h-full items-center justify-center'>
-            <Spin />
-          </div>
-        ) : !loading && metrics.every((item) => item.empty) && panel.targets.every((target) => target.absent !== 'uninstrumented' && target.absent !== 'zero') ? (
-          <div className='flex h-full items-center justify-center'>
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('monitoring.chart_empty')} />
+          <div className='flex h-full w-full items-center justify-center'>
+            <Spin size='small' />
           </div>
         ) : (
-          <>
-            <div className={titleClass}>{primaryText}</div>
-            {secondary.length ? (
-              <Row gutter={8}>
-                {secondary.map((item) => (
-                  <Col key={item.target.refId} span={secondary.length === 1 ? 24 : 12}>
-                    <div className='flex h-[66px] items-center rounded-lg bg-fc-50 p-3'>
-                      <div className='min-w-0 flex-1'>
-                        <div className='truncate text-hint' title={item.target.labelKey ? t(item.target.labelKey) : item.target.refId}>
-                          {item.target.labelKey ? t(item.target.labelKey) : item.target.refId}
-                        </div>
-                        <div className={`font-bold ${secondaryClass(item.target, item.value, item.empty)}`}>
-                          {displayValue(item, item.target.unit || panel.unit, t)}
-                        </div>
-                      </div>
-                    </div>
-                  </Col>
-                ))}
-              </Row>
-            ) : null}
-          </>
+          cells.map((cell) => (
+            <div key={cell.refId} data-metric={cell.refId} className='flex min-w-0 flex-1 flex-col gap-2'>
+              <div className='truncate text-base font-normal text-hint' title={cell.label}>
+                {cell.label}
+              </div>
+              <div className='flex items-baseline whitespace-nowrap'>
+                <span className={`text-l4 font-bold leading-none ${cell.tone}`}>{cell.value}</span>
+                {cell.suffix ? <span className={`text-base font-normal leading-none text-hint ${cell.suffix === '%' ? '' : 'ml-1'}`}>{cell.suffix}</span> : null}
+              </div>
+            </div>
+          ))
         )}
       </div>
     </div>

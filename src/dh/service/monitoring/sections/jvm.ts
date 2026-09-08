@@ -9,7 +9,6 @@ function heapPanel(): MonitoringPanelDef {
   return {
     id: 'jvm_heap',
     titleKey: 'monitoring.panel.jvm_heap',
-    hintKey: 'monitoring.panel.jvm_heap_hint',
     unit: 'bytes',
     span: 12,
     targets: [
@@ -24,7 +23,7 @@ function heapPanel(): MonitoringPanelDef {
         nameLabels: ['exported_instance'],
         nameRewrite: 'exportedInstancePod',
         nameKey: 'monitoring.legend.limit',
-        dashed: true,
+        reference: 'ceiling',
         build: (scope) => `sum by (exported_instance) (jvm_memory_limit_bytes${otel(scope, ['jvm_memory_type="heap"'])})`,
       },
     ],
@@ -51,7 +50,6 @@ function gcPanel(): MonitoringPanelDef {
   return {
     id: 'jvm_gc',
     titleKey: 'monitoring.panel.jvm_gc',
-    hintKey: 'monitoring.panel.jvm_gc_hint',
     unit: 'percentUnit',
     span: 12,
     targets: [
@@ -68,7 +66,6 @@ function afterGcPanel(): MonitoringPanelDef {
   return {
     id: 'jvm_after_gc',
     titleKey: 'monitoring.panel.jvm_after_gc',
-    hintKey: 'monitoring.panel.jvm_after_gc_hint',
     unit: 'bytes',
     span: 12,
     targets: [
@@ -120,16 +117,16 @@ function cpuPanel(): MonitoringPanelDef {
   return {
     id: 'jvm_cpu',
     titleKey: 'monitoring.panel.jvm_cpu',
-    hintKey: 'monitoring.panel.jvm_cpu_hint',
     unit: 'percentUnit',
+    // Process utilization of the whole runtime, so the same coarse ladder as the node panels.
+    yAxis: 'utilization',
     span: 8,
     targets: [
       {
         refId: 'cpu',
         nameLabels: ['exported_instance'],
         nameRewrite: 'exportedInstancePod',
-        build: (scope) =>
-          `avg by (exported_instance) (jvm_cpu_recent_utilization_ratio${otel(scope)} or jvm_cpu_recent_utilization${otel(scope)})`,
+        build: (scope) => `avg by (exported_instance) (jvm_cpu_recent_utilization_ratio${otel(scope)} or jvm_cpu_recent_utilization${otel(scope)})`,
       },
     ],
   };

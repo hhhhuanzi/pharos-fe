@@ -25,6 +25,7 @@ import ReactFlow, {
   type ReactFlowState,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { errorRateTone, TONE_NORMAL } from '@/dh/status';
 import { formatDuration } from '@/pages/traceCpt/utils/date';
 import type { PharosServiceEdge } from '../contract';
 import {
@@ -34,7 +35,6 @@ import {
   edgeHighlightZIndex,
   edgeStrokeGeometry,
   edgeStrokeWidth,
-  errorTone,
   nodeFontScale,
   NODE_LABEL_FONT,
   formatErrorRatePercent,
@@ -101,12 +101,6 @@ interface ServiceEdgeData {
   onLabelClose: (event: React.MouseEvent) => void;
 }
 
-const ERROR_TEXT_CLASS: Record<ReturnType<typeof errorTone>, string> = {
-  success: 'text-success',
-  warning: 'text-warning',
-  error: 'text-error',
-};
-
 function NodeGlyph(props: { glyph: PeerGlyph }) {
   const className = 'dh-service-node__glyph shrink-0 text-hint';
   if (props.glyph === 'user') return <UserOutlined className={className} />;
@@ -171,7 +165,7 @@ function ServiceGraphEdge(props: EdgeProps<ServiceEdgeData>) {
         <EdgeLabelRenderer>
           <EdgeMetricCard
             errorLabel={data.errorLabel}
-            errorClass={data.errorClass || 'text-success'}
+            errorClass={data.errorClass || TONE_NORMAL}
             errorRateLabel={data.errorRateLabel}
             directions={data.directions}
             expanded={data.expanded}
@@ -385,7 +379,7 @@ function ServiceGraphCanvasInner(props: IProps) {
     (metrics: EdgeDirectionMetrics, withTitle: boolean): EdgeMetricDirection => ({
       title: withTitle ? `${nodeLabels?.[metrics.client] || metrics.client} → ${nodeLabels?.[metrics.server] || metrics.server}` : undefined,
       errorLabel: formatErrorRatePercent(metrics.errorRate),
-      errorClass: ERROR_TEXT_CLASS[errorTone(metrics.errorRate)],
+      errorClass: errorRateTone(metrics.errorRate),
       qps: formatQps(metrics.requestCount, rangeSeconds),
       p95: metrics.p95Seconds == null ? '-' : formatDuration(Math.round(metrics.p95Seconds * 1e6)),
     }),
@@ -432,7 +426,7 @@ function ServiceGraphCanvasInner(props: IProps) {
           style: { stroke, ...geometry },
           data: {
             errorLabel: formatErrorRatePercent(edge.errorRate),
-            errorClass: ERROR_TEXT_CLASS[errorTone(edge.errorRate)],
+            errorClass: errorRateTone(edge.errorRate),
             errorRateLabel: t('graph.edge_chip.error_rate'),
             qpsLabel: t('graph.edge_chip.qps_avg'),
             p95Label: t('graph.edge_chip.p95'),

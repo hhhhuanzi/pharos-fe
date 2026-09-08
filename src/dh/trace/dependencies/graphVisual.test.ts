@@ -2,6 +2,7 @@ import type { PharosServiceEdge } from '../contract';
 import { edgeKey } from './promql';
 import {
   EDGE_HIGHLIGHT_WIDTH_BOOST,
+  defaultEdgeContrast,
   edgeEmphasis,
   edgeErrorLabelVisible,
   edgeHighlightZIndex,
@@ -360,6 +361,12 @@ describe('graphVisual', () => {
     expect(anomaly.screenConstantWidth).toBe(true);
     expect(anomaly.screenWidthScale).toBeGreaterThan(quiet.screenWidthScale);
     expect(healthyLayeredStroke(EDGE_VOLUME_PRIMARY_RANK)).toBe(EDGE_HEALTHY_STROKE_PRIMARY);
+  });
+
+  it('defaults global topology to layered and service topology to uniform', () => {
+    expect(defaultEdgeContrast()).toBe('layered');
+    expect(defaultEdgeContrast(undefined)).toBe('layered');
+    expect(defaultEdgeContrast('checkout')).toBe('uniform');
   });
 
   it('flattens healthy edges in uniform contrast and still dims the rest on hover', () => {

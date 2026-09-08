@@ -1,12 +1,13 @@
+import { ENV_GROUP_LABEL } from '../constants';
 import { escapePromLabel, escapePromRegex } from '../red';
 
 /** cadvisor metric that carries both `cluster` and `container`; also the source of the pod set. */
 export const CONTAINER_MEMORY_WORKING_SET = 'container_memory_working_set_bytes';
 
 /**
- * Dashboard inputs are only `service_name` + `cluster` (PLAN-metrics-label-contract).
- * `namespace` may be shown in the toolbar; it is never a PromQL matcher — OTel's namespace
- * is the collector, and Pharos often has none.
+ * Dashboard inputs are `service_name` + `cluster` (+ `namespace` / `env` when the page has them).
+ * kube-state / cadvisor must bind `namespace` or same-named workloads in another ns (pre vs prod)
+ * get summed together. OTel JVM / HTTP `namespace` is the collector — never the business ns.
  *
  * `service` here is the page's service_name. The K8s `service` label is a scrape target
  * (e.g. kubelet) and must not be used as a service filter.
@@ -14,8 +15,10 @@ export const CONTAINER_MEMORY_WORKING_SET = 'container_memory_working_set_bytes'
 export interface MonitoringScope {
   service: string;
   cluster: string;
-  /** Display-only. Matchers ignore it. */
+  /** K8s namespace. Matcher for cadvisor / kube-state; ignored by OTel / spanmetrics. */
   namespace?: string;
+  /** spanmetrics `deployment_environment_name`. Ignored by K8s matchers. */
+  env?: string;
 }
 
 function eq(name: string, value: string): string {
@@ -26,14 +29,20 @@ function braces(matchers: string[]): string {
   return `{${matchers.join(',')}}`;
 }
 
+function k8sScope(scope: MonitoringScope): string[] {
+  const matchers = [eq('cluster', scope.cluster)];
+  if (scope.namespace) matchers.push(eq('namespace', scope.namespace));
+  return matchers;
+}
+
 /** Stage-0 encoding: cadvisor / kube-state-metrics have no `service_name`. DESIGN maps it to `container`. */
 export function containerMatcher(scope: MonitoringScope, extra: string[] = []): string {
-  return braces([eq('cluster', scope.cluster), eq('container', scope.service), ...extra]);
+  return braces([...k8sScope(scope), eq('container', scope.service), ...extra]);
 }
 
 /** Stage-0 encoding: `kube_deployment_*` is keyed by `deployment`, not `service_name`. */
 export function workloadMatcher(scope: MonitoringScope, extra: string[] = []): string {
-  return braces([eq('cluster', scope.cluster), eq('deployment', scope.service), ...extra]);
+  return braces([...k8sScope(scope), eq('deployment', scope.service), ...extra]);
 }
 
 /**
@@ -46,17 +55,22 @@ export function otelJobMatcher(scope: MonitoringScope, extra: string[] = []): st
   return braces([eq('cluster', scope.cluster), job, ...extra]);
 }
 
-/** Cluster only. Used with {@link podSetFilter} on families that have no service dimension. */
+/** kube_pod_info and similar: cluster + business namespace when known. */
 export function scopeMatcher(scope: MonitoringScope, extra: string[] = []): string {
-  return braces([eq('cluster', scope.cluster), ...extra]);
+  return braces([...k8sScope(scope), ...extra]);
 }
 
-/** RED family (spanmetrics). The only family that already carries the contract label. */
+/** RED family (spanmetrics). Env is the same slice the list row opened (URL `?env=`). */
 export function spanmetricsMatcher(scope: MonitoringScope, extra: string[] = []): string {
-  return braces([eq('service_name', scope.service), ...extra]);
+  const matchers = [eq('service_name', scope.service)];
+  if (scope.env) matchers.push(eq(ENV_GROUP_LABEL, scope.env));
+  return braces([...matchers, ...extra]);
 }
 
-/** node_* / container_network_*: cluster plus extras, then intersect the pod set. */
+/**
+ * node-exporter / container_network_*: cluster plus extras. Do not add business namespace —
+ * node_* has none; network series are then intersected with {@link podSetFilter}.
+ */
 export function clusterMatcher(scope: MonitoringScope, extra: string[] = []): string {
   return braces([eq('cluster', scope.cluster), ...extra]);
 }

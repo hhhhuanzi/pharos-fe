@@ -1,4 +1,4 @@
-import { buildScopeDiscoveryQuery, parseScopeOptions, resolveScopeOption } from './scope';
+import { buildScopeDiscoveryQuery, isMonitoringIdentityPending, parseScopeOptions, resolveScopeOption } from './scope';
 
 const sample = (metric: Record<string, string>) => ({ metric, value: [0, '1'] as [number, string] });
 
@@ -49,5 +49,23 @@ describe('resolveScopeOption', () => {
   it('trusts the caller when discovery returned nothing', () => {
     expect(resolveScopeOption([], { cluster: 'k8s-devops', namespace: 'sre' })).toEqual({ cluster: 'k8s-devops', namespace: 'sre' });
     expect(resolveScopeOption([], {})).toBeUndefined();
+  });
+
+  it('picks the preferred namespace on the same cluster so pre and prod stay apart', () => {
+    const sharedCluster = [
+      { cluster: 'k8s-trade-prod', namespace: 'pre-turms' },
+      { cluster: 'k8s-trade-prod', namespace: 'turms' },
+    ];
+    expect(resolveScopeOption(sharedCluster, { cluster: 'k8s-trade-prod', namespace: 'turms' })).toEqual(sharedCluster[1]);
+    expect(resolveScopeOption(sharedCluster, { cluster: 'k8s-trade-prod', namespace: 'pre-turms' })).toEqual(sharedCluster[0]);
+  });
+});
+
+describe('isMonitoringIdentityPending', () => {
+  it('waits when the header has an env but association has not arrived', () => {
+    expect(isMonitoringIdentityPending('prod', undefined)).toBe(true);
+    expect(isMonitoringIdentityPending('prod', ['k8s-trade-prod'])).toBe(false);
+    expect(isMonitoringIdentityPending('prod', [])).toBe(false);
+    expect(isMonitoringIdentityPending(undefined, undefined)).toBe(false);
   });
 });

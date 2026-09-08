@@ -52,7 +52,7 @@ description: >-
 | 文字 主/正文/辅助/更弱/禁用 | `--fc-text-1` … `--fc-text-5` | `text-title` `text-main` `text-hint` `text-soft` `text-disable` |
 | 链接 / 占位 | `--fc-text-link` / `--fc-text-placeholder` | `text-link` / `text-placeholder` |
 | 填充（越大越重） | `--fc-fill-1` … `--fc-fill-7` | `bg-fc-50` `bg-fc-100` `bg-fc-150` `bg-fc-200` … `bg-fc-600` |
-| 状态 成功/警告/次高危/危险 | `--fc-fill-success` `--fc-fill-warning` `--fc-fill-alert` `--fc-fill-error` | `text-success` `text-warning` `text-alert` `text-error`（背景同名 `bg-*`） |
+| 状态 成功/警告/次高危/危险 | `--fc-fill-success` `--fc-fill-warning` `--fc-fill-alert` `--fc-fill-error` | `text-success` `text-warning` `text-alert` `text-error`（背景同名 `bg-*`；黄色文字走 `--fc-text-warning`，见 reference-tokens.md） |
 | 品牌主色 | `--fc-fill-primary` / `--fc-primary-color` | `bg-primary` |
 | 边框 | `--fc-border-color` `--fc-card-border` `--fc-antd-border-color` | `fc-border`（全局 class）/ `border-card-border` |
 | 圆角基准 | `--fc-border-radius-base: 8px` | `rounded-lg` |

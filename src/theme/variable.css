@@ -57,6 +57,11 @@
   --fc-text-link-light: #a186f4; /* 用于 tooltip 里加亮链接颜色 */
   --fc-text-link-rgb: 129 98 220;
   --fc-text-placeholder: #bfbfbf;
+  /* 黄色警戒当文字色用：--fc-fill-warning 在白底上只有 1.6:1，12px 文字读不清（红色一档是 6:1，
+     等于最该被看见的一档反而最淡）。文字场景取 warning 色阶的文字档 --fc-yellow-11（4.4:1）；
+     填充、背景、SVG 描边仍用 --fc-fill-warning，那些场景没有可读性问题。 */
+  --fc-text-warning-rgb: 149 115 0;
+  --fc-text-warning: rgb(var(--fc-text-warning-rgb));
 
   /* 其他 */
   --fc-primary-color: var(--fc-text-link);
@@ -309,6 +314,10 @@
   --fc-text-4: rgb(109, 109, 120);
   --fc-text-5: rgb(68, 68, 75);
   --fc-text-placeholder: rgb(89, 89, 98);
+  /* 深色底上黄色本来就够亮（fill 档约 11.8:1），这里同样取色阶文字档 --fc-yellow-11 保持两套主题
+     同源，对比度约 12.2:1。 */
+  --fc-text-warning-rgb: 255 206 53;
+  --fc-text-warning: rgb(var(--fc-text-warning-rgb));
 
   /* 其他 */
   --fc-primary-color: var(--fc-text-link);

@@ -36,8 +36,15 @@ export function formatMonitoringValue(unit: MonitoringUnit, value?: number | nul
       return formatBytes(value, '');
     case 'bytesPerSecond':
       return formatBytes(value, '/s');
-    case 'percentUnit':
-      return `${trim(value * 100, Math.abs(value) >= 0.1 ? 1 : 2)}%`;
+    case 'percentUnit': {
+      // Decimals follow the percentage, not the ratio: error rates live in the 0.0x% range and
+      // rounding them to 2 decimals collapsed 0.012% and 0.008% onto the same "0.01%".
+      const percent = value * 100;
+      const abs = Math.abs(percent);
+      if (abs >= 10) return `${trim(percent, 1)}%`;
+      if (abs >= 1) return `${trim(percent, 2)}%`;
+      return `${trim(percent, 3)}%`;
+    }
     case 'count':
       return Math.round(value).toLocaleString();
     case 'ops':
@@ -67,12 +74,7 @@ export function shortExportedInstance(value: string): string {
  * Series name for a panel legend. `labels` picks metric labels (usually `pod`) and `staticName` is
  * for label-less threshold lines (request / limit) or a direction suffix (rx / tx).
  */
-export function monitoringSeriesName(
-  metric: Record<string, string> | undefined,
-  labels: string[] = [],
-  staticName?: string,
-  rewrite?: MonitoringNameRewrite,
-): string {
+export function monitoringSeriesName(metric: Record<string, string> | undefined, labels: string[] = [], staticName?: string, rewrite?: MonitoringNameRewrite): string {
   const labelPart = labels
     .map((label) => {
       const raw = metric?.[label];

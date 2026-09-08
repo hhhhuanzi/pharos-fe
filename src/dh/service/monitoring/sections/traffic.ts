@@ -6,7 +6,7 @@ import { otelJobMatcher, spanmetricsMatcher, type MonitoringScope } from '../sel
 const CALLS = SPANMETRICS_CALLS_CANDIDATES[0];
 const DURATION_MS_BUCKET = SPANMETRICS_DURATION_MS_CANDIDATES[0];
 const HTTP_DURATION_COUNT = 'http_server_request_duration_seconds_count';
-const HTTP_DURATION_BUCKET = 'http_server_request_duration_seconds_bucket';
+const SERVER_KIND = 'span_kind=~"SPAN_KIND_SERVER|SERVER|server"';
 
 function spanQps(scope: MonitoringScope, window: string): string {
   return `sum(rate(${CALLS}${spanmetricsMatcher(scope)}[${window}]))`;
@@ -46,7 +46,6 @@ function p95Panel(): MonitoringPanelDef {
   return {
     id: 'traffic_p95',
     titleKey: 'monitoring.panel.p95_ms',
-    hintKey: 'monitoring.panel.p95_ms_hint',
     unit: 'milliseconds',
     span: 8,
     targets: [{ refId: 'p95', build: (scope, rateWindow) => spanQuantileMs(scope, rateWindow, 0.95) }],
@@ -57,7 +56,6 @@ function httpStatusPanel(): MonitoringPanelDef {
   return {
     id: 'traffic_http_status',
     titleKey: 'monitoring.panel.http_status',
-    hintKey: 'monitoring.panel.http_status_hint',
     unit: 'ops',
     span: 12,
     targets: [
@@ -80,8 +78,10 @@ function httpRoutePanel(): MonitoringPanelDef {
     targets: [
       {
         refId: 'route',
-        nameLabels: ['http_route'],
-        build: (scope, rateWindow) => `topk(8, sum by (http_route) (rate(${HTTP_DURATION_COUNT}${otelJobMatcher(scope)}[${rateWindow}])))`,
+        // Incoming interfaces. `http_server_*` often has no `http_route` (RPC-over-HTTP), so
+        // `sum by (http_route)` collapsed to one unlabeled series and uPlot named it "Value".
+        nameLabels: ['span_name'],
+        build: (scope, rateWindow) => `topk(8, sum by (span_name) (rate(${CALLS}${spanmetricsMatcher(scope, [SERVER_KIND])}[${rateWindow}])))`,
       },
     ],
   };
@@ -92,14 +92,14 @@ function httpSlowPanel(): MonitoringPanelDef {
     id: 'traffic_http_slow',
     titleKey: 'monitoring.panel.http_slow',
     hintKey: 'monitoring.panel.http_slow_hint',
-    unit: 'seconds',
+    unit: 'milliseconds',
     span: 12,
     targets: [
       {
         refId: 'slow',
-        nameLabels: ['http_route'],
+        nameLabels: ['span_name'],
         build: (scope, rateWindow) =>
-          `topk(8, histogram_quantile(0.95, sum by (http_route, le) (rate(${HTTP_DURATION_BUCKET}${otelJobMatcher(scope)}[${rateWindow}]))))`,
+          `topk(8, histogram_quantile(0.95, sum by (span_name, le) (rate(${DURATION_MS_BUCKET}${spanmetricsMatcher(scope, [SERVER_KIND])}[${rateWindow}]))))`,
       },
     ],
   };
@@ -116,14 +116,13 @@ function clientPanel(): MonitoringPanelDef {
       {
         refId: 'client',
         nameLabels: ['span_name'],
-        build: (scope, rateWindow) =>
-          `topk(8, sum by (span_name) (rate(${CALLS}${spanmetricsMatcher(scope, ['span_kind=~"SPAN_KIND_CLIENT|CLIENT|client"'])}[${rateWindow}])))`,
+        build: (scope, rateWindow) => `topk(8, sum by (span_name) (rate(${CALLS}${spanmetricsMatcher(scope, ['span_kind=~"SPAN_KIND_CLIENT|CLIENT|client"'])}[${rateWindow}])))`,
       },
     ],
   };
 }
 
-/** Section 1: RED from spanmetrics (ms); HTTP route/status from OTel HTTP (seconds). */
+/** Section 1: RED + Top/slow interfaces from spanmetrics (ms); HTTP status from OTel HTTP (seconds). */
 export const TRAFFIC_SECTION: MonitoringSectionDef = {
   id: 'traffic',
   titleKey: 'monitoring.section.traffic',

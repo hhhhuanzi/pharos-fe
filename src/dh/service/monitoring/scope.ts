@@ -15,12 +15,17 @@ export interface PreferredScope {
 
 /**
  * Where the queryable cluster comes from. The cluster shown on the detail page is derived
- * from trace labels, so it is empty for services without trace data. Asking cadvisor
- * (stage-0 encoding: container = service_name) gives the clusters that actually have
- * this service's container metrics. Namespace is collected only for toolbar display.
+ * from the current environment's association. Asking cadvisor (stage-0 encoding:
+ * container = service_name) gives the cluster / namespace pairs that actually have
+ * this service's container metrics, so the page can bind PromQL to the right ns.
  */
 export function buildScopeDiscoveryQuery(service: string): string {
   return `count by (cluster, namespace) (${CONTAINER_MEMORY_WORKING_SET}{container="${escapePromLabel(service)}"})`;
+}
+
+/** Header env is set but association has not arrived — do not pick another env's cluster/ns. */
+export function isMonitoringIdentityPending(env?: string, clusters?: string[]): boolean {
+  return Boolean(env) && clusters == null;
 }
 
 export function scopeOptionKey(option: MonitoringScopeOption): string {
@@ -40,9 +45,9 @@ export function parseScopeOptions(samples: PromVectorSample[]): MonitoringScopeO
 }
 
 /**
- * Pick the scope to query. A preferred cluster wins when it actually has data; the preferred
- * namespace is only a tiebreaker, since dropping it still returns correct series (service names are
- * unique within a cluster).
+ * Pick the scope to query. Preferred cluster + namespace come from the page environment.
+ * Namespace is a real matcher for kube-state / cadvisor, so an exact pair must beat a
+ * same-cluster different-namespace option (prod `turms` vs pre `pre-turms`).
  */
 export function resolveScopeOption(options: MonitoringScopeOption[], preferred: PreferredScope = {}): MonitoringScopeOption | undefined {
   if (!options.length) {
