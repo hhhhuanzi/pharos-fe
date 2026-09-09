@@ -10,7 +10,7 @@
  * - `success` → `text-success` / `--fc-fill-success`. Measured, and inside the band we call fine.
  *   Zero restarts and zero OOM kills belong here: "the event never happened" is the healthy
  *   answer, not a missing sample.
- * - `warning` → `text-warning` / `--fc-text-warning`. Worth a look. Headroom is thinning, errors
+ * - `warning` → `text-warning` / `--fc-fill-warning`. Worth a look. Headroom is thinning, errors
  *   have started, something restarted once.
  * - `error` → `text-error` / `--fc-fill-error`. Already broken. Replicas missing, OOM kills, errors
  *   at a level a caller notices, a limit essentially reached.
@@ -29,15 +29,10 @@
  * 2. Tone is the *only* emphasis a verdict gets: no bold, no background chip, no icon. Numbers in
  *    one card are already uniformly sized and weighted, so colour is the single variable.
  *
- * Warning is the one level whose text and fill are two different tokens. Yellow is the only hue
- * here where the colour that works as a 2px dot or a chart stroke is illegible as 12px text:
- * `--fc-fill-warning` reaches ~1.6:1 on a white card against ~6:1 for `--fc-fill-error`, so the
- * scale used to be weakest exactly where it should be loudest. `text-warning` therefore resolves to
- * `--fc-text-warning`, the warning scale's text step, while `statusFillRgb` still returns the fill
- * token — a fill has no legibility problem to fix, and the dependency graph tuned its edge colours
- * against the saturated one. Both live in `src/theme/variable.css` so every consumer gets the fix
- * at once; forking a private palette per page is what produced the drift this module exists to
- * remove.
+ * Text and fill share one token per level. `text-warning` and `statusFillRgb('warning')` both
+ * resolve to `--fc-fill-warning` (light `rgb(250, 200, 0)`): warning is yellow, the same hue on a
+ * number, a dot and a chart stroke. Forking a private palette per page is what produced the drift
+ * this module exists to remove.
  */
 export type StatusLevel = 'success' | 'warning' | 'error';
 

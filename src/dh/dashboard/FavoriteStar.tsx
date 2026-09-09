@@ -32,8 +32,7 @@ export default function FavoriteStar(props: Props) {
         }
       }}
     >
-      {/* Gold, not `text-warning`: a favourite is a bookmark, not a degraded state, and the warning
-          scale's text step is a dark olive that reads as neither. */}
+      {/* Gold, not `text-warning`: a favourite is a bookmark, not a degraded state. */}
       {favorited ? <StarFilled className='text-[var(--fc-fill-gold)]' /> : <StarOutlined className='text-hint hover:text-[var(--fc-fill-gold)]' />}
     </span>
   );
