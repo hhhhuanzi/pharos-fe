@@ -180,7 +180,8 @@ function MonitoringMetricTable({ rows, columns, panelId }: { rows: TableRow[]; c
   );
 
   const { components, resizableColumns, tableWidth } = useAntdResizableHeader({
-    columns: tableColumns,
+    // Hook types dataIndex as string | number; antd 4 accepts string[] for nested cells.
+    columns: tableColumns as never,
     columnsState: {
       persistenceType: 'localStorage',
       persistenceKey: `dh-service-monitoring-table-v2-${panelId}`,

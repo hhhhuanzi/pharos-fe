@@ -398,7 +398,7 @@ export interface GraphHighlight {
 }
 
 /** Edges touching `center`, plus their endpoints. Used for hover / click neighborhood. */
-export function incidentHighlight(center: string, edges: PharosServiceEdge[]): GraphHighlight {
+export function incidentHighlight(center: string, edges: ReadonlyArray<PharosServiceEdge>): GraphHighlight {
   const nodes = new Set<string>([center]);
   const ids = new Set<string>();
   edges.forEach((edge) => {

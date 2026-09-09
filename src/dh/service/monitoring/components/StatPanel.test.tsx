@@ -85,7 +85,7 @@ describe('StatPanel summary cards', () => {
   it('puts the window explanation on the traffic card title, not beside QPS', () => {
     const traffic = panelById('summary_traffic');
     expect(traffic.hintKey).toBe('monitoring.stat.traffic_hint');
-    expect(traffic.targets.every((target) => target.hintKey == null)).toBe(true);
+    expect(traffic.targets.every((target) => !('hintKey' in target))).toBe(true);
 
     const { container } = render(<StatPanel panel={traffic} loading={false} entries={[entry('qps', 0.1), entry('error_rate', 0), entry('p95', 5.46)]} />);
 

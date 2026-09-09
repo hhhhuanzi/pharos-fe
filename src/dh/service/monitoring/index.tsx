@@ -11,7 +11,7 @@ import { MONITORING_RANGE_LS } from '@/pages/service/storage';
 import { fetchMonitoringScopes } from './api';
 import { pickMonitoringDatasourceId, readMonitoringDatasourceId, type MonitoringDatasource } from './datasource';
 import { MONITORING_SECTIONS } from './panels';
-import { isMonitoringIdentityPending, pickPreferredScope, resolveScopeOption } from './scope';
+import { isMonitoringIdentityPending, pickPreferredScope, resolveScopeOption, type MonitoringScopeOption } from './scope';
 import type { MonitoringScope } from './selectors';
 import SectionPanels from './components/SectionPanels';
 import Toolbar from './components/Toolbar';

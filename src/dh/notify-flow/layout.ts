@@ -218,7 +218,7 @@ export function layoutChainYs(rowHeights: number[]): ChainLayout {
   }
   const titleBlock = titleBlockHeight();
   const ys: number[] = [];
-  let cursor = LAYOUT.paddingY;
+  let cursor: number = LAYOUT.paddingY;
   for (const rowHeight of rowHeights) {
     const cardTop = cursor + titleBlock;
     ys.push(cardTop + rowHeight / 2);
