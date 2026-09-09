@@ -30,6 +30,11 @@ const zh_CN = {
     weekday_4: '周四',
     weekday_5: '周五',
     weekday_6: '周六',
+    unrestricted: '不限 · 匹配全部事件',
+    row_severity: '级别',
+    row_time: '时段',
+    row_condition: '条件',
+    and: '且',
   },
 };
 

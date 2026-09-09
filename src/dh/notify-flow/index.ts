@@ -1,4 +1,4 @@
 export { default as NotifyConfigsPanel } from './NotifyConfigsPanel';
-export { buildNotifyFlowGraph, formatFilterLines, formatFiltersSummary, formatParamsSummary, emptyLookups } from './buildGraph';
+export { buildNotifyFlowGraph, emptyLookups, formatFilterContent, formatFilterLines, formatFiltersSummary, formatKvChip, formatParamsSummary, formatTagValue } from './buildGraph';
 export { mergeNodePositions } from './mergeNodePositions';
-export type { NotifyConfigValue, NotifyFlowFocus, NotifyFlowGraph, NotifyFlowLookups } from './types';
+export type { NotifyConfigValue, NotifyFlowColumns, NotifyFlowFilterContent, NotifyFlowFocus, NotifyFlowGraph, NotifyFlowKvChip, NotifyFlowLookups } from './types';

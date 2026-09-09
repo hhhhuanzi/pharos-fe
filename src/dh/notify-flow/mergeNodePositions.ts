@@ -9,14 +9,15 @@ export interface PositionedNode {
 }
 
 /**
- * Rebuild graph nodes but keep positions (and RF drag metrics) for ids that already exist.
- * New ids keep `next` default coordinates. Dropped ids disappear with `next`.
+ * Rebuild graph nodes. Only ids the user has dragged keep their coordinates;
+ * everyone else takes the newly computed layout so taller filter cards can reflow.
  */
-export function mergeNodePositions<T extends PositionedNode>(prev: T[], next: T[]): T[] {
+export function mergeNodePositions<T extends PositionedNode>(prev: T[], next: T[], draggedIds?: Iterable<string>): T[] {
+  const dragged = new Set(draggedIds ?? []);
   const prevById = new Map(prev.map((node) => [node.id, node]));
   return next.map((node) => {
     const old = prevById.get(node.id);
-    if (!old) return node;
+    if (!old || !dragged.has(node.id)) return node;
     return {
       ...node,
       position: { x: old.position.x, y: old.position.y },

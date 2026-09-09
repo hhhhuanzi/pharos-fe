@@ -1,8 +1,11 @@
 import { FILTER_I18N, FLOW_I18N, LAYOUT, SOURCE_NODE_ID, weekdayKey } from './constants';
+import { columnLayout, estimateChannelCardHeight, estimateFilterCardHeight, estimateFilterColumnWidth, estimateTemplateCardHeight, layoutChainYs, rowCardHeight } from './layout';
 import type {
   NotifyConfigValue,
   NotifyFlowChannelNode,
   NotifyFlowEdge,
+  NotifyFlowFilterContent,
+  NotifyFlowKvChip,
   NotifyFlowFilterNode,
   NotifyFlowGraph,
   NotifyFlowLookups,
@@ -11,7 +14,7 @@ import type {
   NotifyFlowTranslate,
 } from './types';
 
-const VALUE_MAX = 24;
+const VALUE_MAX = 36;
 const TIME_PREVIEW = 2;
 
 function asParamsRecord(params: unknown): Record<string, unknown> | undefined {
@@ -78,29 +81,25 @@ function formatTimeRange(item: unknown, t: NotifyFlowTranslate): string | undefi
   return parts.length > 0 ? parts.join(' ') : undefined;
 }
 
-function formatTagValue(value: unknown): string {
+/** in/not in 存数组；== 等是单字符串，空格是值的一部分，不能拆。 */
+export function formatTagValue(value: unknown): string {
   if (Array.isArray(value)) {
     return value.map((item) => String(item)).join(', ');
   }
   if (typeof value === 'string') {
-    return value
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .join(', ');
+    return value.trim();
   }
   if (value == null) return '';
   return String(value);
 }
 
-function formatKvLine(item: unknown, opKey: 'op' | 'func'): string | undefined {
+export function formatKvChip(item: unknown, opKey: 'op' | 'func'): NotifyFlowKvChip | undefined {
   if (item == null || typeof item !== 'object') return undefined;
   const rec = item as Record<string, unknown>;
   const key = typeof rec.key === 'string' ? rec.key.trim() : '';
   if (!key) return undefined;
   const op = typeof rec[opKey] === 'string' && rec[opKey] ? String(rec[opKey]) : '==';
-  const value = truncate(formatTagValue(rec.value));
-  return value ? `${key} ${op} ${value}` : `${key} ${op}`;
+  return { key, op, value: truncate(formatTagValue(rec.value)) };
 }
 
 function formatSeverities(severities: number[] | undefined, t: NotifyFlowTranslate): string {
@@ -117,24 +116,46 @@ function formatSeverities(severities: number[] | undefined, t: NotifyFlowTransla
     .join('/');
 }
 
-/** Detailed filter lines for the filter box. Default = all 3 severities and no extras. */
-export function formatFilterLines(config: NotifyConfigValue | undefined, t: NotifyFlowTranslate): string[] {
-  const severityLine = formatSeverities(config?.severities, t);
+export function flattenFilterContent(content: NotifyFlowFilterContent): string[] {
+  if (content.unrestricted) {
+    return content.unrestrictedText ? [content.unrestrictedText] : [];
+  }
+  const chipTexts = content.chips.map((chip) => (chip.value ? `${chip.key} ${chip.op} ${chip.value}` : `${chip.key} ${chip.op}`));
+  return [content.severity, ...content.times, ...chipTexts].filter((item): item is string => Boolean(item));
+}
+
+function isAllSeverities(severities: number[] | undefined): boolean {
+  return Array.isArray(severities) && severities.length === 3;
+}
+
+/** Structured filter body: unrestricted default vs two-column rows (empty kinds omitted). */
+export function formatFilterContent(config: NotifyConfigValue | undefined, t: NotifyFlowTranslate): NotifyFlowFilterContent {
   const timeLines = (config?.time_ranges ?? []).map((item) => formatTimeRange(item, t)).filter((item): item is string => Boolean(item));
-  const labelLines = (config?.label_keys ?? []).map((item) => formatKvLine(item, 'op')).filter((item): item is string => Boolean(item));
-  const attrLines = (config?.attributes ?? []).map((item) => formatKvLine(item, 'func')).filter((item): item is string => Boolean(item));
+  const chips = [...(config?.label_keys ?? []).map((item) => formatKvChip(item, 'op')), ...(config?.attributes ?? []).map((item) => formatKvChip(item, 'func'))].filter(
+    (item): item is NotifyFlowKvChip => Boolean(item),
+  );
+  const hasExtras = timeLines.length > 0 || chips.length > 0;
 
-  const hasExtras = timeLines.length > 0 || labelLines.length > 0 || attrLines.length > 0;
-  if (!hasExtras) {
-    return [`${severityLine} · ${t(FILTER_I18N.noExtra)}`];
+  if (isAllSeverities(config?.severities) && !hasExtras) {
+    return { unrestricted: true, unrestrictedText: t(FLOW_I18N.unrestricted), times: [], chips: [] };
   }
 
-  const shownTimes = timeLines.slice(0, TIME_PREVIEW);
+  const times = timeLines.slice(0, TIME_PREVIEW);
   if (timeLines.length > TIME_PREVIEW) {
-    shownTimes.push(t(FLOW_I18N.timeMore, { count: timeLines.length }));
+    times.push(t(FLOW_I18N.timeMore, { count: timeLines.length }));
   }
 
-  return [severityLine, ...shownTimes, ...labelLines, ...attrLines];
+  return {
+    unrestricted: false,
+    severity: isAllSeverities(config?.severities) ? undefined : formatSeverities(config?.severities, t),
+    times,
+    chips,
+  };
+}
+
+/** Flattened lines for summary / tests. Default = all 3 severities and no extras. */
+export function formatFilterLines(config: NotifyConfigValue | undefined, t: NotifyFlowTranslate): string[] {
+  return flattenFilterContent(formatFilterContent(config, t));
 }
 
 export function formatFiltersSummary(config: NotifyConfigValue | undefined, t: NotifyFlowTranslate): string {
@@ -231,8 +252,19 @@ export function buildNotifyFlowGraph(
 ): NotifyFlowGraph {
   const list = Array.isArray(configs) ? configs : [];
   const keys = options?.keys;
-  const count = list.length;
-  const sourceY = count === 0 ? LAYOUT.paddingY : LAYOUT.paddingY + ((count - 1) * LAYOUT.rowHeight) / 2;
+
+  const prepared = list.map((config) => {
+    const safeConfig = config ?? {};
+    const content = formatFilterContent(safeConfig, t);
+    const paramsSummary = formatParamsSummary(safeConfig.params, lookups, t);
+    return { safeConfig, content, paramsSummary };
+  });
+  const columns = columnLayout(estimateFilterColumnWidth(prepared.map((item) => item.content)));
+  const rowHeights = prepared.map((item) =>
+    rowCardHeight(estimateFilterCardHeight(item.content, columns.filterWidth), estimateChannelCardHeight(Boolean(item.paramsSummary)), estimateTemplateCardHeight()),
+  );
+
+  const { ys, sourceY, contentHeight } = layoutChainYs(rowHeights);
 
   const source: NotifyFlowNode = {
     id: SOURCE_NODE_ID,
@@ -246,34 +278,33 @@ export function buildNotifyFlowGraph(
   const templates: NotifyFlowTemplateNode[] = [];
   const edges: NotifyFlowEdge[] = [];
 
-  list.forEach((config, index) => {
-    const y = LAYOUT.paddingY + index * LAYOUT.rowHeight;
+  prepared.forEach((item, index) => {
+    const y = ys[index];
     const filterId = filterNodeId(index, keys);
     const channelId = channelNodeId(index, keys);
     const templateId = templateNodeId(index, keys);
-    const safeConfig = config ?? {};
 
     filters.push({
       id: filterId,
       kind: 'filter',
       index,
-      lines: formatFilterLines(safeConfig, t),
-      position: { x: LAYOUT.filterX, y },
+      content: item.content,
+      position: { x: columns.filterX, y },
     });
     channels.push({
       id: channelId,
       kind: 'channel',
       index,
-      channelName: resolveChannelName(safeConfig, lookups, t),
-      paramsSummary: formatParamsSummary(safeConfig.params, lookups, t),
-      position: { x: LAYOUT.channelX, y },
+      channelName: resolveChannelName(item.safeConfig, lookups, t),
+      paramsSummary: item.paramsSummary,
+      position: { x: columns.channelX, y },
     });
     templates.push({
       id: templateId,
       kind: 'template',
       index,
-      templateName: resolveTemplateName(safeConfig, lookups, t),
-      position: { x: LAYOUT.templateX, y },
+      templateName: resolveTemplateName(item.safeConfig, lookups, t),
+      position: { x: columns.templateX, y },
     });
 
     edges.push(
@@ -286,5 +317,7 @@ export function buildNotifyFlowGraph(
   return {
     nodes: [source, ...filters, ...channels, ...templates],
     edges,
+    contentHeight,
+    columns,
   };
 }

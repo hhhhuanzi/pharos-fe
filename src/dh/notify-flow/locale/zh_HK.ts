@@ -30,6 +30,11 @@ const zh_HK = {
     weekday_4: '週四',
     weekday_5: '週五',
     weekday_6: '週六',
+    unrestricted: '不限 · 匹配全部事件',
+    row_severity: '級別',
+    row_time: '時段',
+    row_condition: '條件',
+    and: '且',
   },
 };
 

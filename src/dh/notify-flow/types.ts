@@ -41,10 +41,36 @@ export interface NotifyFlowSourceNode extends NotifyFlowBaseNode {
   label: string;
 }
 
+export interface NotifyFlowKvChip {
+  key: string;
+  op: string;
+  value: string;
+}
+
+export interface NotifyFlowFilterContent {
+  /** 全部级别 + 无时段 + 无标签/属性：弱化默认态，不走两栏。 */
+  unrestricted?: boolean;
+  unrestrictedText?: string;
+  /** 有限制时才有值；全部级别且已有其它条件时省略。 */
+  severity?: string;
+  times: string[];
+  chips: NotifyFlowKvChip[];
+}
+
+export interface NotifyFlowColumns {
+  sourceX: number;
+  filterX: number;
+  filterWidth: number;
+  channelX: number;
+  channelWidth: number;
+  templateX: number;
+  templateWidth: number;
+}
+
 export interface NotifyFlowFilterNode extends NotifyFlowBaseNode {
   kind: 'filter';
   index: number;
-  lines: string[];
+  content: NotifyFlowFilterContent;
 }
 
 export interface NotifyFlowChannelNode extends NotifyFlowBaseNode {
@@ -72,6 +98,8 @@ export interface NotifyFlowEdge {
 export interface NotifyFlowGraph {
   nodes: NotifyFlowNode[];
   edges: NotifyFlowEdge[];
+  contentHeight: number;
+  columns: NotifyFlowColumns;
 }
 
 export type NotifyFlowPositions = Record<string, NotifyFlowPosition>;

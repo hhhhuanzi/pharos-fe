@@ -30,6 +30,11 @@ const ru_RU = {
     weekday_4: 'чт',
     weekday_5: 'пт',
     weekday_6: 'сб',
+    unrestricted: 'Без ограничений · все события',
+    row_severity: 'Уровень',
+    row_time: 'Время',
+    row_condition: 'Условие',
+    and: 'и',
   },
 };
 

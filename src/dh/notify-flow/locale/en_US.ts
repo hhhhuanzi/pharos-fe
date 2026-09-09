@@ -30,6 +30,11 @@ const en_US = {
     weekday_4: 'Thu',
     weekday_5: 'Fri',
     weekday_6: 'Sat',
+    unrestricted: 'Any · matches all events',
+    row_severity: 'Level',
+    row_time: 'Time',
+    row_condition: 'When',
+    and: 'AND',
   },
 };
 

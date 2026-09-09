@@ -30,6 +30,11 @@ const ja_JP = {
     weekday_4: '木',
     weekday_5: '金',
     weekday_6: '土',
+    unrestricted: '制限なし · すべてのイベント',
+    row_severity: 'レベル',
+    row_time: '時間',
+    row_condition: '条件',
+    and: 'かつ',
   },
 };
 

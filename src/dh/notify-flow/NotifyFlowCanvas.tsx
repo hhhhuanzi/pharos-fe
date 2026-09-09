@@ -21,18 +21,19 @@ import { NS } from '@/pages/notificationRules/constants';
 
 import { DRAG_CLICK_THRESHOLD, LAYOUT, SOURCE_NODE_ID } from './constants';
 import { mergeNodePositions } from './mergeNodePositions';
-import type { NotifyFlowFocus, NotifyFlowGraph } from './types';
+import type { NotifyFlowFilterContent, NotifyFlowFocus, NotifyFlowGraph, NotifyFlowKvChip } from './types';
 
 interface SourceNodeData {
   label: string;
   selected?: boolean;
 }
 
-interface FilterNodeData {
+interface FilterNodeData extends NotifyFlowFilterContent {
   index: number;
+  width: number;
   title: string;
-  lines: string[];
   selected: boolean;
+  labels: { severity: string; time: string; condition: string; and: string };
 }
 
 interface ChannelNodeData {
@@ -53,9 +54,45 @@ interface TemplateNodeData {
 }
 
 function boxClass(selected: boolean): string {
-  return `cursor-grab rounded-lg border border-solid p-3 ${
-    selected ? 'border-[var(--fc-fill-primary)] bg-[var(--fc-violet-2)]' : 'border-[var(--fc-border-color)] bg-fc-100'
-  }`;
+  return `cursor-grab rounded-lg border border-solid p-3 ${selected ? 'border-[var(--fc-fill-primary)] bg-[var(--fc-violet-2)]' : 'border-[var(--fc-border-color)] bg-fc-100'}`;
+}
+
+function NodeCaption({ title }: { title: string }) {
+  return <div className='pointer-events-none absolute bottom-full left-0 mb-1 text-base text-hint'>{title}</div>;
+}
+
+function TextChip({ text }: { text: string }) {
+  return (
+    <span
+      className='inline-flex max-w-full truncate rounded-lg border border-solid border-[var(--fc-border-color)] bg-fc-50 px-2 py-0.5 text-base leading-none text-main'
+      title={text}
+    >
+      {text}
+    </span>
+  );
+}
+
+function KvChip({ chip }: { chip: NotifyFlowKvChip }) {
+  const title = chip.value ? `${chip.key} ${chip.op} ${chip.value}` : `${chip.key} ${chip.op}`;
+  return (
+    <span
+      className='inline-flex max-w-full items-center gap-1 truncate rounded-lg border border-solid border-[var(--fc-border-color)] bg-fc-50 px-2 py-0.5 text-base leading-none'
+      title={title}
+    >
+      <span className='text-main'>{chip.key}</span>
+      <span className='text-hint'>{chip.op}</span>
+      {chip.value ? <span className='font-medium text-title'>{chip.value}</span> : null}
+    </span>
+  );
+}
+
+function FilterRow(props: { label: string; children: React.ReactNode }) {
+  return (
+    <div className='flex gap-2'>
+      <div className='w-8 shrink-0 text-base text-hint'>{props.label}</div>
+      <div className='flex min-w-0 flex-1 flex-wrap items-center gap-2'>{props.children}</div>
+    </div>
+  );
 }
 
 function SourceNode({ data }: NodeProps<SourceNodeData>) {
@@ -69,57 +106,86 @@ function SourceNode({ data }: NodeProps<SourceNodeData>) {
 
 function FilterNode({ data }: NodeProps<FilterNodeData>) {
   return (
-    <div className={`w-[200px] ${boxClass(data.selected)}`}>
-      <Handle type='target' position={Position.Left} isConnectable={false} className='bg-[var(--fc-fill-primary)]' />
-      <div className='mb-1 text-base text-hint'>{data.title}</div>
-      {data.lines.map((line, lineIndex) => (
-        <div key={`${lineIndex}-${line}`} className='truncate text-base text-main' title={line}>
-          {line}
-        </div>
-      ))}
-      <Handle type='source' position={Position.Right} isConnectable={false} className='bg-[var(--fc-fill-primary)]' />
+    <div className='relative' style={{ width: data.width }}>
+      <NodeCaption title={data.title} />
+      <div className={boxClass(data.selected)}>
+        <Handle type='target' position={Position.Left} isConnectable={false} className='bg-[var(--fc-fill-primary)]' />
+        {data.unrestricted ? (
+          <div className='text-base text-hint'>{data.unrestrictedText}</div>
+        ) : (
+          <div className='flex flex-col gap-2'>
+            {data.severity ? (
+              <FilterRow label={data.labels.severity}>
+                <TextChip text={data.severity} />
+              </FilterRow>
+            ) : null}
+            {data.times.length > 0 ? (
+              <FilterRow label={data.labels.time}>
+                {data.times.map((time, timeIndex) => (
+                  <TextChip key={`${timeIndex}-${time}`} text={time} />
+                ))}
+              </FilterRow>
+            ) : null}
+            {data.chips.length > 0 ? (
+              <FilterRow label={data.labels.condition}>
+                {data.chips.map((chip, chipIndex) => (
+                  <React.Fragment key={`${chipIndex}-${chip.key}-${chip.op}-${chip.value}`}>
+                    {chipIndex > 0 ? <span className='text-base text-soft'>{data.labels.and}</span> : null}
+                    <KvChip chip={chip} />
+                  </React.Fragment>
+                ))}
+              </FilterRow>
+            ) : null}
+          </div>
+        )}
+        <Handle type='source' position={Position.Right} isConnectable={false} className='bg-[var(--fc-fill-primary)]' />
+      </div>
     </div>
   );
 }
 
 function ChannelNode({ data }: NodeProps<ChannelNodeData>) {
   return (
-    <div className={`w-[184px] ${boxClass(data.selected)}`}>
-      <Handle type='target' position={Position.Left} isConnectable={false} className='bg-[var(--fc-fill-primary)]' />
-      <div className='flex items-start gap-2'>
-        <div className='min-w-0 flex-1'>
-          <div className='mb-1 text-base text-hint'>{data.title}</div>
-          <div className='truncate text-l1 font-bold text-title' title={data.channelName}>
-            {data.channelName}
-          </div>
-          {data.paramsSummary ? (
-            <div className='mt-1 truncate text-base text-hint' title={data.paramsSummary}>
-              {data.paramsSummary}
+    <div className='relative' style={{ width: LAYOUT.channelWidth }}>
+      <NodeCaption title={data.title} />
+      <div className={boxClass(data.selected)}>
+        <Handle type='target' position={Position.Left} isConnectable={false} className='bg-[var(--fc-fill-primary)]' />
+        <div className='flex items-start gap-2'>
+          <div className='min-w-0 flex-1'>
+            <div className='truncate text-l1 font-bold text-title' title={data.channelName}>
+              {data.channelName}
             </div>
+            {data.paramsSummary ? (
+              <div className='mt-1 truncate text-base text-hint' title={data.paramsSummary}>
+                {data.paramsSummary}
+              </div>
+            ) : null}
+          </div>
+          {!data.disabled && data.onDelete ? (
+            <MinusCircleOutlined
+              className='nodrag mt-1 shrink-0 text-soft hover:text-title'
+              onClick={(event) => {
+                event.stopPropagation();
+                data.onDelete?.(data.index);
+              }}
+            />
           ) : null}
         </div>
-        {!data.disabled && data.onDelete ? (
-          <MinusCircleOutlined
-            className='nodrag mt-1 shrink-0 text-soft hover:text-title'
-            onClick={(event) => {
-              event.stopPropagation();
-              data.onDelete?.(data.index);
-            }}
-          />
-        ) : null}
+        <Handle type='source' position={Position.Right} isConnectable={false} className='bg-[var(--fc-fill-primary)]' />
       </div>
-      <Handle type='source' position={Position.Right} isConnectable={false} className='bg-[var(--fc-fill-primary)]' />
     </div>
   );
 }
 
 function TemplateNode({ data }: NodeProps<TemplateNodeData>) {
   return (
-    <div className={`w-[168px] ${boxClass(data.selected)}`}>
-      <Handle type='target' position={Position.Left} isConnectable={false} className='bg-[var(--fc-fill-primary)]' />
-      <div className='mb-1 text-base text-hint'>{data.title}</div>
-      <div className='truncate text-l1 font-bold text-title' title={data.templateName}>
-        {data.templateName}
+    <div className='relative' style={{ width: LAYOUT.templateWidth }}>
+      <NodeCaption title={data.title} />
+      <div className={boxClass(data.selected)}>
+        <Handle type='target' position={Position.Left} isConnectable={false} className='bg-[var(--fc-fill-primary)]' />
+        <div className='truncate text-l1 font-bold text-title' title={data.templateName}>
+          {data.templateName}
+        </div>
       </div>
     </div>
   );
@@ -162,6 +228,7 @@ function toRfNodes(
   disabled: boolean | undefined,
   onDelete: ((index: number) => void) | undefined,
   titles: { filter: string; channel: string; template: string },
+  labels: { severity: string; time: string; condition: string; and: string },
 ): Node[] {
   return graph.nodes.map((node) => {
     const selected = node.kind !== 'source' && node.index === selectedIndex;
@@ -173,13 +240,18 @@ function toRfNodes(
       selectable: node.kind !== 'source',
       deletable: false,
       selected,
+      style: { overflow: 'visible' as const },
     };
 
     if (node.kind === 'source') {
       return { ...shared, type: 'source', data: { label: node.label, selected: false } };
     }
     if (node.kind === 'filter') {
-      return { ...shared, type: 'filter', data: { index: node.index, title: titles.filter, lines: node.lines, selected } };
+      return {
+        ...shared,
+        type: 'filter',
+        data: { index: node.index, width: graph.columns.filterWidth, title: titles.filter, selected, labels, ...node.content },
+      };
     }
     if (node.kind === 'channel') {
       return {
@@ -242,6 +314,7 @@ function NotifyFlowCanvasInner(props: NotifyFlowCanvasProps) {
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
   const draggedRef = useRef(false);
   const lastResetRef = useRef(resetToken);
+  const draggedIdsRef = useRef<Set<string>>(new Set());
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
 
@@ -254,20 +327,33 @@ function NotifyFlowCanvasInner(props: NotifyFlowCanvasProps) {
     [t],
   );
 
+  const labels = useMemo(
+    () => ({
+      severity: t('flow.row_severity'),
+      time: t('flow.row_time'),
+      condition: t('flow.row_condition'),
+      and: t('flow.and'),
+    }),
+    [t],
+  );
+
   useEffect(() => {
-    const built = toRfNodes(graph, selectedIndex, disabled, onDelete, titles);
+    const built = toRfNodes(graph, selectedIndex, disabled, onDelete, titles, labels);
     const isReset = resetToken !== lastResetRef.current;
     lastResetRef.current = resetToken;
-    setNodes((prev) => (isReset || prev.length === 0 ? built : mergeNodePositions(prev, built)));
+    if (isReset) {
+      draggedIdsRef.current = new Set();
+    }
+    setNodes((prev) => (isReset || prev.length === 0 ? built : mergeNodePositions(prev, built, draggedIdsRef.current)));
     setEdges(toRfEdges(graph, selectedIndex));
-  }, [graph, selectedIndex, disabled, onDelete, titles, resetToken]);
+  }, [graph, selectedIndex, disabled, onDelete, titles, labels, resetToken]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setNodes((current) => applyNodeChanges(changes, current));
   }, []);
 
   const chainCount = graph.nodes.filter((node) => node.kind === 'filter').length;
-  const canvasHeight = Math.min(520, Math.max(300, LAYOUT.paddingY + Math.max(chainCount, 1) * LAYOUT.rowHeight));
+  const canvasHeight = Math.min(LAYOUT.canvasMaxHeight, Math.max(LAYOUT.canvasMinHeight, graph.contentHeight));
   const fitKey = `${chainCount}:${fitToken}:${fill ? '1' : '0'}`;
 
   return (
@@ -293,11 +379,12 @@ function NotifyFlowCanvasInner(props: NotifyFlowCanvasProps) {
           dragStartRef.current = { x: event.clientX, y: event.clientY };
           draggedRef.current = false;
         }}
-        onNodeDrag={(event) => {
+        onNodeDrag={(event, node) => {
           const start = dragStartRef.current;
           if (!start) return;
           if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > DRAG_CLICK_THRESHOLD) {
             draggedRef.current = true;
+            draggedIdsRef.current.add(node.id);
           }
         }}
         onNodeClick={(_event, node) => {
