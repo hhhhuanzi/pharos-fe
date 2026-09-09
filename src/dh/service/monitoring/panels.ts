@@ -10,6 +10,7 @@ import { SUMMARY_SECTION } from './sections/summary';
 import { TRAFFIC_SECTION } from './sections/traffic';
 import { clusterMatcher, containerMatcher, podSetFilter, CONTAINER_MEMORY_WORKING_SET, type MonitoringScope } from './selectors';
 import type { MonitoringReduce } from './values';
+import type { MonitoringWindowTopk } from './windowTopk';
 
 export type MonitoringPanelKind = 'chart' | 'stat' | 'table' | 'empty';
 export type MonitoringAbsentMode = 'uninstrumented' | 'zero' | 'dash';
@@ -32,6 +33,11 @@ export interface MonitoringTargetDef {
   emphasis?: 'all';
   /** Instant vector at range end. Stats / tables default to this; charts stay range queries. */
   instant?: boolean;
+  /**
+   * Pin plotted series to the top-k label values over the whole selected window. Per-step
+   * `topk()` in a range query unions different winners and grows the legend past k.
+   */
+  windowTopk?: MonitoringWindowTopk;
   /** How to collapse a matrix into one number for a stat card. */
   reduce?: MonitoringReduce;
   /**
@@ -95,6 +101,16 @@ export interface MonitoringPanelDef {
   columns?: MonitoringTableColumn[];
   tableEmptyKey?: string;
   emptyKey?: string;
+  /**
+   * Pin this panel to the section's selected `exported_instance`. Heap used / Xms / Xmx stay
+   * unfiltered; heap-generation and non-heap share one Pod picker. GC stays all-pod.
+   */
+  instanceFilter?: 'exported_instance';
+  /**
+   * After fetch, map collector names to Young GC / Full GC and pad a zero Full GC when Young
+   * is present but Full is missing.
+   */
+  padMissingGc?: 'g1Old';
   targets: MonitoringTargetDef[];
 }
 
@@ -107,6 +123,13 @@ export interface MonitoringSectionDef {
   emptyKey?: string;
   /** When every panel in the section came back empty (JVM not instrumented). */
   fallbackEmptyKey?: string;
+  /**
+   * Instant `count by (exported_instance)` used to populate the shared Pod picker.
+   * The picker query itself is never pinned to a selected instance.
+   */
+  instancePicker?: {
+    build: (scope: MonitoringScope) => string;
+  };
   panels: MonitoringPanelDef[];
 }
 
@@ -192,16 +215,21 @@ function memoryPanel(): MonitoringPanelDef {
 function networkPanel(): MonitoringPanelDef {
   // container_network_* has no `container` label, hence the pod-set primitive; `id!="/"` drops the
   // host interface series that cadvisor reports alongside the pod ones.
-  const build = (metric: string) => (scope: MonitoringScope, rateWindow: string) =>
-    `sum by (pod) (rate(${metric}${clusterMatcher(scope, ['id!="/"'])}[${rateWindow}]) ${podSetFilter(scope)})`;
+  // Transmit is negated so the axis is symmetric around 0 (receive up, transmit down), same as
+  // node network. Per-pod pairs stay overlay, not stacked across pods.
+  const build =
+    (metric: string, sign: '' | '-' = '') =>
+    (scope: MonitoringScope, rateWindow: string) =>
+      `${sign}sum by (pod) (rate(${metric}${clusterMatcher(scope, ['id!="/"'])}[${rateWindow}]) ${podSetFilter(scope)})`;
   return {
     id: 'container_network',
     titleKey: 'monitoring.panel.network',
     unit: 'bytesPerSecond',
+    yAxis: 'signed',
     span: 12,
     targets: [
       { refId: 'receive', nameLabels: ['pod'], nameKey: 'monitoring.legend.receive', build: build('container_network_receive_bytes_total') },
-      { refId: 'transmit', nameLabels: ['pod'], nameKey: 'monitoring.legend.transmit', build: build('container_network_transmit_bytes_total') },
+      { refId: 'transmit', nameLabels: ['pod'], nameKey: 'monitoring.legend.transmit', build: build('container_network_transmit_bytes_total', '-') },
     ],
   };
 }
@@ -238,6 +266,8 @@ export interface MonitoringSectionQuery extends MonitoringTargetDef {
   batchRefId: string;
   query: string;
   instant: boolean;
+  /** Instant ranking PromQL; not plotted. Used to rewrite `query` before the range fetch. */
+  windowTopkQuery?: string;
 }
 
 function targetIsInstant(panel: MonitoringPanelDef, target: MonitoringTargetDef): boolean {
@@ -245,15 +275,31 @@ function targetIsInstant(panel: MonitoringPanelDef, target: MonitoringTargetDef)
   return panel.kind === 'stat' || panel.kind === 'table';
 }
 
+function scopeWithoutInstance(scope: MonitoringScope): MonitoringScope {
+  if (scope.exportedInstance === undefined) return scope;
+  const { exportedInstance: _dropped, ...rest } = scope;
+  return rest;
+}
+
 /** Flattens a section into one batch payload, keeping the panel each query belongs to. */
-export function buildSectionQueries(section: MonitoringSectionDef, scope: MonitoringScope, rateWindow: string, rangeWindow = '1h'): MonitoringSectionQuery[] {
-  return section.panels.flatMap((panel) =>
-    panel.targets.map((target) => ({
+export function buildSectionQueries(
+  section: MonitoringSectionDef,
+  scope: MonitoringScope,
+  rateWindow: string,
+  rangeWindow = '1h',
+  exportedInstance?: string,
+): MonitoringSectionQuery[] {
+  const instance = exportedInstance ?? scope.exportedInstance;
+  const baseScope = scopeWithoutInstance(scope);
+  return section.panels.flatMap((panel) => {
+    const panelScope = panel.instanceFilter === 'exported_instance' && instance ? { ...baseScope, exportedInstance: instance } : baseScope;
+    return panel.targets.map((target) => ({
       ...target,
       panelId: panel.id,
       batchRefId: batchRefId(panel.id, target.refId),
-      query: target.build(scope, rateWindow, rangeWindow),
+      query: target.build(panelScope, rateWindow, rangeWindow),
       instant: targetIsInstant(panel, target),
-    })),
-  );
+      windowTopkQuery: target.windowTopk?.rank(panelScope, rateWindow, rangeWindow),
+    }));
+  });
 }

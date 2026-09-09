@@ -15,10 +15,18 @@ export const CONTAINER_MEMORY_WORKING_SET = 'container_memory_working_set_bytes'
 export interface MonitoringScope {
   service: string;
   cluster: string;
-  /** K8s namespace. Matcher for cadvisor / kube-state; ignored by OTel / spanmetrics. */
+  /**
+   * K8s namespace. cadvisor / kube-state match `namespace=`; HTTP / JVM encode it as the
+   * `exported_job` prefix (`<ns>/<service>`), never as `namespace=` (that label is the collector).
+   */
   namespace?: string;
-  /** spanmetrics `deployment_environment_name`. Ignored by K8s matchers. */
+  /** spanmetrics `deployment_environment_name`. Ignored by K8s and HTTP / JVM matchers. */
   env?: string;
+  /**
+   * Full OTel `exported_instance` (`<ns>.<pod>.<service>`). Only instance-filtered JVM panels
+   * receive this; heap used / Xms / Xmx stay service-wide. `otelJobMatcher` adds the equality.
+   */
+  exportedInstance?: string;
 }
 
 function eq(name: string, value: string): string {
@@ -46,13 +54,19 @@ export function workloadMatcher(scope: MonitoringScope, extra: string[] = []): s
 }
 
 /**
- * JVM / HTTP family. Scraped from the OTel collector: no `container`, and `namespace` / `pod`
- * name the collector. Stage 0 (PLAN: 前端暂用 exported_*) uses
- * `{cluster, exported_job=~".+/$service_name"}` — not `container=`, not business namespace.
+ * JVM / HTTP family. Scraped from the OTel collector: no `container`, and the `namespace` / `pod`
+ * labels name the collector — never put `namespace=` here. These series also have no
+ * `deployment_environment_name` (that stays on `target_info` until path-1 promote).
+ *
+ * `exported_job` is `<business-ns>/<service>` (PLAN). Pin that exact job when the page has a
+ * namespace so the same service in `pre-*` on this cluster does not appear. Without a namespace,
+ * fall back to `exported_job=~".+/$service"`.
  */
 export function otelJobMatcher(scope: MonitoringScope, extra: string[] = []): string {
-  const job = `exported_job=~"${escapePromLabel(`.+/${escapePromRegex(scope.service)}`)}"`;
-  return braces([eq('cluster', scope.cluster), job, ...extra]);
+  const job = scope.namespace ? eq('exported_job', `${scope.namespace}/${scope.service}`) : `exported_job=~"${escapePromLabel(`.+/${escapePromRegex(scope.service)}`)}"`;
+  const matchers = [eq('cluster', scope.cluster), job];
+  if (scope.exportedInstance) matchers.push(eq('exported_instance', scope.exportedInstance));
+  return braces([...matchers, ...extra]);
 }
 
 /** kube_pod_info and similar: cluster + business namespace when known. */

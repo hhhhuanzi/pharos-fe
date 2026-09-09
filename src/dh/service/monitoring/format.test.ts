@@ -19,6 +19,7 @@ describe('formatMonitoringValue', () => {
     expect(formatMonitoringValue('bytes', 1024 * 1024 * 1005)).toBe('1005 MiB');
     expect(formatMonitoringValue('bytesPerSecond', 89)).toBe('89 B/s');
     expect(formatMonitoringValue('bytesPerSecond', 2048)).toBe('2 KiB/s');
+    expect(formatMonitoringValue('bytesPerSecond', -2048)).toBe('-2 KiB/s');
   });
 
   it('renders ratios as percentages with more precision when small', () => {
@@ -114,5 +115,37 @@ describe('monitoringSeriesName', () => {
     expect(monitoringSeriesName({ exported_instance: 'rome-sec.rome-sec-admin-abc.rome-sec-admin' }, ['exported_instance'], undefined, 'exportedInstancePod')).toBe(
       'rome-sec-admin-abc',
     );
+    expect(
+      monitoringSeriesName(
+        { exported_instance: 'rome-sec.rome-sec-admin-abc.rome-sec-admin', jvm_gc_name: 'G1 Young Generation' },
+        ['exported_instance', 'jvm_gc_name'],
+        undefined,
+        'exportedInstancePod',
+      ),
+    ).toBe('rome-sec-admin-abc · Young GC');
+    expect(
+      monitoringSeriesName(
+        { exported_instance: 'rome-sec.rome-sec-admin-abc.rome-sec-admin', jvm_gc_name: 'Copy' },
+        ['exported_instance', 'jvm_gc_name'],
+        undefined,
+        'exportedInstancePod',
+      ),
+    ).toBe('rome-sec-admin-abc · Young GC');
+    expect(
+      monitoringSeriesName(
+        { exported_instance: 'rome-sec.rome-sec-admin-abc.rome-sec-admin', jvm_gc_name: 'MarkSweepCompact' },
+        ['exported_instance', 'jvm_gc_name'],
+        undefined,
+        'exportedInstancePod',
+      ),
+    ).toBe('rome-sec-admin-abc · Full GC');
+    expect(
+      monitoringSeriesName(
+        { exported_instance: 'rome-sec.rome-sec-admin-abc.rome-sec-admin', jvm_gc_name: 'G1 Concurrent Cycle' },
+        ['exported_instance', 'jvm_gc_name'],
+        undefined,
+        'exportedInstancePod',
+      ),
+    ).toBe('rome-sec-admin-abc · G1 Concurrent Cycle');
   });
 });

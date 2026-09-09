@@ -1,6 +1,7 @@
 import { errorRateYMax } from '../series';
 import { buildMonitoringYAxis, defaultMonitoringYAxisMode } from './axis';
 import { formatMonitoringValue } from './format';
+import { WORKLOAD_SECTION } from './panels';
 import { JVM_SECTION } from './sections/jvm';
 import { NODE_SECTION } from './sections/node';
 
@@ -91,7 +92,7 @@ describe('utilization axes', () => {
   });
 
   it('is what the node and JVM CPU panels ask for', () => {
-    expect(NODE_SECTION.panels.map((panel) => panel.yAxis)).toEqual(['utilization', 'utilization', 'utilization']);
+    expect(NODE_SECTION.panels.map((panel) => panel.yAxis)).toEqual(['utilization', 'utilization', 'utilization', 'signed']);
     expect(JVM_SECTION.panels.find((panel) => panel.id === 'jvm_cpu')?.yAxis).toBe('utilization');
     expect(JVM_SECTION.panels.find((panel) => panel.id === 'jvm_gc')?.yAxis).toBeUndefined();
   });
@@ -164,5 +165,24 @@ describe('linear axes', () => {
 
   it('ignores nulls left by gap-filled series', () => {
     expect(buildMonitoringYAxis({ unit: 'ops', values: [null, 3.1, undefined, NaN] }).range).toEqual([0, 4]);
+  });
+});
+
+describe('signed axes', () => {
+  it('keeps 0 in the middle so network receive / transmit stay symmetric', () => {
+    const plan = buildMonitoringYAxis({ unit: 'bytesPerSecond', mode: 'signed', values: [800, -400] });
+
+    expect(plan.range[0]).toBe(-plan.range[1]);
+    expect(plan.range[1]).toBeGreaterThanOrEqual(800);
+    expect(plan.incrs).toBeDefined();
+  });
+
+  it('uses the same empty scale on both sides when nothing was measured', () => {
+    expect(buildMonitoringYAxis({ unit: 'bytesPerSecond', mode: 'signed', values: [0, 0] }).range).toEqual([-1024, 1024]);
+  });
+
+  it('is what both network panels ask for', () => {
+    expect(NODE_SECTION.panels.find((panel) => panel.id === 'node_network')?.yAxis).toBe('signed');
+    expect(WORKLOAD_SECTION.panels.find((panel) => panel.id === 'container_network')?.yAxis).toBe('signed');
   });
 });

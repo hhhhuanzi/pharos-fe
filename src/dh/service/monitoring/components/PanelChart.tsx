@@ -7,6 +7,7 @@ import type { AlignedData, Options, Series } from 'uplot';
 
 import UPlotChart, { paddingSide, scalesBuilder, tooltipPlugin } from '@/components/UPlotChart';
 import { CommonStateContext } from '@/App';
+import '../monitoringTooltip.less';
 import { hexPalette } from '@/pages/dashboard/config';
 import { NS } from '@/pages/service/constants';
 
@@ -26,7 +27,7 @@ import {
   type MonitoringSeriesReference,
 } from '../chartTheme';
 import { formatMonitoringValue } from '../format';
-import { isolateLegendName, isLegendNameHidden, resolveMonitoringSeriesName } from '../legend';
+import { isolateLegendName, isLegendNameHidden, resolveMonitoringSeriesName, shouldIsolateLegendClick, snapshotLegendSelection } from '../legend';
 import type { MonitoringPanelDef, MonitoringSectionQuery } from '../panels';
 import type { MonitoringSeries } from '../query';
 import { readUplotSelectRange } from '../zoom';
@@ -45,6 +46,8 @@ interface Props {
   emptyDescription: string;
   /** Box-select updates the page time range, not a local visual zoom. */
   onRangeChange?: (range: IRawTimeRange) => void;
+  /** Shared Pod picker for instance-filtered JVM pool / non-heap charts. Sits after the title. */
+  titleExtra?: React.ReactNode;
 }
 
 interface ResolvedSeries extends NamedSeries {
@@ -52,7 +55,7 @@ interface ResolvedSeries extends NamedSeries {
   emphasis?: 'all';
 }
 
-export default function PanelChart({ panel, entries, loading, emptyDescription, onRangeChange }: Props) {
+export default function PanelChart({ panel, entries, loading, emptyDescription, onRangeChange, titleExtra }: Props) {
   const { t } = useTranslation(NS);
   const { darkMode } = useContext(CommonStateContext);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -116,6 +119,7 @@ export default function PanelChart({ panel, entries, loading, emptyDescription, 
           id,
           mode: 'all',
           sort: 'desc',
+          pinningEnabled: true,
           pointValueformatter: formatValue,
         }),
       ],
@@ -148,17 +152,18 @@ export default function PanelChart({ panel, entries, loading, emptyDescription, 
     <div className='fc-border flex h-[300px] flex-col rounded-lg bg-fc-100 p-4'>
       {/* Panel titles are one step under the section header (16px bold) in both size and weight, and
           one step over the 12px labels inside the card. */}
-      <div className='mb-3 flex shrink-0 items-center gap-2 text-l1 font-medium leading-none text-title'>
-        <span className='truncate' title={t(panel.titleKey)}>
+      <div className='mb-3 flex shrink-0 flex-wrap items-start gap-2 text-l1 font-medium leading-none text-title'>
+        <span className='min-w-0 truncate pt-1' title={t(panel.titleKey)}>
           {t(panel.titleKey)}
         </span>
         {panel.hintKey ? (
           <Tooltip title={t(panel.hintKey)}>
-            <QuestionCircleOutlined className='text-soft' />
+            <QuestionCircleOutlined className='mt-1 text-soft' />
           </Tooltip>
         ) : null}
+        {titleExtra ? <div className='min-w-0'>{titleExtra}</div> : null}
       </div>
-      {/* Plot left, legend right. Long pod names stack; they never wrap under the plot. */}
+      {/* Plot left, legend right. Long pod names wrap inside the column, never under the plot. */}
       <div className='flex min-h-0 flex-1 gap-3'>
         <div ref={wrapRef} className='min-h-0 min-w-0 flex-1'>
           {loading && aligned.labels.length === 0 ? (
@@ -174,27 +179,34 @@ export default function PanelChart({ panel, entries, loading, emptyDescription, 
           ) : null}
         </div>
         {legend.show ? (
-          /* `w-max` hugs short names (200 / GET); the 12rem / 38% cap keeps the plot. Names that
-             still overflow ellipsize from the left so the pod hash stays visible; `title` has all. */
+          /* `w-max` hugs short names; the 16rem / 42% cap keeps the plot. Long pod names wrap in
+             full — no ellipsis, no tooltip. Click isolates; drag-select copies via the OS. */
           <div className={`best-looking-scroll shrink-0 text-base text-hint ${MONITORING_LEGEND_SIDE_CLASS}`}>
             {legend.items.map((label, idx) => {
               const hidden = isLegendNameHidden(isolate, label);
               return (
-                <button
+                <div
                   key={`${label}-${idx}`}
-                  type='button'
-                  onClick={() => setFocusedName((current) => isolateLegendName(current, label))}
-                  className={`flex max-w-full cursor-pointer select-none items-center gap-2 border-0 bg-transparent p-0 text-left text-base leading-5 ${
+                  role='button'
+                  tabIndex={0}
+                  onClick={(event) => {
+                    if (!shouldIsolateLegendClick(snapshotLegendSelection(event.currentTarget, window.getSelection()))) return;
+                    setFocusedName((current) => isolateLegendName(current, label));
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    setFocusedName((current) => isolateLegendName(current, label));
+                  }}
+                  className={`flex max-w-full cursor-pointer items-start gap-2 bg-transparent p-0 text-left text-base leading-5 ${
                     hidden ? 'text-soft line-through opacity-40' : 'text-hint'
                   }`}
                 >
                   {/* Colour only, same chip for every series: the plotted line is what says solid or
                       dashed. Matches the shared uPlot tooltip chip, which is also 12x4 solid. */}
-                  <i className='inline-block h-1 w-3 shrink-0 rounded-sm' style={{ backgroundColor: colors[idx] }} />
-                  <span className={MONITORING_LEGEND_NAME_CLASS} title={label}>
-                    {label}
-                  </span>
-                </button>
+                  <i className='mt-2 inline-block h-1 w-3 shrink-0 rounded-sm' style={{ backgroundColor: colors[idx] }} />
+                  <span className={MONITORING_LEGEND_NAME_CLASS}>{label}</span>
+                </div>
               );
             })}
             {isolate ? (

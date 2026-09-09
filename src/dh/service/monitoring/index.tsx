@@ -11,7 +11,7 @@ import { MONITORING_RANGE_LS } from '@/pages/service/storage';
 import { fetchMonitoringScopes } from './api';
 import { pickMonitoringDatasourceId, readMonitoringDatasourceId, type MonitoringDatasource } from './datasource';
 import { MONITORING_SECTIONS } from './panels';
-import { isMonitoringIdentityPending, resolveScopeOption, type MonitoringScopeOption } from './scope';
+import { isMonitoringIdentityPending, pickPreferredScope, resolveScopeOption } from './scope';
 import type { MonitoringScope } from './selectors';
 import SectionPanels from './components/SectionPanels';
 import Toolbar from './components/Toolbar';
@@ -111,14 +111,12 @@ export default function ServiceMonitoring({ service, env, clusters, namespaces }
       });
   }, [service, datasourceId, range, refreshKey]);
 
-  const preferredCluster = clusters?.length === 1 ? clusters[0] : undefined;
-  const preferredNamespace = namespaces?.length === 1 ? namespaces[0] : undefined;
   const identityPending = isMonitoringIdentityPending(env, clusters);
 
   const activeScopeOption = useMemo(() => {
     if (identityPending) return undefined;
-    return resolveScopeOption(scopeOptions, { cluster: preferredCluster, namespace: preferredNamespace });
-  }, [scopeOptions, identityPending, preferredCluster, preferredNamespace]);
+    return resolveScopeOption(scopeOptions, pickPreferredScope(scopeOptions, clusters, namespaces));
+  }, [scopeOptions, identityPending, clusters, namespaces]);
 
   const scope = useMemo((): MonitoringScope | undefined => {
     if (!activeScopeOption) return undefined;

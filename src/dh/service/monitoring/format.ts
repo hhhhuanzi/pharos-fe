@@ -1,3 +1,5 @@
+import { displayJvmGcName } from './gcDisplay';
+
 export type MonitoringUnit = 'cores' | 'bytes' | 'bytesPerSecond' | 'percentUnit' | 'short' | 'count' | 'ops' | 'milliseconds' | 'seconds';
 
 export type MonitoringNameRewrite = 'exportedInstancePod' | 'httpMethodRoute';
@@ -88,6 +90,7 @@ export function monitoringSeriesName(metric: Record<string, string> | undefined,
     .map((label) => {
       const raw = metric?.[label];
       if (!raw || !raw.trim()) return undefined;
+      if (label === 'jvm_gc_name') return displayJvmGcName(raw);
       return rewrite === 'exportedInstancePod' && label === 'exported_instance' ? shortExportedInstance(raw) : raw;
     })
     .filter((value): value is string => Boolean(value))

@@ -1,4 +1,4 @@
-import { isolateLegendName, isLegendNameHidden, resolveMonitoringSeriesName } from './legend';
+import { isolateLegendName, isLegendNameHidden, resolveMonitoringSeriesName, shouldIsolateLegendClick, snapshotLegendSelection } from './legend';
 
 describe('isolateLegendName', () => {
   it('isolates the clicked series instead of hiding it', () => {
@@ -20,6 +20,45 @@ describe('isolateLegendName', () => {
   it('shows every series when nothing is isolated', () => {
     expect(isLegendNameHidden(undefined, 'All')).toBe(false);
     expect(isLegendNameHidden(undefined, 'pod-a')).toBe(false);
+  });
+});
+
+describe('shouldIsolateLegendClick', () => {
+  it('isolates a plain click with no selection', () => {
+    expect(shouldIsolateLegendClick(null)).toBe(true);
+    expect(shouldIsolateLegendClick({ isCollapsed: true, text: '', intersectsRow: false })).toBe(true);
+  });
+
+  it('does not isolate after the user drag-selects text in the row', () => {
+    expect(shouldIsolateLegendClick({ isCollapsed: false, text: 'turms-business-service-7c7d568c44-9g5v2', intersectsRow: true })).toBe(false);
+  });
+
+  it('still isolates when the selection is outside the row', () => {
+    expect(shouldIsolateLegendClick({ isCollapsed: false, text: 'elsewhere', intersectsRow: false })).toBe(true);
+  });
+});
+
+describe('snapshotLegendSelection', () => {
+  const inside = 'inside' as unknown as Node;
+  const row = { contains: (node: Node | null) => node === inside } as Node;
+
+  it('returns null when the document has no selection', () => {
+    expect(snapshotLegendSelection(row, null)).toBeNull();
+  });
+
+  it('records a drag-select that intersects the row', () => {
+    const selection = {
+      isCollapsed: false,
+      toString: () => 'turms-business-service-7c7d568c44-9g5v2',
+      anchorNode: inside,
+      focusNode: inside,
+    } as Selection;
+
+    expect(snapshotLegendSelection(row, selection)).toEqual({
+      isCollapsed: false,
+      text: 'turms-business-service-7c7d568c44-9g5v2',
+      intersectsRow: true,
+    });
   });
 });
 

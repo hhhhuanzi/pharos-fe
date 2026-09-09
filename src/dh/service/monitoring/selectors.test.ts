@@ -24,18 +24,31 @@ describe('containerMatcher / workloadMatcher', () => {
 });
 
 describe('otelJobMatcher', () => {
-  it('uses the DESIGN exported_job prefix regex and ignores business namespace', () => {
-    expect(otelJobMatcher(withNamespace)).toBe('{cluster="k8s-rome-sec-test",exported_job=~".+/rome-sec-admin"}');
+  it('pins exported_job to the business namespace without using the collector namespace label', () => {
+    expect(otelJobMatcher(withNamespace)).toBe('{cluster="k8s-rome-sec-test",exported_job="rome-sec/rome-sec-admin"}');
     expect(otelJobMatcher(withoutNamespace)).toBe('{cluster="k8s-rome-sec-test",exported_job=~".+/rome-sec-admin"}');
   });
 
   it('never uses container, whose namespace/pod on these series name the collector', () => {
     expect(otelJobMatcher(withNamespace)).not.toContain('container=');
     expect(otelJobMatcher(withNamespace)).not.toContain('namespace="rome-sec"');
+    expect(otelJobMatcher(withEnv)).not.toContain('deployment_environment_name=');
   });
 
-  it('escapes regex metacharacters in the service name', () => {
+  it('escapes regex metacharacters in the service name when the namespace is unknown', () => {
     expect(otelJobMatcher({ service: 'a.b', cluster: 'c' })).toBe('{cluster="c",exported_job=~".+/a\\\\.b"}');
+  });
+
+  it('escapes quotes in the pinned job when the namespace is known', () => {
+    expect(otelJobMatcher({ service: 'a"b', cluster: 'c', namespace: 'n' })).toBe('{cluster="c",exported_job="n/a\\"b"}');
+  });
+
+  it('pins exported_instance only when the scope carries one', () => {
+    expect(otelJobMatcher({ ...withNamespace, exportedInstance: 'rome-sec.rome-sec-admin-abc.rome-sec-admin' })).toBe(
+      '{cluster="k8s-rome-sec-test",exported_job="rome-sec/rome-sec-admin",exported_instance="rome-sec.rome-sec-admin-abc.rome-sec-admin"}',
+    );
+    expect(otelJobMatcher(withNamespace)).not.toContain('exported_instance=');
+    expect(otelJobMatcher({ ...withEnv, exportedInstance: 'rome-sec.pod-a.rome-sec-admin' })).not.toContain('deployment_environment_name=');
   });
 });
 

@@ -12,13 +12,49 @@ describe('matrixToMonitoringSeries', () => {
           ],
         },
       ]),
-    ).toEqual([{ metric: { pod: 'p-1' }, points: [[1, 0.5], [2, 0.75]] }]);
+    ).toEqual([
+      {
+        metric: { pod: 'p-1' },
+        points: [
+          [1, 0.5],
+          [2, 0.75],
+        ],
+      },
+    ]);
+  });
+
+  it('keeps an all-zero series so a quiet GC name still plots', () => {
+    expect(
+      matrixToMonitoringSeries([
+        {
+          metric: { jvm_gc_name: 'G1 Old Generation' },
+          values: [
+            [1, '0'],
+            [2, '0'],
+          ],
+        },
+      ]),
+    ).toEqual([
+      {
+        metric: { jvm_gc_name: 'G1 Old Generation' },
+        points: [
+          [1, 0],
+          [2, 0],
+        ],
+      },
+    ]);
   });
 
   it('drops NaN points and series left empty by that', () => {
     expect(
       matrixToMonitoringSeries([
-        { metric: { pod: 'p-1' }, values: [[1, 'NaN'], [2, '3']] },
+        {
+          metric: { pod: 'p-1' },
+          values: [
+            [1, 'NaN'],
+            [2, '3'],
+          ],
+        },
         { metric: { pod: 'p-2' }, values: [[1, 'NaN']] },
       ]),
     ).toEqual([{ metric: { pod: 'p-1' }, points: [[2, 3]] }]);
@@ -47,10 +83,7 @@ describe('buildRangeBatchPayload / zipRangeBatchResult', () => {
   });
 
   it('zips positional batch slots back onto the requested refIds', () => {
-    const dat = [
-      [{ metric: { pod: 'p-1' }, values: [[1, '0.2']] }],
-      [{ metric: {}, values: [[1, '1']] }],
-    ];
+    const dat = [[{ metric: { pod: 'p-1' }, values: [[1, '0.2']] }], [{ metric: {}, values: [[1, '1']] }]];
     expect(zipRangeBatchResult(queries, dat)).toEqual([
       { refId: 'cpu.usage', series: [{ metric: { pod: 'p-1' }, points: [[1, 0.2]] }] },
       { refId: 'cpu.limit', series: [{ metric: {}, points: [[1, 1]] }] },

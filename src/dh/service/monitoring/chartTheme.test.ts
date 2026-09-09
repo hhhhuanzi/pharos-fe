@@ -111,9 +111,9 @@ describe('buildMonitoringSeriesColors', () => {
     const [budget] = buildMonitoringSeriesColors(['budget'], [...PALETTE], false);
 
     expect(budget).toBe(BUDGET_LIGHT);
-    // `--fc-yellow-11` / `--fc-green-11` / `--fc-red-11`: this system's warning, success and
-    // critical scales. A guardrail line may not borrow any of them.
-    expect(['rgb(149, 115, 0)', 'rgb(0, 129, 76)', 'rgb(204, 46, 57)']).not.toContain(budget);
+    // `--fc-fill-warning` / `--fc-fill-success` / `--fc-fill-error`: this system's warning, success
+    // and critical scales. A guardrail line may not borrow any of them.
+    expect(['rgb(250, 200, 0)', 'rgb(0, 167, 0)', 'rgb(200, 0, 0)']).not.toContain(budget);
     // Nor may it re-use the ceiling's hue, which is what made the two indistinguishable before.
     expect(budget).not.toBe(CEILING_LIGHT);
   });
@@ -360,9 +360,20 @@ describe('buildMonitoringLegendLayout', () => {
 
   it('caps the side column so a long pod name cannot starve the plot', () => {
     expect(MONITORING_LEGEND_SIDE_CLASS).toContain('w-max');
-    expect(MONITORING_LEGEND_SIDE_CLASS).toContain('max-w-[min(12rem,38%)]');
-    expect(MONITORING_LEGEND_NAME_CLASS).toContain('truncate');
-    expect(MONITORING_LEGEND_NAME_CLASS).toContain('[direction:rtl]');
+    expect(MONITORING_LEGEND_SIDE_CLASS).toContain('max-w-[min(16rem,42%)]');
+    expect(MONITORING_LEGEND_SIDE_CLASS).toContain('overflow-x-hidden');
+  });
+
+  it('keeps a long pod name intact and wraps it instead of ellipsizing', () => {
+    const pod = 'turms-business-service-7c7d568c44-9g5v2';
+    const layout = buildMonitoringLegendLayout(['All', pod]);
+
+    expect(layout.items).toEqual(['All', pod]);
+    expect(MONITORING_LEGEND_NAME_CLASS).toContain('break-all');
+    expect(MONITORING_LEGEND_NAME_CLASS).toContain('select-text');
+    expect(MONITORING_LEGEND_NAME_CLASS).not.toContain('truncate');
+    expect(MONITORING_LEGEND_NAME_CLASS).not.toContain('rtl');
+    expect(MONITORING_LEGEND_NAME_CLASS).not.toContain('ellipsis');
   });
 });
 
@@ -393,10 +404,11 @@ describe('panel definitions', () => {
         // Hard boundaries: crossing them gets the container throttled or OOMKilled.
         'container_cpu.limit:ceiling',
         'container_memory.limit:ceiling',
-        'jvm_heap.limit:ceiling',
+        'jvm_heap.xmx:ceiling',
         // Scheduler reservations: crossing them is routine.
         'container_cpu.request:budget',
         'container_memory.request:budget',
+        'jvm_heap.xms:budget',
       ]),
     );
     expect(references.every((entry) => /:(ceiling|budget|baseline)$/.test(entry))).toBe(true);
@@ -407,6 +419,8 @@ describe('panel definitions', () => {
 
     expect(targets.filter((target) => target.refId === 'request').every((target) => target.reference === 'budget')).toBe(true);
     expect(targets.filter((target) => target.refId === 'limit').every((target) => target.reference === 'ceiling')).toBe(true);
+    expect(targets.filter((target) => target.refId === 'xmx').every((target) => target.reference === 'ceiling')).toBe(true);
+    expect(targets.filter((target) => target.refId === 'xms').every((target) => target.reference === 'budget')).toBe(true);
   });
 });
 

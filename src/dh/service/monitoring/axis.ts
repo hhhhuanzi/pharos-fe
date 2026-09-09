@@ -8,10 +8,10 @@ import type { MonitoringUnit } from './format';
  * so a replica count of 1 drew ticks 0 / 0 / 1 / 1 after `count` rounding. Both are fixed here by
  * locking the range and restricting the increments per unit.
  *
- * Every range is zero-based on purpose: these are all non-negative metrics, and a floating baseline
- * turns ±0.1% jitter into what looks like an outage.
+ * Ranges are zero-based except `signed` (network receive / transmit), where 0 is the midline. A
+ * floating baseline on a non-negative metric turns ±0.1% jitter into what looks like an outage.
  */
-export type MonitoringYAxisMode = 'count' | 'ratio' | 'utilization' | 'linear';
+export type MonitoringYAxisMode = 'count' | 'ratio' | 'utilization' | 'linear' | 'signed';
 
 /** Headroom above the measured max before rounding up to a nice value. */
 const HEADROOM = 1.1;
@@ -65,7 +65,7 @@ export interface MonitoringYAxisInput {
 }
 
 export interface MonitoringYAxisPlan {
-  /** Locked `[min, max]` for `scalesBuilder({ yRange })`. Always zero-based. */
+  /** Locked `[min, max]` for `scalesBuilder({ yRange })`. Zero-based except `signed`. */
   range: [number, number];
   /** uPlot axis `incrs`; left undefined when the default decimal ladder is already right. */
   incrs?: number[];
@@ -90,6 +90,16 @@ function maxFinite(values: Array<number | null | undefined>): number {
   let max = 0;
   values.forEach((value) => {
     if (typeof value === 'number' && Number.isFinite(value) && value > max) max = value;
+  });
+  return max;
+}
+
+function maxAbsFinite(values: Array<number | null | undefined>): number {
+  let max = 0;
+  values.forEach((value) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return;
+    const abs = Math.abs(value);
+    if (abs > max) max = abs;
   });
   return max;
 }
@@ -149,6 +159,16 @@ export function buildMonitoringYAxis({ unit, mode, values, references = [] }: Mo
   }
   if (resolvedMode === 'ratio' || resolvedMode === 'utilization') {
     return { range: [0, ratioCeil(extent, resolvedMode === 'ratio' ? RATIO_FLOORS : UTILIZATION_FLOORS)] };
+  }
+  if (resolvedMode === 'signed') {
+    const absExtent = maxAbsFinite([...values, ...references]);
+    const incrs = isByteUnit(unit) ? BINARY_INCRS : undefined;
+    if (absExtent <= 0) {
+      const zero = ZERO_MAX[unit];
+      return { range: [-zero, zero], incrs };
+    }
+    const max = isByteUnit(unit) ? binaryCeil(absExtent * HEADROOM) : decimalCeil(absExtent * HEADROOM);
+    return { range: [-max, max], incrs };
   }
   if (extent <= 0) {
     return { range: [0, ZERO_MAX[unit]], incrs: isByteUnit(unit) ? BINARY_INCRS : undefined };

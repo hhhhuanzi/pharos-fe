@@ -152,6 +152,12 @@ function httpSlowPanel(): MonitoringPanelDef {
   };
 }
 
+const CLIENT_KIND = 'span_kind=~"SPAN_KIND_CLIENT|CLIENT|client"';
+
+function clientCalls(scope: MonitoringScope): string {
+  return `${CALLS}${spanmetricsMatcher(scope, [CLIENT_KIND])}`;
+}
+
 function clientPanel(): MonitoringPanelDef {
   return {
     id: 'traffic_client',
@@ -163,7 +169,14 @@ function clientPanel(): MonitoringPanelDef {
       {
         refId: 'client',
         nameLabels: ['span_name'],
-        build: (scope, rateWindow) => `topk(8, sum by (span_name) (rate(${CALLS}${spanmetricsMatcher(scope, ['span_kind=~"SPAN_KIND_CLIENT|CLIENT|client"'])}[${rateWindow}])))`,
+        // Per-step topk unions different winners across the window and grows the legend past 8.
+        // Rank once on window totals, then the range query keeps only those span_names.
+        windowTopk: {
+          k: 8,
+          by: 'span_name',
+          rank: (scope, _rate, rangeWindow) => `topk(8, sum by (span_name) (increase(${clientCalls(scope)}[${rangeWindow}])))`,
+        },
+        build: (scope, rateWindow) => `sum by (span_name) (rate(${clientCalls(scope)}[${rateWindow}]))`,
       },
     ],
   };
@@ -173,14 +186,14 @@ function clientPanel(): MonitoringPanelDef {
  * Two-column pairs follow the on-call scan, not the old three-across fold.
  *
  * Row 1 is the first glance: still taking traffic, and is it failing.
- * Down the left is volume → which interfaces; down the right is errors → which status codes.
- * Row 3 is latency as a left-right pair (overall P95 next to the slow interfaces).
- * Downstream sits last — a different question ("is it someone we call") and is not forced into a
- * pair with P95 or errors.
+ * Row 2 is latency as a left-right pair (overall P95 next to the slow interfaces).
+ * Row 3 attributes volume (top routes) and errors (status codes).
+ * Downstream sits last — a different question ("is it someone we call") and stays half-width
+ * rather than being stretched across the row or paired with P95 / errors.
  */
 export const TRAFFIC_SECTION: MonitoringSectionDef = {
   id: 'traffic',
   titleKey: 'monitoring.section.traffic',
   defaultOpen: true,
-  panels: [qpsPanel(), errorPanel(), httpRoutePanel(), httpStatusPanel(), p95Panel(), httpSlowPanel(), clientPanel()],
+  panels: [qpsPanel(), errorPanel(), p95Panel(), httpSlowPanel(), httpRoutePanel(), httpStatusPanel(), clientPanel()],
 };

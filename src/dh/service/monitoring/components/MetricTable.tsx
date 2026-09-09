@@ -1,14 +1,26 @@
 import React, { useMemo } from 'react';
 import { Empty, Spin, Table, Tooltip } from 'antd';
 import { QuestionCircleOutlined } from '@ant-design/icons';
+import { useAntdResizableHeader } from '@fc-components/use-antd-resizable-header';
+import '@fc-components/use-antd-resizable-header/dist/style.css';
 import { useTranslation } from 'react-i18next';
 
 import { NS } from '@/pages/service/constants';
 
-import { formatMonitoringValue, shortExportedInstance } from '../format';
+import { formatMonitoringValue } from '../format';
 import type { MonitoringPanelDef, MonitoringTableColumn } from '../panels';
 import type { MonitoringSeries } from '../query';
 import { TONE_ABSENT, utilizationTone, type StatusToneOrAbsent } from '@/dh/status';
+import {
+  collectMonitoringJoinKeys,
+  isWrappingTableColumn,
+  joinKeyOf,
+  MONITORING_TABLE_COMPACT_CELL_CLASS,
+  MONITORING_TABLE_COMPACT_COLUMN_CLASS,
+  MONITORING_TABLE_WRAP_CELL_CLASS,
+  MONITORING_TABLE_WRAP_COLUMN_CLASS,
+  monitoringTableColumnWidth,
+} from '../tableRows';
 import { lastPointValue } from '../values';
 import type { PanelChartEntry } from './PanelChart';
 
@@ -48,15 +60,6 @@ function seriesByRefId(entries: PanelChartEntry[]): Record<string, MonitoringSer
     acc[entry.target.refId] = entry.series;
     return acc;
   }, {});
-}
-
-function joinKeyOf(series: MonitoringSeries, joinLabel: string, rewritePodFromInstance: boolean): string | undefined {
-  const direct = series.metric[joinLabel];
-  if (direct && direct.trim()) return direct.trim();
-  if (rewritePodFromInstance && series.metric.exported_instance) {
-    return shortExportedInstance(series.metric.exported_instance);
-  }
-  return undefined;
 }
 
 function cellValue(column: MonitoringTableColumn, rowKey: string, byRef: Record<string, MonitoringSeries[]>, joinLabel: string): TableCell {
@@ -110,23 +113,13 @@ export default function MetricTable({ panel, entries, loading }: Props) {
         return row;
       });
     }
-    const keys = new Set<string>();
-    entries.forEach((entry) => {
-      const rewrite = entry.target.nameRewrite === 'exportedInstancePod';
-      entry.series.forEach((item) => {
-        const key = joinKeyOf(item, joinLabel, rewrite);
-        if (key) keys.add(key);
+    return collectMonitoringJoinKeys(entries, joinLabel).map((key) => {
+      const row: TableRow = { key, cells: {} };
+      columns.forEach((column) => {
+        row.cells[column.id] = cellValue(column, key, byRef, joinLabel);
       });
+      return row;
     });
-    return Array.from(keys)
-      .sort((a, b) => a.localeCompare(b))
-      .map((key) => {
-        const row: TableRow = { key, cells: {} };
-        columns.forEach((column) => {
-          row.cells[column.id] = cellValue(column, key, byRef, joinLabel);
-        });
-        return row;
-      });
   }, [byRef, columns, entries, joinLabel, panel.tableMode]);
 
   return (
@@ -151,24 +144,60 @@ export default function MetricTable({ panel, entries, loading }: Props) {
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t(panel.tableEmptyKey || 'monitoring.chart_empty')} />
         </div>
       ) : (
-        <Table
-          size='small'
-          rowKey='key'
-          pagination={rows.length > 10 ? { pageSize: 10 } : false}
-          dataSource={rows}
-          columns={columns.map((column) => ({
-            title: t(column.titleKey),
-            dataIndex: ['cells', column.id],
-            key: column.id,
-            ellipsis: true,
-            render: (cell?: TableCell) => (
-              <span title={cell?.text} className={cell?.tone || TONE_ABSENT}>
-                {cell?.text ?? EM_DASH}
-              </span>
-            ),
-          }))}
-        />
+        <MonitoringMetricTable rows={rows} columns={columns} panelId={panel.id} />
       )}
     </div>
+  );
+}
+
+function omitColumnEllipsis(column: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...column };
+  delete next.ellipsis;
+  return next;
+}
+
+function MonitoringMetricTable({ rows, columns, panelId }: { rows: TableRow[]; columns: MonitoringTableColumn[]; panelId: string }) {
+  const { t } = useTranslation(NS);
+  const tableColumns = useMemo(
+    () =>
+      columns.map((column) => {
+        const wrap = isWrappingTableColumn(column.id);
+        const title = t(column.titleKey);
+        const values = rows.map((row) => row.cells[column.id]?.text ?? EM_DASH);
+        return {
+          title,
+          dataIndex: ['cells', column.id],
+          key: column.id,
+          width: monitoringTableColumnWidth(column.id, title, values),
+          className: wrap ? MONITORING_TABLE_WRAP_COLUMN_CLASS : MONITORING_TABLE_COMPACT_COLUMN_CLASS,
+          render: (cell?: TableCell) => {
+            const text = cell?.text ?? EM_DASH;
+            return <span className={`${cell?.tone || TONE_ABSENT} ${wrap ? MONITORING_TABLE_WRAP_CELL_CLASS : MONITORING_TABLE_COMPACT_CELL_CLASS}`}>{text}</span>;
+          },
+        };
+      }),
+    [columns, rows, t],
+  );
+
+  const { components, resizableColumns, tableWidth } = useAntdResizableHeader({
+    columns: tableColumns,
+    columnsState: {
+      persistenceType: 'localStorage',
+      persistenceKey: `dh-service-monitoring-table-v2-${panelId}`,
+    },
+    cache: false,
+  });
+
+  return (
+    <Table
+      size='small'
+      rowKey='key'
+      pagination={rows.length > 10 ? { pageSize: 10 } : false}
+      dataSource={rows}
+      components={components}
+      columns={resizableColumns.map((column) => omitColumnEllipsis(column as Record<string, unknown>))}
+      scroll={{ x: tableWidth }}
+      className='[&_td]:overflow-visible'
+    />
   );
 }

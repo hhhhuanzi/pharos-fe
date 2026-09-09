@@ -14,9 +14,9 @@ function queryOf(
   refId: string,
   rateWindow = '5m',
   rangeWindow = '1h',
-  queryScope: typeof scope | typeof scoped = scope,
+  queryScope: typeof scope | typeof scoped | (typeof scoped & { exportedInstance: string }) = scope,
 ): string {
-  const queries = buildSectionQueries(section, queryScope, rateWindow, rangeWindow);
+  const queries = buildSectionQueries(section, queryScope, rateWindow, rangeWindow, 'exportedInstance' in queryScope ? queryScope.exportedInstance : undefined);
   const hit = queries.find((item) => item.panelId === panelId && item.refId === refId);
   if (!hit) throw new Error(`missing target ${panelId}.${refId}`);
   return hit.query;
@@ -105,6 +105,14 @@ describe('container network panel', () => {
     );
     expect(query).not.toContain('pod=~');
     expect(queryOf(WORKLOAD_SECTION, 'container_network', 'transmit')).toContain('container_network_transmit_bytes_total');
+  });
+
+  it('plots receive up and transmit down on a signed axis, per pod', () => {
+    const network = WORKLOAD_SECTION.panels.find((panel) => panel.id === 'container_network');
+    expect(network?.yAxis).toBe('signed');
+    expect(network?.unit).toBe('bytesPerSecond');
+    expect(queryOf(WORKLOAD_SECTION, 'container_network', 'receive')).toMatch(/^sum by \(pod\)/);
+    expect(queryOf(WORKLOAD_SECTION, 'container_network', 'transmit')).toMatch(/^-sum by \(pod\)/);
   });
 });
 
@@ -196,14 +204,25 @@ describe('traffic section', () => {
     expect(queryOf(TRAFFIC_SECTION, 'traffic_client', 'client')).toContain('span_kind=~"SPAN_KIND_CLIENT|CLIENT|client"');
   });
 
-  it('pairs charts for the on-call scan: glance, then volume/error attribution, then latency', () => {
+  it('ranks client QPS over the selected window instead of per-step topk', () => {
+    const item = buildSectionQueries(TRAFFIC_SECTION, scope, '5m', '1h').find((query) => query.panelId === 'traffic_client' && query.refId === 'client');
+    expect(item?.query).toBe('sum by (span_name) (rate(traces_span_metrics_calls_total{service_name="rome-sec-admin",span_kind=~"SPAN_KIND_CLIENT|CLIENT|client"}[5m]))');
+    expect(item?.query).not.toContain('topk(');
+    expect(item?.windowTopkQuery).toBe(
+      'topk(8, sum by (span_name) (increase(traces_span_metrics_calls_total{service_name="rome-sec-admin",span_kind=~"SPAN_KIND_CLIENT|CLIENT|client"}[1h])))',
+    );
+    expect(item?.windowTopk?.k).toBe(8);
+    expect(item?.windowTopk?.by).toBe('span_name');
+  });
+
+  it('pairs charts for the on-call scan: glance, then latency, then volume/error attribution', () => {
     expect(TRAFFIC_SECTION.panels.map((panel) => panel.id)).toEqual([
       'traffic_qps',
       'traffic_error',
-      'traffic_http_route',
-      'traffic_http_status',
       'traffic_p95',
       'traffic_http_slow',
+      'traffic_http_route',
+      'traffic_http_status',
       'traffic_client',
     ]);
   });
@@ -238,22 +257,143 @@ describe('traffic section', () => {
     expect(TRAFFIC_SECTION.panels.find((panel) => panel.id === 'traffic_http_slow')?.targets[0]?.nameRewrite).toBe('httpMethodRoute');
   });
 
-  it('does not put the business namespace on OTel HTTP matchers', () => {
+  it('does not put the business namespace label on OTel HTTP matchers', () => {
     const queries = buildSectionQueries(TRAFFIC_SECTION, scoped, '5m');
     const http = queries.find((item) => item.panelId === 'traffic_http_status');
     expect(http?.query).not.toContain('namespace="rome-sec"');
+    expect(http?.query).toContain('exported_job="rome-sec/rome-sec-admin"');
   });
 
   it('narrows spanmetrics to the header environment, not the K8s namespace', () => {
     expect(queryOf(TRAFFIC_SECTION, 'traffic_client', 'client', '5m', '1h', scoped)).toContain('deployment_environment_name="prod"');
     expect(queryOf(TRAFFIC_SECTION, 'traffic_client', 'client', '5m', '1h', scoped)).not.toContain('namespace=');
+    const client = buildSectionQueries(TRAFFIC_SECTION, scoped, '5m', '1h').find((item) => item.panelId === 'traffic_client');
+    expect(client?.windowTopkQuery).toContain('deployment_environment_name="prod"');
+    expect(client?.windowTopkQuery).not.toContain('namespace=');
     expect(queryOf(TRAFFIC_SECTION, 'traffic_qps', 'qps', '5m', '1h', scoped)).not.toContain('namespace="rome-sec"');
+  });
+
+  it('pins HTTP exported_job to the page namespace so pre and prod are not mixed', () => {
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_qps', 'qps', '5m', '1h', scoped)).toContain('exported_job="rome-sec/rome-sec-admin"');
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_qps', 'qps', '5m', '1h', scoped)).not.toContain('exported_job=~');
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_error', 'all', '5m', '1h', scoped)).toContain('exported_job="rome-sec/rome-sec-admin"');
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_p95', 'pods', '5m', '1h', scoped)).toContain('exported_job="rome-sec/rome-sec-admin"');
   });
 });
 
 describe('jvm section', () => {
-  it('pairs heap with pools, GC with after-GC, and CPU with threads', () => {
-    expect(JVM_SECTION.panels.map((panel) => panel.id)).toEqual(['jvm_heap', 'jvm_pool', 'jvm_gc', 'jvm_after_gc', 'jvm_cpu', 'jvm_threads', 'jvm_classes']);
+  it('keeps heap next to heap generations, then non-heap / after-GC, then GC trio, then CPU / threads / classes', () => {
+    expect(JVM_SECTION.panels.map((panel) => panel.id)).toEqual([
+      'jvm_heap',
+      'jvm_pool',
+      'jvm_nonheap',
+      'jvm_after_gc',
+      'jvm_gc',
+      'jvm_gc_count',
+      'jvm_gc_pause',
+      'jvm_cpu',
+      'jvm_threads',
+      'jvm_classes',
+    ]);
+  });
+
+  it('does not sum heap pools across pods or mix in Metaspace', () => {
+    const query = queryOf(JVM_SECTION, 'jvm_pool', 'pool', '5m', '1h', {
+      ...scoped,
+      exportedInstance: 'rome-sec.rome-sec-admin-abc.rome-sec-admin',
+    });
+    expect(query).toContain('sum by (jvm_memory_pool_name)');
+    expect(query).toContain('jvm_memory_type="heap"');
+    expect(query).toContain('exported_instance="rome-sec.rome-sec-admin-abc.rome-sec-admin"');
+    expect(query).not.toMatch(/sum by \(exported_instance, jvm_memory_pool_name\)/);
+  });
+
+  it('names the heap ceiling Xmx and still reads jvm_memory_limit_bytes', () => {
+    const xmx = JVM_SECTION.panels.find((panel) => panel.id === 'jvm_heap')?.targets.find((target) => target.refId === 'xmx');
+    expect(xmx?.nameKey).toBe('monitoring.legend.xmx');
+    expect(xmx?.reference).toBe('ceiling');
+    expect(xmx?.nameLabels).toBeUndefined();
+    expect(queryOf(JVM_SECTION, 'jvm_heap', 'xmx')).toBe(
+      'max(sum by (exported_instance) (jvm_memory_limit_bytes{cluster="k8s-rome-sec-test",exported_job=~".+/rome-sec-admin",jvm_memory_type="heap"}))',
+    );
+  });
+
+  it('folds Xms the same way as Xmx and reads jvm_memory_init_bytes, not used or container request', () => {
+    const heap = JVM_SECTION.panels.find((panel) => panel.id === 'jvm_heap');
+    const xms = heap?.targets.find((target) => target.refId === 'xms');
+    expect(heap?.targets.map((target) => target.refId)).toEqual(['used', 'xms', 'xmx']);
+    expect(xms?.nameKey).toBe('monitoring.legend.xms');
+    expect(xms?.reference).toBe('budget');
+    expect(xms?.nameLabels).toBeUndefined();
+    expect(queryOf(JVM_SECTION, 'jvm_heap', 'xms')).toBe(
+      'max(sum by (exported_instance) (jvm_memory_init_bytes{cluster="k8s-rome-sec-test",exported_job=~".+/rome-sec-admin",jvm_memory_type="heap"}))',
+    );
+    expect(queryOf(JVM_SECTION, 'jvm_heap', 'xms')).not.toContain('jvm_memory_used_bytes');
+    expect(queryOf(JVM_SECTION, 'jvm_heap', 'xms')).not.toContain('jvm_memory_committed_bytes');
+    expect(queryOf(JVM_SECTION, 'jvm_heap', 'xms')).not.toContain('kube_pod_container_resource_requests');
+  });
+
+  it('pins heap-generation and non-heap to one exported_instance; GC stays all-pod', () => {
+    const instance = 'rome-sec.rome-sec-admin-abc.rome-sec-admin';
+    const pool = JVM_SECTION.panels.find((panel) => panel.id === 'jvm_pool');
+    const nonheap = JVM_SECTION.panels.find((panel) => panel.id === 'jvm_nonheap');
+    const gc = JVM_SECTION.panels.find((panel) => panel.id === 'jvm_gc');
+    const gcCount = JVM_SECTION.panels.find((panel) => panel.id === 'jvm_gc_count');
+    const gcPause = JVM_SECTION.panels.find((panel) => panel.id === 'jvm_gc_pause');
+    expect(pool?.instanceFilter).toBe('exported_instance');
+    expect(nonheap?.instanceFilter).toBe('exported_instance');
+    expect(gc?.instanceFilter).toBeUndefined();
+    expect(gcCount?.instanceFilter).toBeUndefined();
+    expect(gcPause?.instanceFilter).toBeUndefined();
+    expect(gc?.padMissingGc).toBe('g1Old');
+    expect(gcCount?.padMissingGc).toBe('g1Old');
+    expect(gcPause?.padMissingGc).toBe('g1Old');
+    expect(pool?.targets[0]?.nameLabels).toEqual(['jvm_memory_pool_name']);
+    expect(nonheap?.targets[0]?.nameLabels).toEqual(['jvm_memory_pool_name']);
+    expect(gc?.targets[0]?.nameLabels).toEqual(['exported_instance', 'jvm_gc_name']);
+    expect(gcCount?.targets[0]?.nameLabels).toEqual(['exported_instance', 'jvm_gc_name']);
+    expect(gcPause?.targets[0]?.nameLabels).toEqual(['exported_instance', 'jvm_gc_name']);
+    expect(gc?.targets[0]?.nameRewrite).toBe('exportedInstancePod');
+    expect(queryOf(JVM_SECTION, 'jvm_pool', 'pool', '5m', '1h', { ...scoped, exportedInstance: instance })).toBe(
+      `sum by (jvm_memory_pool_name) (jvm_memory_used_bytes{cluster="k8s-rome-sec-test",exported_job="rome-sec/rome-sec-admin",exported_instance="${instance}",jvm_memory_type="heap"})`,
+    );
+    expect(queryOf(JVM_SECTION, 'jvm_nonheap', 'nonheap', '5m', '1h', { ...scoped, exportedInstance: instance })).toContain(`exported_instance="${instance}"`);
+    expect(queryOf(JVM_SECTION, 'jvm_nonheap', 'nonheap', '5m', '1h', { ...scoped, exportedInstance: instance })).toContain('jvm_memory_type="non_heap"');
+    expect(queryOf(JVM_SECTION, 'jvm_heap', 'used', '5m', '1h', { ...scoped, exportedInstance: instance })).not.toContain('exported_instance=');
+    expect(queryOf(JVM_SECTION, 'jvm_gc', 'gc', '5m', '1h', { ...scoped, exportedInstance: instance })).toBe(
+      'sum by (exported_instance, jvm_gc_name) (rate(jvm_gc_duration_seconds_sum{cluster="k8s-rome-sec-test",exported_job="rome-sec/rome-sec-admin"}[5m]))',
+    );
+    expect(queryOf(JVM_SECTION, 'jvm_gc', 'gc', '5m', '1h', { ...scoped, exportedInstance: instance })).not.toContain('exported_instance="');
+    expect(queryOf(JVM_SECTION, 'jvm_gc', 'gc', '5m', '1h', { ...scoped, exportedInstance: instance })).not.toMatch(/Young|Old|Full/);
+    expect(queryOf(JVM_SECTION, 'jvm_gc_count', 'gc_count', '5m', '1h', { ...scoped, exportedInstance: instance })).toBe(
+      'sum by (exported_instance, jvm_gc_name) (increase(jvm_gc_duration_seconds_count{cluster="k8s-rome-sec-test",exported_job="rome-sec/rome-sec-admin"}[5m]))',
+    );
+    expect(queryOf(JVM_SECTION, 'jvm_gc_count', 'gc_count', '5m', '1h', { ...scoped, exportedInstance: instance })).not.toContain('rate(');
+    expect(gcCount?.unit).toBe('short');
+    expect(queryOf(JVM_SECTION, 'jvm_gc_pause', 'gc_pause', '5m', '1h', { ...scoped, exportedInstance: instance })).toContain('sum by (exported_instance, jvm_gc_name)');
+    expect(queryOf(JVM_SECTION, 'jvm_gc_pause', 'gc_pause', '5m', '1h', { ...scoped, exportedInstance: instance })).toContain('rate(jvm_gc_duration_seconds_sum');
+    expect(queryOf(JVM_SECTION, 'jvm_gc_pause', 'gc_pause', '5m', '1h', { ...scoped, exportedInstance: instance })).toContain('rate(jvm_gc_duration_seconds_count');
+    expect(queryOf(JVM_SECTION, 'jvm_gc_pause', 'gc_pause', '5m', '1h', { ...scoped, exportedInstance: instance })).not.toContain('increase(');
+  });
+
+  it('lists pods for the shared picker without pinning exported_instance', () => {
+    const query = JVM_SECTION.instancePicker?.build(scoped);
+    expect(query).toBe('count by (exported_instance) (jvm_memory_used_bytes{cluster="k8s-rome-sec-test",exported_job="rome-sec/rome-sec-admin",jvm_memory_type="heap"})');
+    expect(query).not.toContain('exported_instance=');
+  });
+
+  it('pins JVM exported_job to the page namespace the same way HTTP does', () => {
+    expect(queryOf(JVM_SECTION, 'jvm_heap', 'used', '5m', '1h', scoped)).toContain('exported_job="rome-sec/rome-sec-admin"');
+    expect(queryOf(JVM_SECTION, 'jvm_heap', 'used', '5m', '1h', scoped)).not.toContain('namespace="rome-sec"');
+    expect(queryOf(JVM_SECTION, 'jvm_heap', 'used', '5m', '1h', scoped)).not.toContain('deployment_environment_name=');
+  });
+
+  it('splits non-heap pools and adds GC count plus average pause from the same histogram', () => {
+    expect(queryOf(JVM_SECTION, 'jvm_nonheap', 'nonheap')).toContain('jvm_memory_type="non_heap"');
+    expect(queryOf(JVM_SECTION, 'jvm_gc_count', 'gc_count')).toContain('increase(jvm_gc_duration_seconds_count');
+    expect(queryOf(JVM_SECTION, 'jvm_gc_count', 'gc_count')).not.toContain('rate(jvm_gc_duration_seconds_count');
+    expect(queryOf(JVM_SECTION, 'jvm_gc_pause', 'gc_pause')).toContain('jvm_gc_duration_seconds_sum');
+    expect(queryOf(JVM_SECTION, 'jvm_gc_pause', 'gc_pause')).toContain('jvm_gc_duration_seconds_count');
   });
 });
 
@@ -270,6 +410,19 @@ describe('label contract', () => {
     expect(queryOf(NODE_SECTION, 'node_cpu', 'cpu', '5m', '1h', scoped)).toContain('namespace="rome-sec"');
     expect(queryOf(NODE_SECTION, 'node_cpu', 'cpu', '5m', '1h', scoped)).not.toContain('node_cpu_seconds_total{cluster="k8s-rome-sec-test",namespace=');
   });
+
+  it('puts an env or namespace constraint on every panel query so pre cannot leak in', () => {
+    const ns = `namespace="${scoped.namespace}"`;
+    const env = `deployment_environment_name="${scoped.env}"`;
+    const job = `exported_job="${scoped.namespace}/${scoped.service}"`;
+
+    MONITORING_SECTIONS.forEach((section) => {
+      buildSectionQueries(section, scoped, '5m', '1h').forEach((item) => {
+        const isolated = item.query.includes(ns) || item.query.includes(env) || item.query.includes(job);
+        expect({ panel: item.panelId, refId: item.refId, query: item.query, isolated }).toEqual(expect.objectContaining({ isolated: true }));
+      });
+    });
+  });
 });
 
 describe('node section', () => {
@@ -278,5 +431,27 @@ describe('node section', () => {
     expect(query).toContain('kube_pod_info');
     expect(query).toContain('label_replace');
     expect(query).not.toContain('pod=~');
+  });
+
+  it('fills the 2x2 with CPU, memory, root disk, and signed network', () => {
+    expect(NODE_SECTION.panels.map((panel) => panel.id)).toEqual(['node_cpu', 'node_memory', 'node_disk', 'node_network']);
+    expect(NODE_SECTION.panels.every((panel) => panel.span === 12)).toBe(true);
+  });
+
+  it('reads only the root filesystem so the disk panel is labelled /', () => {
+    const query = queryOf(NODE_SECTION, 'node_disk', 'disk');
+    expect(query).toContain('mountpoint="/"');
+    expect(query).toContain('node_filesystem_avail_bytes');
+  });
+
+  it('plots node-exporter receive up and transmit down on the same join as the other node panels', () => {
+    const receive = queryOf(NODE_SECTION, 'node_network', 'receive');
+    const transmit = queryOf(NODE_SECTION, 'node_network', 'transmit');
+    expect(receive).toContain('node_network_receive_bytes_total');
+    expect(receive).toContain('device!="lo"');
+    expect(receive).toContain('kube_pod_info');
+    expect(transmit).toContain('node_network_transmit_bytes_total');
+    expect(transmit).toMatch(/-sum by \(node\)/);
+    expect(transmit).toContain('kube_pod_info');
   });
 });

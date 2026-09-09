@@ -108,19 +108,23 @@ export type MonitoringLegendPlacement = 'none' | 'right';
 
 export interface MonitoringLegendLayout {
   show: boolean;
-  /** Single-series: hidden. Multi-series: a right column so long pod names stack instead of wrap. */
+  /** Single-series: hidden. Multi-series: a right column; long names wrap in place. */
   placement: MonitoringLegendPlacement;
   items: string[];
 }
 
 /**
- * Side-column width: hug the longest name, but stop at 12rem / 38% so the plot keeps the rest.
- * 12rem is enough of a k8s pod name to keep the replica hash visible after start-truncation.
+ * Side-column width: hug short names (200 / GET), but stop at 16rem / 42% so the plot keeps the
+ * rest. Long pod names wrap inside this cap; the column scrolls vertically, never sideways.
  */
-export const MONITORING_LEGEND_SIDE_CLASS = 'flex min-h-0 w-max max-w-[min(12rem,38%)] flex-col gap-1';
+export const MONITORING_LEGEND_SIDE_CLASS = 'flex min-h-0 w-max max-w-[min(16rem,42%)] flex-col gap-1 overflow-x-hidden';
 
-/** Ellipsis on the left so `…7bb9ccd7c7-bnbqw` stays readable; `title` still has the full name. */
-export const MONITORING_LEGEND_NAME_CLASS = 'min-w-0 truncate [direction:rtl] [unicode-bidi:plaintext]';
+/**
+ * Full name, always. K8s labels have no spaces, so `break-all` wraps on a character boundary
+ * instead of clipping. `select-text` lets the user copy by dragging; isolate is a click without
+ * a selection. No ellipsis, no RTL, no hover-to-reveal.
+ */
+export const MONITORING_LEGEND_NAME_CLASS = 'min-w-0 flex-1 cursor-text select-text break-all text-left';
 
 /**
  * Service-monitoring HTML legend only. Not uPlot / official Dashboard legend.
@@ -187,8 +191,8 @@ const REFERENCE_LINE_COLOR = {
  *
  * Not the yellow, orange or green that were suggested: orange is already `limit`, and a second
  * orange hairline puts the two guardrails back in one hue, which is the exact confusion this
- * page just fixed. Yellow is this system's *warning* scale and its step 11 (`rgb(149, 115, 0)`)
- * is an olive that reads as a dim orange right next to the amber limit — worst of both. Green is
+ * page just fixed. Yellow is this system's *warning* scale (`--fc-fill-warning`, light
+ * `rgb(250, 200, 0)`) and must not sit on a permanent request line. Green is
  * the *success* scale and `hexPalette` already spends two slots on greens.
  *
  * Light `rgb(107, 81, 175)` is ~6.1:1 on a white card, dark `rgb(184, 164, 255)` ~8:1 on a dark

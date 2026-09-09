@@ -69,10 +69,46 @@ function diskPanel(): MonitoringPanelDef {
         refId: 'disk',
         nameLabels: ['node'],
         build: (scope) => {
-          const extra = ['fstype!~"tmpfs|overlay"'];
+          // Root filesystem only. `min by (node)` across every mount hid which disk was full.
+          const extra = ['fstype!~"tmpfs|overlay"', 'mountpoint="/"'];
           const avail = instanceToNode(`node_filesystem_avail_bytes${clusterMatcher(scope, extra)}`);
           const size = instanceToNode(`node_filesystem_size_bytes${clusterMatcher(scope, extra)}`);
           return withNodeJoin(`1 - min by (node) (${avail} / ${size})`, scope);
+        },
+      },
+    ],
+  };
+}
+
+/**
+ * node-exporter counters, same join as CPU / memory / disk. Loopback is excluded; other devices
+ * are summed per node so one in / one out line stays aligned with the other node panels.
+ * Out is negated so the axis is symmetric around 0 (in up, out down).
+ */
+function networkPanel(): MonitoringPanelDef {
+  return {
+    id: 'node_network',
+    titleKey: 'monitoring.panel.node_network',
+    unit: 'bytesPerSecond',
+    yAxis: 'signed',
+    span: 12,
+    targets: [
+      {
+        refId: 'receive',
+        nameLabels: ['node'],
+        nameKey: 'monitoring.legend.in',
+        build: (scope, rateWindow) => {
+          const receive = instanceToNode(`rate(node_network_receive_bytes_total${clusterMatcher(scope, ['device!="lo"'])}[${rateWindow}])`);
+          return withNodeJoin(`sum by (node) (${receive})`, scope);
+        },
+      },
+      {
+        refId: 'transmit',
+        nameLabels: ['node'],
+        nameKey: 'monitoring.legend.out',
+        build: (scope, rateWindow) => {
+          const transmit = instanceToNode(`rate(node_network_transmit_bytes_total${clusterMatcher(scope, ['device!="lo"'])}[${rateWindow}])`);
+          return withNodeJoin(`-sum by (node) (${transmit})`, scope);
         },
       },
     ],
@@ -84,5 +120,5 @@ export const NODE_SECTION: MonitoringSectionDef = {
   id: 'node',
   titleKey: 'monitoring.section.node',
   defaultOpen: true,
-  panels: [cpuPanel(), memoryPanel(), diskPanel()],
+  panels: [cpuPanel(), memoryPanel(), diskPanel(), networkPanel()],
 };

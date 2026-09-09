@@ -1,0 +1,12 @@
+// Service-monitoring tooltip only (overlay id is `n9e-dh-service-monitoring-<panel>-tooltip`).
+// Official `tooltipPlugin` appends to document.body; pinningEnabled already locks the overlay.
+[id^='n9e-dh-service-monitoring-'][id$='-tooltip'] {
+  .n9e-uplot-tooltip {
+    user-select: text;
+  }
+
+  .n9e-uplot-tooltip-main {
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+}
