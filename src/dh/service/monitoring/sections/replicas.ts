@@ -8,10 +8,6 @@ function replicaTrendPanel(): MonitoringPanelDef {
     hintKey: 'monitoring.panel.replicas_hint',
     unit: 'count',
     span: 12,
-    // Three fixed, one-word series names, so the side column takes ~60px and costs the plot less
-    // than a legend row costs its height. The pod-name panels stay bottom-legend: their labels are
-    // long enough that a side column would eat the plot instead.
-    legend: 'right',
     targets: [
       {
         refId: 'available',

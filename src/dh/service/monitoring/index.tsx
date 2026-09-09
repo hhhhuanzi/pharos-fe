@@ -1,9 +1,10 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Collapse, Empty, Spin } from 'antd';
 import { useTranslation } from 'react-i18next';
 
 import { CommonStateContext } from '@/App';
 import { getDefaultValue, timeRangeUnix, type IRawTimeRange } from '@/components/TimeRangePicker';
+import { valueAsString } from '@/components/TimeRangePicker/utils';
 import { NS } from '@/pages/service/constants';
 import { MONITORING_RANGE_LS } from '@/pages/service/storage';
 
@@ -28,6 +29,21 @@ export interface ServiceMonitoringProps {
 }
 
 const DEFAULT_RANGE: IRawTimeRange = { start: 'now-1h', end: 'now' };
+const RANGE_DATE_FORMAT = 'YYYY-MM-DD HH:mm:ss';
+
+function persistMonitoringRange(next: IRawTimeRange) {
+  try {
+    localStorage.setItem(
+      MONITORING_RANGE_LS,
+      JSON.stringify({
+        start: valueAsString(next.start, RANGE_DATE_FORMAT),
+        end: valueAsString(next.end, RANGE_DATE_FORMAT),
+      }),
+    );
+  } catch {
+    // quota / private mode — the in-memory range still updates
+  }
+}
 
 /**
  * The page is 6+ screens tall, so a section header that scrolls away leaves no way to tell
@@ -112,6 +128,11 @@ export default function ServiceMonitoring({ service, env, clusters, namespaces }
     return next;
   }, [service, env, activeScopeOption]);
 
+  const handleRangeChange = useCallback((next: IRawTimeRange) => {
+    persistMonitoringRange(next);
+    setRange(next);
+  }, []);
+
   const renderBody = () => {
     if (!datasourceList.length) return <EmptyState description={t('overview.no_prometheus')} />;
     if (datasourceId == null) return <EmptyState description={t('monitoring.no_datasource')} />;
@@ -136,7 +157,7 @@ export default function ServiceMonitoring({ service, env, clusters, namespaces }
           // label inside a card at 12px. It previously matched the panel titles exactly, which left
           // the bar and the left rule as the only thing separating a section from its contents.
           <Collapse.Panel key={section.id} header={<span className='text-l2 font-bold text-title'>{t(section.titleKey)}</span>}>
-            <SectionPanels section={section} scope={scope} datasourceId={datasourceId} range={range} refreshKey={refreshKey} />
+            <SectionPanels section={section} scope={scope} datasourceId={datasourceId} range={range} refreshKey={refreshKey} onRangeChange={handleRangeChange} />
           </Collapse.Panel>
         ))}
       </Collapse>
@@ -145,7 +166,7 @@ export default function ServiceMonitoring({ service, env, clusters, namespaces }
 
   return (
     <div className='flex flex-col gap-4'>
-      <Toolbar range={range} onRangeChange={setRange} onRefresh={() => setRefreshKey((key) => key + 1)} />
+      <Toolbar range={range} onRangeChange={handleRangeChange} onRefresh={() => setRefreshKey((key) => key + 1)} />
       {renderBody()}
     </div>
   );

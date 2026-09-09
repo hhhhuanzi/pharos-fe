@@ -1,6 +1,6 @@
 export type MonitoringUnit = 'cores' | 'bytes' | 'bytesPerSecond' | 'percentUnit' | 'short' | 'count' | 'ops' | 'milliseconds' | 'seconds';
 
-export type MonitoringNameRewrite = 'exportedInstancePod';
+export type MonitoringNameRewrite = 'exportedInstancePod' | 'httpMethodRoute';
 
 const IEC_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
 
@@ -70,11 +70,20 @@ export function shortExportedInstance(value: string): string {
   return parts.length >= 3 ? parts[1] : value;
 }
 
+/** `POST /api/orders`. Method-only when the app never set `http.route`. */
+export function formatHttpMethodRoute(metric: Record<string, string> | undefined): string {
+  const method = metric?.http_request_method?.trim();
+  const route = metric?.http_route?.trim();
+  if (method && route) return `${method} ${route}`;
+  return method || route || '';
+}
+
 /**
  * Series name for a panel legend. `labels` picks metric labels (usually `pod`) and `staticName` is
  * for label-less threshold lines (request / limit) or a direction suffix (rx / tx).
  */
 export function monitoringSeriesName(metric: Record<string, string> | undefined, labels: string[] = [], staticName?: string, rewrite?: MonitoringNameRewrite): string {
+  if (rewrite === 'httpMethodRoute') return formatHttpMethodRoute(metric);
   const labelPart = labels
     .map((label) => {
       const raw = metric?.[label];

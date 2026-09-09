@@ -36,6 +36,7 @@ function trafficCard(): MonitoringPanelDef {
   return {
     id: 'summary_traffic',
     titleKey: 'monitoring.stat.traffic',
+    hintKey: 'monitoring.stat.traffic_hint',
     kind: 'stat',
     unit: 'ops',
     span: 8,

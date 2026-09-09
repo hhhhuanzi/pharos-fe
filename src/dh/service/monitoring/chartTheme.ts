@@ -4,29 +4,21 @@ import axisBuilder from '@/components/UPlotChart/utils/axisBuilder';
 import cursorBuider from '@/components/UPlotChart/utils/cursorBuilder';
 import seriesBuider from '@/components/UPlotChart/utils/seriesBuider';
 
-/** Thin solid stroke, closer to Grafana than the previous 2px polyline. */
-export const MONITORING_CHART_LINE_WIDTH = 1.5;
+/** Grafana-like hairline. uPlot takes CSS px and scales by devicePixelRatio itself. */
+export const MONITORING_CHART_LINE_WIDTH = 1;
+/** All is the same kind of line, just a hair heavier so the total still reads next to pods. */
+export const MONITORING_ALL_LINE_WIDTH = 1.25;
 /**
- * Static guardrails (`limit`, `request`) are drawn *heavier* than the data, not lighter.
- *
- * A pod series takes whatever hue `hexPalette` hands it, and two of those slots (`#EF843C`,
- * `#705DA0`) land close enough to the amber ceiling and the violet budget that on a busy panel the
- * dash rhythm alone is not a reliable tell. Weight is: at 2 against 1.5 the guardrail reads as a
- * different *kind* of line before any colour is compared. The alternative was dropping those two
- * hues from the shared palette, which would change every chart in the app to fix three panels here.
- *
- * 2.5 was tried first and was too much: on a CPU panel where the limit is the only thing near the
- * top of the range, a 2.5px dash reads as a row of fat dots rather than a line. The gain over the
- * data line has to be just enough to notice, not enough to make a static boundary the loudest thing
- * on a plot it appears on unconditionally.
+ * Guardrails stay at data weight. Dash + semantic hue already tell them apart from a pod; extra
+ * width made a static `limit` the loudest mark on an otherwise quiet panel.
  */
-export const MONITORING_REFERENCE_LINE_WIDTH = 2;
+export const MONITORING_REFERENCE_LINE_WIDTH = 1;
 /**
  * Segments four times the stroke keep the guardrails reading as a dashed *line*; much shorter and
  * they turn into dots. The gap is the smallest that still separates them at this weight.
  */
 export const MONITORING_DASH: readonly [number, number] = [8, 5];
-/** The same rhythm scaled to a 1.5px stroke; `[8, 6]` reads as sparse once the line is thin. */
+/** Same rhythm at data weight; `[8, 6]` reads as sparse once the line is a hairline. */
 export const MONITORING_BASELINE_DASH: readonly [number, number] = [6, 4];
 
 /**
@@ -48,15 +40,29 @@ export const MONITORING_BASELINE_DASH: readonly [number, number] = [6, 4];
 export const MONITORING_PALETTE_OFFSET = 5;
 
 /**
- * Area fill has to fade as series pile up: eight translucent bands stacked on one plot turn into a
- * single muddy wash where no line is readable. One or two series keep a visible area (it makes the
- * magnitude easy to judge); a busy plot drops to lines only.
+ * Grafana-style opacity gradient: stronger at the line, almost gone at the x-axis.
+ * Dark cards make the same alpha look louder, so both stops are a step quieter there.
+ * Values stay modest so a status-code plot with 6–8 bands does not turn into one wash.
  */
-export function monitoringFillOpacity(measuredCount: number): number {
-  if (measuredCount <= 1) return 0.18;
-  if (measuredCount <= 3) return 0.12;
-  if (measuredCount <= 6) return 0.06;
-  return 0;
+export const MONITORING_FILL_TOP_ALPHA = { light: 0.24, dark: 0.16 } as const;
+export const MONITORING_FILL_BOTTOM_ALPHA = { light: 0.02, dark: 0.01 } as const;
+
+/**
+ * Vertical fade in *canvas* pixels (`u.bbox` is already device-pixel). Rebuilt on every draw so a
+ * resize cannot leave the gradient pointing at the previous plot height.
+ */
+export function createMonitoringAreaFill(color: string, darkMode: boolean): Series.Fill {
+  const theme = darkMode ? 'dark' : 'light';
+  const topAlpha = MONITORING_FILL_TOP_ALPHA[theme];
+  const bottomAlpha = MONITORING_FILL_BOTTOM_ALPHA[theme];
+  return (u) => {
+    const y0 = u.bbox.top;
+    const y1 = u.bbox.top + u.bbox.height;
+    const gradient = u.ctx.createLinearGradient(0, y0, 0, y1);
+    gradient.addColorStop(0, colorWithAlpha(color, topAlpha));
+    gradient.addColorStop(1, colorWithAlpha(color, bottomAlpha));
+    return gradient;
+  };
 }
 
 /**
@@ -72,13 +78,10 @@ export function monitoringFillOpacity(measuredCount: number): number {
  *   next to the series it is compared with, so it stays in neutral chrome grey and asserts
  *   nothing — it is the target, not a verdict on the actual.
  *
- * `ceiling` and `budget` share one heavy stroke: they are static platform numbers, and the
- * distinction that has to survive a glance is guardrail vs measurement, not one guardrail against
- * the other — which of the two it is comes from the colour. `baseline` is deliberately left at data
- * weight. It is a real `kube_deployment_spec_replicas` series that happens to be drawn dashed, not
- * a static line; it is grey rather than a palette hue, so it has no clash with `hexPalette` for the
- * extra weight to solve; and at 2.5px it would out-shout the available / unavailable curves it
- * exists to be read against.
+ * `ceiling` and `budget` share one dashed hairline: they are static platform numbers, and the
+ * distinction that has to survive a glance is dash vs solid, then hue (amber vs violet). `baseline`
+ * is a real `kube_deployment_spec_replicas` series drawn dashed in chrome grey — a target, not a
+ * louder mark.
  *
  * Solid vs dashed and thin vs thick are both said by the plotted line. The legend only maps a
  * colour to a name, so its swatches are all the same solid chip — a 12px chip is too small to
@@ -94,44 +97,48 @@ export interface MonitoringSeriesStroke {
   dash?: readonly [number, number];
 }
 
-export function monitoringSeriesStroke(reference?: MonitoringSeriesReference): MonitoringSeriesStroke {
+export function monitoringSeriesStroke(reference?: MonitoringSeriesReference, emphasis?: 'all'): MonitoringSeriesStroke {
+  if (emphasis === 'all') return { width: MONITORING_ALL_LINE_WIDTH };
   if (reference === undefined) return { width: MONITORING_CHART_LINE_WIDTH };
   if (reference === 'baseline') return { width: MONITORING_CHART_LINE_WIDTH, dash: MONITORING_BASELINE_DASH };
   return { width: MONITORING_REFERENCE_LINE_WIDTH, dash: MONITORING_DASH };
 }
 
-export type MonitoringLegendPlacement = 'none' | 'bottom' | 'right';
-
-/**
- * Panel-level opt-in, set on `MonitoringPanelDef.legend`. `bottom` is the page default and is not
- * spelled out per panel, so the only thing a panel can ask for is the side column.
- */
-export type MonitoringLegendPreference = 'right';
+export type MonitoringLegendPlacement = 'none' | 'right';
 
 export interface MonitoringLegendLayout {
   show: boolean;
-  /** Single-series: hidden, so the plot uses the full width. Multi-series: under the plot unless the panel opts out. */
+  /** Single-series: hidden. Multi-series: a right column so long pod names stack instead of wrap. */
   placement: MonitoringLegendPlacement;
   items: string[];
 }
 
 /**
- * Service-monitoring HTML legend only. Not uPlot / official Dashboard legend.
- * No max/avg/min/last, no sort, no click-to-toggle, no "N more" truncation — color + name.
- *
- * A single series stays legend-less either way, `preference` included. `PanelChart` falls back to
- * the panel title when a series carries no labels, so on the `sum(rate(...))` panels (QPS, error
- * rate, P95) that one legend row would literally repeat the card header a few pixels below it.
- * Hiding it also removes the gutter by construction instead of trying to make an almost-empty
- * gutter look intentional, and hands the freed width back to the plot.
+ * Side-column width: hug the longest name, but stop at 12rem / 38% so the plot keeps the rest.
+ * 12rem is enough of a k8s pod name to keep the replica hash visible after start-truncation.
  */
-export function buildMonitoringLegendLayout(labels: string[], preference?: MonitoringLegendPreference): MonitoringLegendLayout {
+export const MONITORING_LEGEND_SIDE_CLASS = 'flex min-h-0 w-max max-w-[min(12rem,38%)] flex-col gap-1';
+
+/** Ellipsis on the left so `…7bb9ccd7c7-bnbqw` stays readable; `title` still has the full name. */
+export const MONITORING_LEGEND_NAME_CLASS = 'min-w-0 truncate [direction:rtl] [unicode-bidi:plaintext]';
+
+/**
+ * Service-monitoring HTML legend only. Not uPlot / official Dashboard legend.
+ * Color + name; click-to-isolate lives on the HTML rows in `PanelChart`. No max/avg/min/last.
+ *
+ * A single series stays legend-less. Hiding that one row also removes the gutter by construction
+ * instead of trying to make an almost-empty gutter look intentional, and hands the freed width
+ * back to the plot. A requested label that never arrived is dropped in
+ * `resolveMonitoringSeriesName`, so a leftover HTTP-status series cannot become
+ * "HTTP 状态码 QPS" in the legend.
+ */
+export function buildMonitoringLegendLayout(labels: string[]): MonitoringLegendLayout {
   if (labels.length <= 1) {
     return { show: false, placement: 'none', items: [] };
   }
   return {
     show: true,
-    placement: preference ?? 'bottom',
+    placement: 'right',
     items: labels,
   };
 }
@@ -260,7 +267,11 @@ export function buildMonitoringSeriesColors(references: Array<MonitoringSeriesRe
  * `seriesBuider` spreads each base series *before* stamping its own uniform `width`, so per-series
  * weight and dash have to be applied here, after it has run.
  */
-export function buildMonitoringChartSeries(baseSeries: Series[], colors: string[], fillOpacity: number, strokes: MonitoringSeriesStroke[]): Series[] {
+export interface MonitoringChartSeriesOptions {
+  darkMode: boolean;
+}
+
+export function buildMonitoringChartSeries(baseSeries: Series[], colors: string[], strokes: MonitoringSeriesStroke[], options: MonitoringChartSeriesOptions): Series[] {
   const series = seriesBuider({
     baseSeries,
     colors,
@@ -277,9 +288,9 @@ export function buildMonitoringChartSeries(baseSeries: Series[], colors: string[
     const styled: Series = { ...item, width: stroke.width, dash: stroke.dash ? [...stroke.dash] : undefined };
     // A reference is never filled: an area under "limit" would read as the limit being consumed,
     // and an area under "desired" would hide the actual it exists to be compared with.
-    if (stroke.dash || fillOpacity <= 0) return styled;
+    if (stroke.dash) return styled;
     const color = colors[(idx - 1) % colors.length];
-    return { ...styled, fill: colorWithAlpha(color, fillOpacity) };
+    return { ...styled, fill: createMonitoringAreaFill(color, options.darkMode) };
   });
 }
 

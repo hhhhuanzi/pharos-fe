@@ -22,6 +22,7 @@ interface Props {
   datasourceId: number;
   range: IRawTimeRange;
   refreshKey: number;
+  onRangeChange?: (range: IRawTimeRange) => void;
 }
 
 type SeriesByRefId = Record<string, MonitoringSeries[]>;
@@ -34,7 +35,7 @@ function mergeResults(results: Array<{ refId: string; series: MonitoringSeries[]
  * Queries one section as a single batch (range + instant). Mounted only while its
  * `Collapse.Panel` is open, so a collapsed section costs nothing.
  */
-export default function SectionPanels({ section, scope, datasourceId, range, refreshKey }: Props) {
+export default function SectionPanels({ section, scope, datasourceId, range, refreshKey, onRangeChange }: Props) {
   const { t } = useTranslation(NS);
   const [seriesByRefId, setSeriesByRefId] = useState<SeriesByRefId>({});
   const [loading, setLoading] = useState(true);
@@ -129,13 +130,13 @@ export default function SectionPanels({ section, scope, datasourceId, range, ref
         const kind = panel.kind || 'chart';
         const entries = entriesByPanel[panel.id] || [];
         return (
-          <Col key={panel.id} span={panel.span}>
+          <Col key={panel.id} span={24} xl={panel.span}>
             {kind === 'stat' ? (
               <StatPanel panel={panel} entries={entries} loading={loading} />
             ) : kind === 'table' ? (
               <MetricTable panel={panel} entries={entries} loading={loading} />
             ) : (
-              <PanelChart panel={panel} entries={entries} loading={loading} emptyDescription={emptyDescription} />
+              <PanelChart panel={panel} entries={entries} loading={loading} emptyDescription={emptyDescription} onRangeChange={onRangeChange} />
             )}
           </Col>
         );

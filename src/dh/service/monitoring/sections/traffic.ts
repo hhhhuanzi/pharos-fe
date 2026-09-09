@@ -1,34 +1,51 @@
 import { buildPromRatio } from '../../series';
-import { SPANMETRICS_CALLS_CANDIDATES, SPANMETRICS_DURATION_MS_CANDIDATES, spanmetricsErrorMatcher } from '../../spanmetrics';
+import { SPANMETRICS_CALLS_CANDIDATES } from '../../spanmetrics';
 import type { MonitoringPanelDef, MonitoringSectionDef } from '../panels';
 import { otelJobMatcher, spanmetricsMatcher, type MonitoringScope } from '../selectors';
 
 const CALLS = SPANMETRICS_CALLS_CANDIDATES[0];
-const DURATION_MS_BUCKET = SPANMETRICS_DURATION_MS_CANDIDATES[0];
 const HTTP_DURATION_COUNT = 'http_server_request_duration_seconds_count';
-const SERVER_KIND = 'span_kind=~"SPAN_KIND_SERVER|SERVER|server"';
+const HTTP_DURATION_BUCKET = 'http_server_request_duration_seconds_bucket';
+const HTTP_5XX = 'http_response_status_code=~"5.."';
 
-function spanQps(scope: MonitoringScope, window: string): string {
-  return `sum(rate(${CALLS}${spanmetricsMatcher(scope)}[${window}]))`;
+function httpQpsByPod(scope: MonitoringScope, window: string): string {
+  return `sum by (exported_instance) (rate(${HTTP_DURATION_COUNT}${otelJobMatcher(scope)}[${window}]))`;
 }
 
-function spanErrorRate(scope: MonitoringScope, window: string): string {
-  const total = spanQps(scope, window);
-  const failed = `sum(rate(${CALLS}${spanmetricsMatcher(scope, [spanmetricsErrorMatcher()])}[${window}]))`;
+function httpErrorRate(scope: MonitoringScope, window: string, by?: string): string {
+  const failed = by
+    ? `sum by (${by}) (rate(${HTTP_DURATION_COUNT}${otelJobMatcher(scope, [HTTP_5XX])}[${window}]))`
+    : `sum(rate(${HTTP_DURATION_COUNT}${otelJobMatcher(scope, [HTTP_5XX])}[${window}]))`;
+  const total = by ? `sum by (${by}) (rate(${HTTP_DURATION_COUNT}${otelJobMatcher(scope)}[${window}]))` : `sum(rate(${HTTP_DURATION_COUNT}${otelJobMatcher(scope)}[${window}]))`;
   return buildPromRatio(failed, total);
 }
 
-function spanQuantileMs(scope: MonitoringScope, window: string, q: number): string {
-  return `histogram_quantile(${q}, sum by (le) (rate(${DURATION_MS_BUCKET}${spanmetricsMatcher(scope)}[${window}])))`;
+function httpP95Ms(scope: MonitoringScope, window: string, by: string): string {
+  return `histogram_quantile(0.95, sum by (${by}) (rate(${HTTP_DURATION_BUCKET}${otelJobMatcher(scope)}[${window}]))) * 1000`;
 }
 
+/**
+ * Spanmetrics has no pod dimension (`resource_metrics_key_attributes` drops it). HTTP metrics
+ * keep `exported_instance` (`<ns>.<pod>.<service>`), the same per-replica key JVM uses.
+ * All for QPS is summed in the browser so it equals the pod lines. Error rate and P95 are not
+ * additive — those All series are queried as the combined HTTP ratio / quantile.
+ */
 function qpsPanel(): MonitoringPanelDef {
   return {
     id: 'traffic_qps',
     titleKey: 'monitoring.panel.qps',
+    hintKey: 'monitoring.panel.red_http_hint',
     unit: 'ops',
-    span: 8,
-    targets: [{ refId: 'qps', build: (scope, rateWindow) => spanQps(scope, rateWindow) }],
+    span: 12,
+    deriveAll: 'sum',
+    targets: [
+      {
+        refId: 'qps',
+        nameLabels: ['exported_instance'],
+        nameRewrite: 'exportedInstancePod',
+        build: (scope, rateWindow) => httpQpsByPod(scope, rateWindow),
+      },
+    ],
   };
 }
 
@@ -36,9 +53,23 @@ function errorPanel(): MonitoringPanelDef {
   return {
     id: 'traffic_error',
     titleKey: 'monitoring.panel.error_rate',
+    hintKey: 'monitoring.panel.red_http_hint',
     unit: 'percentUnit',
-    span: 8,
-    targets: [{ refId: 'error_rate', build: (scope, rateWindow) => spanErrorRate(scope, rateWindow) }],
+    span: 12,
+    targets: [
+      {
+        refId: 'all',
+        nameKey: 'monitoring.legend.all',
+        emphasis: 'all',
+        build: (scope, rateWindow) => httpErrorRate(scope, rateWindow),
+      },
+      {
+        refId: 'pods',
+        nameLabels: ['exported_instance'],
+        nameRewrite: 'exportedInstancePod',
+        build: (scope, rateWindow) => httpErrorRate(scope, rateWindow, 'exported_instance'),
+      },
+    ],
   };
 }
 
@@ -46,9 +77,23 @@ function p95Panel(): MonitoringPanelDef {
   return {
     id: 'traffic_p95',
     titleKey: 'monitoring.panel.p95_ms',
+    hintKey: 'monitoring.panel.red_http_hint',
     unit: 'milliseconds',
-    span: 8,
-    targets: [{ refId: 'p95', build: (scope, rateWindow) => spanQuantileMs(scope, rateWindow, 0.95) }],
+    span: 12,
+    targets: [
+      {
+        refId: 'all',
+        nameKey: 'monitoring.legend.all',
+        emphasis: 'all',
+        build: (scope, rateWindow) => httpP95Ms(scope, rateWindow, 'le'),
+      },
+      {
+        refId: 'pods',
+        nameLabels: ['exported_instance'],
+        nameRewrite: 'exportedInstancePod',
+        build: (scope, rateWindow) => httpP95Ms(scope, rateWindow, 'exported_instance, le'),
+      },
+    ],
   };
 }
 
@@ -78,10 +123,11 @@ function httpRoutePanel(): MonitoringPanelDef {
     targets: [
       {
         refId: 'route',
-        // Incoming interfaces. `http_server_*` often has no `http_route` (RPC-over-HTTP), so
-        // `sum by (http_route)` collapsed to one unlabeled series and uPlot named it "Value".
-        nameLabels: ['span_name'],
-        build: (scope, rateWindow) => `topk(8, sum by (span_name) (rate(${CALLS}${spanmetricsMatcher(scope, [SERVER_KIND])}[${rateWindow}])))`,
+        // HTTP family keeps method + route. spanmetrics `span_name` is only the method when the
+        // app never set http.route (turms: GET/POST/OPTIONS) — grouping there cannot invent a path.
+        nameLabels: ['http_request_method', 'http_route'],
+        nameRewrite: 'httpMethodRoute',
+        build: (scope, rateWindow) => `topk(8, sum by (http_request_method, http_route) (rate(${HTTP_DURATION_COUNT}${otelJobMatcher(scope)}[${rateWindow}])))`,
       },
     ],
   };
@@ -97,9 +143,10 @@ function httpSlowPanel(): MonitoringPanelDef {
     targets: [
       {
         refId: 'slow',
-        nameLabels: ['span_name'],
+        nameLabels: ['http_request_method', 'http_route'],
+        nameRewrite: 'httpMethodRoute',
         build: (scope, rateWindow) =>
-          `topk(8, histogram_quantile(0.95, sum by (span_name, le) (rate(${DURATION_MS_BUCKET}${spanmetricsMatcher(scope, [SERVER_KIND])}[${rateWindow}]))))`,
+          `topk(8, histogram_quantile(0.95, sum by (http_request_method, http_route, le) (rate(${HTTP_DURATION_BUCKET}${otelJobMatcher(scope)}[${rateWindow}])))) * 1000`,
       },
     ],
   };
@@ -122,10 +169,18 @@ function clientPanel(): MonitoringPanelDef {
   };
 }
 
-/** Section 1: RED + Top/slow interfaces from spanmetrics (ms); HTTP status from OTel HTTP (seconds). */
+/**
+ * Two-column pairs follow the on-call scan, not the old three-across fold.
+ *
+ * Row 1 is the first glance: still taking traffic, and is it failing.
+ * Down the left is volume → which interfaces; down the right is errors → which status codes.
+ * Row 3 is latency as a left-right pair (overall P95 next to the slow interfaces).
+ * Downstream sits last — a different question ("is it someone we call") and is not forced into a
+ * pair with P95 or errors.
+ */
 export const TRAFFIC_SECTION: MonitoringSectionDef = {
   id: 'traffic',
   titleKey: 'monitoring.section.traffic',
   defaultOpen: true,
-  panels: [qpsPanel(), errorPanel(), p95Panel(), httpStatusPanel(), httpRoutePanel(), httpSlowPanel(), clientPanel()],
+  panels: [qpsPanel(), errorPanel(), httpRoutePanel(), httpStatusPanel(), p95Panel(), httpSlowPanel(), clientPanel()],
 };

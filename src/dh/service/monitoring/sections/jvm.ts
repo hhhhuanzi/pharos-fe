@@ -84,7 +84,7 @@ function threadsPanel(): MonitoringPanelDef {
     id: 'jvm_threads',
     titleKey: 'monitoring.panel.jvm_threads',
     unit: 'count',
-    span: 8,
+    span: 12,
     targets: [
       {
         refId: 'threads',
@@ -101,7 +101,7 @@ function classesPanel(): MonitoringPanelDef {
     id: 'jvm_classes',
     titleKey: 'monitoring.panel.jvm_classes',
     unit: 'count',
-    span: 8,
+    span: 12,
     targets: [
       {
         refId: 'classes',
@@ -120,7 +120,7 @@ function cpuPanel(): MonitoringPanelDef {
     unit: 'percentUnit',
     // Process utilization of the whole runtime, so the same coarse ladder as the node panels.
     yAxis: 'utilization',
-    span: 8,
+    span: 12,
     targets: [
       {
         refId: 'cpu',
@@ -141,5 +141,7 @@ export const JVM_SECTION: MonitoringSectionDef = {
   titleKey: 'monitoring.section.jvm',
   defaultOpen: true,
   fallbackEmptyKey: 'monitoring.jvm.empty',
-  panels: [heapPanel(), poolPanel(), gcPanel(), afterGcPanel(), threadsPanel(), classesPanel(), cpuPanel()],
+  // Heap→pool and GC→after-GC are memory pairs. CPU next to threads: spinning vs stuck.
+  // Class count is a slower leak signal and sits last.
+  panels: [heapPanel(), poolPanel(), gcPanel(), afterGcPanel(), cpuPanel(), threadsPanel(), classesPanel()],
 };

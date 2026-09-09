@@ -82,6 +82,19 @@ describe('StatPanel summary cards', () => {
     expect(screen.getByText('ms')).toBeInTheDocument();
   });
 
+  it('puts the window explanation on the traffic card title, not beside QPS', () => {
+    const traffic = panelById('summary_traffic');
+    expect(traffic.hintKey).toBe('monitoring.stat.traffic_hint');
+    expect(traffic.targets.every((target) => target.hintKey == null)).toBe(true);
+
+    const { container } = render(<StatPanel panel={traffic} loading={false} entries={[entry('qps', 0.1), entry('error_rate', 0), entry('p95', 5.46)]} />);
+
+    expect(screen.getByText('monitoring.stat.traffic')).toBeInTheDocument();
+    expect(screen.queryByText('monitoring.stat.window_avg')).not.toBeInTheDocument();
+    expect(screen.queryByText('区间平均')).not.toBeInTheDocument();
+    expect(container.querySelector('.anticon-question-circle')).not.toBeNull();
+  });
+
   it('gives every number in a card the same size and weight', () => {
     const { container } = render(<StatPanel panel={panelById('summary_traffic')} loading={false} entries={[entry('qps', 0.1), entry('error_rate', 0.2), entry('p95', 5.46)]} />);
 

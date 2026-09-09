@@ -13,11 +13,16 @@ import {
   buildMonitoringChartCursor,
   buildMonitoringChartSeries,
   buildMonitoringLegendLayout,
+  MONITORING_LEGEND_NAME_CLASS,
+  MONITORING_LEGEND_SIDE_CLASS,
   buildMonitoringSeriesColors,
   colorWithAlpha,
-  monitoringFillOpacity,
+  createMonitoringAreaFill,
   monitoringSeriesStroke,
   MONITORING_BASELINE_DASH,
+  MONITORING_FILL_BOTTOM_ALPHA,
+  MONITORING_FILL_TOP_ALPHA,
+  MONITORING_ALL_LINE_WIDTH,
   MONITORING_CHART_LINE_WIDTH,
   MONITORING_CURSOR_CLASS,
   MONITORING_DASH,
@@ -44,17 +49,34 @@ describe('colorWithAlpha', () => {
   });
 });
 
-describe('monitoringFillOpacity', () => {
-  it('fades the area out as series pile up and drops it entirely on a busy plot', () => {
-    expect(monitoringFillOpacity(1)).toBe(0.18);
-    expect(monitoringFillOpacity(3)).toBe(0.12);
-    expect(monitoringFillOpacity(6)).toBe(0.06);
-    expect(monitoringFillOpacity(8)).toBe(0);
-  });
+describe('createMonitoringAreaFill', () => {
+  it('fades the series colour from the line down to the x-axis, quieter on a dark card', () => {
+    const stops: Array<[number, string]> = [];
+    const ctx = {
+      createLinearGradient: (x0: number, y0: number, x1: number, y1: number) => {
+        expect([x0, y0, x1, y1]).toEqual([0, 40, 0, 240]);
+        return {
+          addColorStop: (offset: number, color: string) => {
+            stops.push([offset, color]);
+          },
+        };
+      },
+    };
+    const fill = createMonitoringAreaFill('#1F78C1', false);
+    expect(typeof fill).toBe('function');
+    if (typeof fill !== 'function') return;
+    fill({ ctx, bbox: { top: 40, height: 200 } } as never, 1);
+    expect(stops).toEqual([
+      [0, colorWithAlpha('#1F78C1', MONITORING_FILL_TOP_ALPHA.light)],
+      [1, colorWithAlpha('#1F78C1', MONITORING_FILL_BOTTOM_ALPHA.light)],
+    ]);
 
-  it('never lets a later step fill more heavily than an earlier one', () => {
-    const steps = [1, 2, 3, 4, 5, 6, 7, 8, 20].map(monitoringFillOpacity);
-    expect(steps).toEqual([...steps].sort((a, b) => b - a));
+    stops.length = 0;
+    const dark = createMonitoringAreaFill('#1F78C1', true);
+    if (typeof dark !== 'function') return;
+    dark({ ctx, bbox: { top: 40, height: 200 } } as never, 1);
+    expect(stops[0]?.[1]).toBe(colorWithAlpha('#1F78C1', MONITORING_FILL_TOP_ALPHA.dark));
+    expect(MONITORING_FILL_TOP_ALPHA.dark).toBeLessThan(MONITORING_FILL_TOP_ALPHA.light);
   });
 });
 
@@ -127,15 +149,11 @@ describe('monitoringSeriesStroke', () => {
     });
   });
 
-  it('weights the static guardrails above the data they are read against', () => {
-    // `hexPalette` can hand a pod `#EF843C` (near the amber ceiling) or `#705DA0` (near the violet
-    // budget), so the dash rhythm alone was not a reliable tell on a busy panel.
+  it('keeps static guardrails at data weight so a dashed limit is not the loudest mark', () => {
     expect(monitoringSeriesStroke('ceiling')).toEqual({ width: MONITORING_REFERENCE_LINE_WIDTH, dash: MONITORING_DASH });
     expect(monitoringSeriesStroke('budget')).toEqual(monitoringSeriesStroke('ceiling'));
-    expect(MONITORING_REFERENCE_LINE_WIDTH).toBeGreaterThan(MONITORING_CHART_LINE_WIDTH);
-    // ...without letting a boundary that is on screen unconditionally shout over the data. 2.5px
-    // crossed that line: the limit came out as a row of fat dots.
-    expect(MONITORING_REFERENCE_LINE_WIDTH).toBeLessThanOrEqual(2);
+    expect(MONITORING_REFERENCE_LINE_WIDTH).toBe(MONITORING_CHART_LINE_WIDTH);
+    expect(MONITORING_CHART_LINE_WIDTH).toBe(1);
   });
 
   it('keeps desired replicas at data weight rather than promoting it to a guardrail', () => {
@@ -189,17 +207,16 @@ describe('buildMonitoringChartCursor', () => {
 });
 
 describe('buildMonitoringChartSeries', () => {
-  it('fills measured series, keeps request/limit dashed, heavier and unfilled, and uses a thin spline', () => {
+  it('fills measured series, keeps request/limit dashed and unfilled, and uses a thin spline', () => {
     const colors = ['#1F78C1', BUDGET_LIGHT] as const;
-    const series = buildMonitoringChartSeries([{ label: 'pod-a' }, { label: 'request' }], [...colors], monitoringFillOpacity(1), [
-      monitoringSeriesStroke(),
-      monitoringSeriesStroke('budget'),
-    ]);
+    const series = buildMonitoringChartSeries([{ label: 'pod-a' }, { label: 'request' }], [...colors], [monitoringSeriesStroke(), monitoringSeriesStroke('budget')], {
+      darkMode: false,
+    });
 
     expect(series).toHaveLength(3);
     expect(series[1]?.width).toBe(MONITORING_CHART_LINE_WIDTH);
     expect(series[1]?.dash).toBeUndefined();
-    expect(series[1]?.fill).toBe(colorWithAlpha(colors[0], 0.18));
+    expect(series[1]?.fill).toEqual(expect.any(Function));
     expect(series[1]?.paths).toEqual(expect.any(Function));
     expect(series[2]?.dash).toEqual([...MONITORING_DASH]);
     expect(series[2]?.width).toBe(MONITORING_REFERENCE_LINE_WIDTH);
@@ -207,10 +224,12 @@ describe('buildMonitoringChartSeries', () => {
   });
 
   it('draws a baseline at data weight, dashed and unfilled', () => {
-    const series = buildMonitoringChartSeries([{ label: 'available' }, { label: 'desired' }], ['#1F78C1', REFERENCE_LIGHT], monitoringFillOpacity(1), [
-      monitoringSeriesStroke(),
-      monitoringSeriesStroke('baseline'),
-    ]);
+    const series = buildMonitoringChartSeries(
+      [{ label: 'available' }, { label: 'desired' }],
+      ['#1F78C1', REFERENCE_LIGHT],
+      [monitoringSeriesStroke(), monitoringSeriesStroke('baseline')],
+      { darkMode: false },
+    );
 
     expect(series[2]?.width).toBe(MONITORING_CHART_LINE_WIDTH);
     expect(series[2]?.dash).toEqual([...MONITORING_BASELINE_DASH]);
@@ -218,29 +237,82 @@ describe('buildMonitoringChartSeries', () => {
     expect(series[2]?.fill).toBeUndefined();
   });
 
-  it('lifts the guardrail above both the data and the target it shares a panel with', () => {
+  it('keeps the guardrail at the same weight as the data and the target it shares a panel with', () => {
     const colors = ['#1F78C1', REFERENCE_LIGHT, CEILING_LIGHT];
-    const series = buildMonitoringChartSeries([{ label: 'available' }, { label: 'desired' }, { label: 'limit' }], colors, monitoringFillOpacity(1), [
-      monitoringSeriesStroke(),
-      monitoringSeriesStroke('baseline'),
-      monitoringSeriesStroke('ceiling'),
-    ]);
-
-    expect(series[2]?.width).toBe(series[1]?.width);
-    expect(Number(series[3]?.width)).toBeGreaterThan(Number(series[2]?.width));
-  });
-
-  it('drops the area fill once the plot is too busy for it to be readable', () => {
-    const colors = Array.from({ length: 8 }, (_, idx) => PALETTE[idx % PALETTE.length]);
     const series = buildMonitoringChartSeries(
-      colors.map((_color, idx) => ({ label: `s${idx}` })),
+      [{ label: 'available' }, { label: 'desired' }, { label: 'limit' }],
       colors,
-      monitoringFillOpacity(colors.length),
-      colors.map(() => monitoringSeriesStroke()),
+      [monitoringSeriesStroke(), monitoringSeriesStroke('baseline'), monitoringSeriesStroke('ceiling')],
+      { darkMode: false },
     );
 
-    expect(series.slice(1).every((item) => item.fill === undefined)).toBe(true);
-    expect(series.slice(1).every((item) => item.width === MONITORING_CHART_LINE_WIDTH)).toBe(true);
+    expect(series[2]?.width).toBe(series[1]?.width);
+    expect(series[3]?.width).toBe(series[1]?.width);
+    expect(series[3]?.dash).toEqual([...MONITORING_DASH]);
+  });
+
+  it('keeps a hidden series hidden so a legend click can turn a line off', () => {
+    const series = buildMonitoringChartSeries(
+      [
+        { label: 'All', show: true },
+        { label: 'pod-a', show: false },
+      ],
+      ['#1F78C1', '#BA43A9'],
+      [monitoringSeriesStroke(undefined, 'all'), monitoringSeriesStroke()],
+      { darkMode: false },
+    );
+
+    expect(series[1]?.show).not.toBe(false);
+    expect(series[2]?.show).toBe(false);
+  });
+
+  it('draws All a hair heavier and solid so it reads as the total next to per-pod lines', () => {
+    const all = monitoringSeriesStroke(undefined, 'all');
+    const pod = monitoringSeriesStroke();
+
+    expect(all.dash).toBeUndefined();
+    expect(pod.dash).toBeUndefined();
+    expect(all.width).toBe(MONITORING_ALL_LINE_WIDTH);
+    expect(Number(all.width)).toBeGreaterThan(Number(pod.width));
+    expect(MONITORING_ALL_LINE_WIDTH).toBeLessThanOrEqual(1.25);
+  });
+
+  it('fills every measured series, including a busy overlay, and never a dashed reference', () => {
+    const colors = Array.from({ length: 8 }, (_, idx) => PALETTE[idx % PALETTE.length]);
+    const filled = buildMonitoringChartSeries(
+      colors.map((_color, idx) => ({ label: `s${idx}` })),
+      colors,
+      colors.map(() => monitoringSeriesStroke()),
+      { darkMode: false },
+    );
+    const withLimit = buildMonitoringChartSeries(
+      [{ label: 'pod-a' }, { label: 'limit' }],
+      ['#1F78C1', CEILING_LIGHT],
+      [monitoringSeriesStroke(), monitoringSeriesStroke('ceiling')],
+      { darkMode: false },
+    );
+
+    expect(filled.slice(1).every((item) => typeof item.fill === 'function')).toBe(true);
+    expect(filled.slice(1).every((item) => item.width === MONITORING_CHART_LINE_WIDTH)).toBe(true);
+    expect(withLimit[1]?.fill).toEqual(expect.any(Function));
+    expect(withLimit[2]?.fill).toBeUndefined();
+  });
+
+  it('keeps fill on a hidden series so isolate does not change how a line is painted', () => {
+    const isolated = buildMonitoringChartSeries(
+      [
+        { label: 'pod-a', show: true },
+        { label: 'pod-b', show: false },
+        { label: 'pod-c', show: false },
+      ],
+      ['#1F78C1', '#BA43A9', '#705DA0'],
+      [monitoringSeriesStroke(), monitoringSeriesStroke(), monitoringSeriesStroke()],
+      { darkMode: false },
+    );
+
+    expect(isolated.slice(1).every((item) => typeof item.fill === 'function')).toBe(true);
+    expect(isolated[1]?.show).not.toBe(false);
+    expect(isolated[2]?.show).toBe(false);
   });
 });
 
@@ -254,20 +326,12 @@ describe('buildMonitoringLegendLayout', () => {
     expect(layout).not.toHaveProperty('rest');
   });
 
-  it('still hides the legend for a single series on a panel that asked for the side column', () => {
-    const layout = buildMonitoringLegendLayout(['QPS'], 'right');
-
-    expect(layout.show).toBe(false);
-    expect(layout.placement).toBe('none');
-    expect(layout.items).toEqual([]);
-  });
-
-  it('defaults a multi-series legend to under the plot, with color + name only', () => {
+  it('puts a multi-series legend on the right, with color + name only', () => {
     const labels = ['200', '204', '400', '401', '429', '500', '503'] as const;
     const layout = buildMonitoringLegendLayout([...labels]);
 
     expect(layout.show).toBe(true);
-    expect(layout.placement).toBe('bottom');
+    expect(layout.placement).toBe('right');
     expect(layout.items).toEqual([...labels]);
     expect(layout).not.toHaveProperty('rest');
     // uPlot's legend only knows the value under the cursor; last/max/avg/min would be our own
@@ -278,38 +342,44 @@ describe('buildMonitoringLegendLayout', () => {
     expect(layout).not.toHaveProperty('last');
   });
 
-  it('moves the legend to a side column only when the panel opts in', () => {
-    const labels = ['available', 'desired', 'unavailable'] as const;
-
-    expect(buildMonitoringLegendLayout([...labels], 'right').placement).toBe('right');
-    expect(buildMonitoringLegendLayout([...labels]).placement).toBe('bottom');
-  });
-
   it('keeps every series listed (the container scrolls) instead of truncating with a remainder', () => {
     const labels = Array.from({ length: 10 }, (_, idx) => `s${idx}`);
+    const layout = buildMonitoringLegendLayout(labels);
 
-    (['bottom', 'right'] as const).forEach((placement) => {
-      const layout = buildMonitoringLegendLayout(labels, placement === 'right' ? 'right' : undefined);
-
-      expect(layout.show).toBe(true);
-      expect(layout.placement).toBe(placement);
-      expect(layout.items).toEqual(labels);
-      expect(layout).not.toHaveProperty('rest');
-    });
+    expect(layout.show).toBe(true);
+    expect(layout.placement).toBe('right');
+    expect(layout.items).toEqual(labels);
+    expect(layout).not.toHaveProperty('rest');
   });
 
   it('preserves series order so the legend stays index-aligned with the plot colours', () => {
     const labels = ['unavailable', 'available', 'desired'] as const;
 
-    expect(buildMonitoringLegendLayout([...labels], 'right').items).toEqual([...labels]);
+    expect(buildMonitoringLegendLayout([...labels]).items).toEqual([...labels]);
+  });
+
+  it('caps the side column so a long pod name cannot starve the plot', () => {
+    expect(MONITORING_LEGEND_SIDE_CLASS).toContain('w-max');
+    expect(MONITORING_LEGEND_SIDE_CLASS).toContain('max-w-[min(12rem,38%)]');
+    expect(MONITORING_LEGEND_NAME_CLASS).toContain('truncate');
+    expect(MONITORING_LEGEND_NAME_CLASS).toContain('[direction:rtl]');
   });
 });
 
 describe('panel definitions', () => {
-  it('gives the side column to the replicas trend and leaves every other panel at the bottom', () => {
-    const optedIn = MONITORING_SECTIONS.flatMap((section) => section.panels.filter((panel) => panel.legend !== undefined).map((panel) => [section.id, panel.id, panel.legend]));
+  it('does not let a panel opt out of the shared area fill', () => {
+    const charts = MONITORING_SECTIONS.flatMap((section) => section.panels.filter((panel) => (panel.kind || 'chart') === 'chart'));
 
-    expect(optedIn).toEqual([['replicas', 'replicas_trend', 'right']]);
+    expect(charts.every((panel) => !('fill' in panel))).toBe(true);
+  });
+
+  it('keeps chart panels at two per row so a right legend has room for pod names', () => {
+    const chartSpans = MONITORING_SECTIONS.flatMap((section) =>
+      section.panels.filter((panel) => (panel.kind || 'chart') === 'chart').map((panel) => [section.id, panel.id, panel.span] as const),
+    );
+
+    expect(chartSpans.every(([, , span]) => span === 12 || span === 24)).toBe(true);
+    expect(chartSpans.filter(([, , span]) => span === 8)).toEqual([]);
   });
 
   it('files every reference line under the claim it actually makes', () => {

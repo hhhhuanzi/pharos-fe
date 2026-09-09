@@ -22,7 +22,7 @@ function cpuPanel(): MonitoringPanelDef {
     // Real utilization, not an error rate: a coarse ladder (10 / 25 / 50 / 100%) keeps the axis
     // from re-scaling on every refresh, and a busy node still lands on a 0–100% axis.
     yAxis: 'utilization',
-    span: 8,
+    span: 12,
     targets: [
       {
         refId: 'cpu',
@@ -42,7 +42,7 @@ function memoryPanel(): MonitoringPanelDef {
     titleKey: 'monitoring.panel.node_memory',
     unit: 'percentUnit',
     yAxis: 'utilization',
-    span: 8,
+    span: 12,
     targets: [
       {
         refId: 'memory',
@@ -63,7 +63,7 @@ function diskPanel(): MonitoringPanelDef {
     titleKey: 'monitoring.panel.node_disk',
     unit: 'percentUnit',
     yAxis: 'utilization',
-    span: 8,
+    span: 12,
     targets: [
       {
         refId: 'disk',

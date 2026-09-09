@@ -1,4 +1,4 @@
-import { formatMonitoringValue, monitoringSeriesName, shortExportedInstance } from './format';
+import { formatHttpMethodRoute, formatMonitoringValue, monitoringSeriesName, shortExportedInstance } from './format';
 
 describe('formatMonitoringValue', () => {
   it('renders missing values as an em dash rather than 0', () => {
@@ -97,6 +97,16 @@ describe('monitoringSeriesName', () => {
   it('describes remaining labels when nothing else identifies the series', () => {
     expect(monitoringSeriesName({ __name__: 'x', device: 'eth0' })).toBe('device=eth0');
     expect(monitoringSeriesName({})).toBe('');
+  });
+
+  it('joins HTTP method and route as POST /api/orders', () => {
+    expect(formatHttpMethodRoute({ http_request_method: 'POST', http_route: '/api/orders' })).toBe('POST /api/orders');
+    expect(monitoringSeriesName({ http_request_method: 'GET', http_route: '/health' }, ['http_request_method', 'http_route'], undefined, 'httpMethodRoute')).toBe('GET /health');
+  });
+
+  it('keeps method-only when http.route was never reported', () => {
+    expect(formatHttpMethodRoute({ http_request_method: 'POST' })).toBe('POST');
+    expect(formatHttpMethodRoute({})).toBe('');
   });
 
   it('shortens exported_instance to the pod segment', () => {

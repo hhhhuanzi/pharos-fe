@@ -1,4 +1,5 @@
 import { buildSectionQueries, MONITORING_SECTIONS, WORKLOAD_SECTION } from './panels';
+import { JVM_SECTION } from './sections/jvm';
 import { MIDDLEWARE_SECTION } from './sections/middleware';
 import { NODE_SECTION } from './sections/node';
 import { SUMMARY_SECTION } from './sections/summary';
@@ -125,6 +126,7 @@ describe('summary stats', () => {
   it('orders summary cards symptom first, the same direction as the sections below', () => {
     expect(SUMMARY_SECTION.panels.map((panel) => panel.id)).toEqual(['summary_traffic', 'summary_ready', 'summary_resource']);
     expect(SUMMARY_SECTION.panels.map((panel) => panel.titleKey)).toEqual(['monitoring.stat.traffic', 'monitoring.stat.ready', 'monitoring.stat.resource']);
+    expect(SUMMARY_SECTION.panels.map((panel) => panel.hintKey)).toEqual(['monitoring.stat.traffic_hint', 'monitoring.stat.ready_hint', 'monitoring.stat.resource_hint']);
     expect(SUMMARY_SECTION.panels.map((panel) => panel.targets[0]?.labelKey)).toEqual(['monitoring.stat.qps', 'monitoring.stat.ready_replicas', 'monitoring.stat.cpu_water']);
     expect(summaryPanel('summary_traffic').targets.map((target) => target.refId)).toEqual(['qps', 'error_rate', 'p95']);
     expect(
@@ -188,21 +190,52 @@ describe('summary stats', () => {
 
 describe('traffic section', () => {
   it('keeps HTTP queries on exported_job and spanmetrics on service_name', () => {
-    expect(queryOf(TRAFFIC_SECTION, 'traffic_qps', 'qps')).toContain('service_name="rome-sec-admin"');
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_qps', 'qps')).toContain('exported_job=~".+/rome-sec-admin"');
     expect(queryOf(TRAFFIC_SECTION, 'traffic_http_status', 'status')).toContain('http_server_request_duration_seconds_count');
     expect(queryOf(TRAFFIC_SECTION, 'traffic_http_status', 'status')).toContain('exported_job=~".+/rome-sec-admin"');
     expect(queryOf(TRAFFIC_SECTION, 'traffic_client', 'client')).toContain('span_kind=~"SPAN_KIND_CLIENT|CLIENT|client"');
   });
 
-  it('splits top and slow interfaces by SERVER span_name, not http_route', () => {
+  it('pairs charts for the on-call scan: glance, then volume/error attribution, then latency', () => {
+    expect(TRAFFIC_SECTION.panels.map((panel) => panel.id)).toEqual([
+      'traffic_qps',
+      'traffic_error',
+      'traffic_http_route',
+      'traffic_http_status',
+      'traffic_p95',
+      'traffic_http_slow',
+      'traffic_client',
+    ]);
+  });
+
+  it('draws QPS / error rate / P95 as All + per-pod on the same HTTP family, not a extra panel', () => {
+    expect(TRAFFIC_SECTION.panels.map((panel) => panel.span)).toEqual([12, 12, 12, 12, 12, 12, 12]);
+    expect(TRAFFIC_SECTION.panels.map((panel) => panel.id)).not.toContain('traffic_qps_pod');
+    expect(TRAFFIC_SECTION.panels.find((panel) => panel.id === 'traffic_qps')?.deriveAll).toBe('sum');
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_qps', 'qps')).toBe(
+      'sum by (exported_instance) (rate(http_server_request_duration_seconds_count{cluster="k8s-rome-sec-test",exported_job=~".+/rome-sec-admin"}[5m]))',
+    );
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_error', 'all')).toContain('http_response_status_code=~"5.."');
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_error', 'all')).not.toContain('exported_instance');
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_error', 'pods')).toContain('sum by (exported_instance)');
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_p95', 'all')).toContain('sum by (le)');
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_p95', 'all')).toContain('* 1000');
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_p95', 'pods')).toContain('sum by (exported_instance, le)');
+  });
+
+  it('splits top and slow interfaces by HTTP method + route, not span_name', () => {
     const route = queryOf(TRAFFIC_SECTION, 'traffic_http_route', 'route');
     const slow = queryOf(TRAFFIC_SECTION, 'traffic_http_slow', 'slow');
-    expect(route).toContain('sum by (span_name)');
-    expect(route).toContain('span_kind=~"SPAN_KIND_SERVER|SERVER|server"');
-    expect(route).not.toContain('http_route');
-    expect(slow).toContain('sum by (span_name, le)');
-    expect(slow).toContain('traces_span_metrics_duration_milliseconds_bucket');
-    expect(slow).not.toContain('http_server_request_duration_seconds');
+    expect(route).toContain('sum by (http_request_method, http_route)');
+    expect(route).toContain('http_server_request_duration_seconds_count');
+    expect(route).toContain('topk(8');
+    expect(route).not.toContain('span_name');
+    expect(slow).toContain('sum by (http_request_method, http_route, le)');
+    expect(slow).toContain('http_server_request_duration_seconds_bucket');
+    expect(slow).toContain('* 1000');
+    expect(slow).not.toContain('span_name');
+    expect(TRAFFIC_SECTION.panels.find((panel) => panel.id === 'traffic_http_route')?.targets[0]?.nameRewrite).toBe('httpMethodRoute');
+    expect(TRAFFIC_SECTION.panels.find((panel) => panel.id === 'traffic_http_slow')?.targets[0]?.nameRewrite).toBe('httpMethodRoute');
   });
 
   it('does not put the business namespace on OTel HTTP matchers', () => {
@@ -212,8 +245,15 @@ describe('traffic section', () => {
   });
 
   it('narrows spanmetrics to the header environment, not the K8s namespace', () => {
-    expect(queryOf(TRAFFIC_SECTION, 'traffic_qps', 'qps', '5m', '1h', scoped)).toContain('deployment_environment_name="prod"');
-    expect(queryOf(TRAFFIC_SECTION, 'traffic_qps', 'qps', '5m', '1h', scoped)).not.toContain('namespace=');
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_client', 'client', '5m', '1h', scoped)).toContain('deployment_environment_name="prod"');
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_client', 'client', '5m', '1h', scoped)).not.toContain('namespace=');
+    expect(queryOf(TRAFFIC_SECTION, 'traffic_qps', 'qps', '5m', '1h', scoped)).not.toContain('namespace="rome-sec"');
+  });
+});
+
+describe('jvm section', () => {
+  it('pairs heap with pools, GC with after-GC, and CPU with threads', () => {
+    expect(JVM_SECTION.panels.map((panel) => panel.id)).toEqual(['jvm_heap', 'jvm_pool', 'jvm_gc', 'jvm_after_gc', 'jvm_cpu', 'jvm_threads', 'jvm_classes']);
   });
 });
 

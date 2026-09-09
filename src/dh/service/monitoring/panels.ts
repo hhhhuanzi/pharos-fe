@@ -1,6 +1,6 @@
 import { buildPromRatio } from '../series';
 import type { MonitoringYAxisMode } from './axis';
-import type { MonitoringLegendPreference, MonitoringSeriesReference } from './chartTheme';
+import type { MonitoringSeriesReference } from './chartTheme';
 import type { MonitoringNameRewrite, MonitoringUnit } from './format';
 import { JVM_SECTION } from './sections/jvm';
 import { MIDDLEWARE_SECTION } from './sections/middleware';
@@ -25,10 +25,11 @@ export interface MonitoringTargetDef {
   nameRewrite?: MonitoringNameRewrite;
   /**
    * Marks the series as something the measured ones are compared *against* rather than one of
-   * them: chrome grey, dashed, no palette slot, no area fill. See `MonitoringSeriesReference` for
-   * why a static `threshold` is a hairline while a moving `baseline` keeps full weight.
+   * them: chrome grey, dashed, no palette slot, no area fill. See `MonitoringSeriesReference`.
    */
   reference?: MonitoringSeriesReference;
+  /** Solid All stroke on a mixed All + per-pod plot. Dropped when only one peer arrived. */
+  emphasis?: 'all';
   /** Instant vector at range end. Stats / tables default to this; charts stay range queries. */
   instant?: boolean;
   /** How to collapse a matrix into one number for a stat card. */
@@ -78,14 +79,13 @@ export interface MonitoringPanelDef {
   unit: MonitoringUnit;
   /** Y-axis strategy; defaults to the unit's natural mode (see `axis.ts`). */
   yAxis?: MonitoringYAxisMode;
-  /** antd grid span within a 24-column row. */
+  /** antd grid span within a 24-column row. Charts stay at 12 (two per row); stats may use 8. */
   span: number;
   /**
-   * Multi-series legends sit under the plot by default. A panel sets this only when its series
-   * names are short and fixed enough that a side column costs less width than a legend row costs
-   * height — see `replicas.ts`. Single-series panels never show a legend either way.
+   * Build an All series by summing every target series at the same timestamp. Used when All is
+   * additive (QPS). Ratios and quantiles must query All separately — they do not sum.
    */
-  legend?: MonitoringLegendPreference;
+  deriveAll?: 'sum';
   kind?: MonitoringPanelKind;
   /** First two targets render as `a / b` (ready replicas). */
   primaryAsPair?: boolean;
